@@ -204,14 +204,14 @@ function TagCard({ title, tags }: { title: string; tags: string[] }) {
 function IconLine({ icon, value, href }: { icon: React.ReactNode; value: string | null; href?: string | null }) {
   if (!value) return null;
   return (
-    <div className="flex items-center gap-2 text-body-md text-foreground">
-      <span className="text-muted-foreground">{icon}</span>
+    <div className="flex min-w-0 items-center gap-2 text-body-md text-foreground">
+      <span className="shrink-0 text-muted-foreground">{icon}</span>
       {href ? (
-        <a href={href.startsWith("http") ? href : `https://${href}`} target="_blank" rel="noopener noreferrer" className="truncate text-primary hover:underline">
+        <a href={href.startsWith("http") ? href : `https://${href}`} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate text-primary hover:underline">
           {value}
         </a>
       ) : (
-        <span className="truncate">{value}</span>
+        <span className="min-w-0 truncate">{value}</span>
       )}
     </div>
   );

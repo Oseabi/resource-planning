@@ -171,26 +171,28 @@ export function TenderMatchingResults({
             </div>
             <ul>
               {matches.map((m) => (
-                <li key={m.matchId} className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-0">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-label-md font-semibold text-accent-foreground">
-                    {m.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <Link href={`/candidates/${m.candidateId}`} className="block truncate font-medium text-foreground hover:text-primary">
-                      {m.name}
-                    </Link>
-                    <div className="truncate text-body-sm text-muted-foreground">{m.role ?? "—"}</div>
-                  </div>
-                  {m.score >= TENDER_STRONG_MATCH_THRESHOLD && (
-                    <span className="inline-flex shrink-0 items-center gap-1 text-label-md text-success" title="Strong match">
-                      <CheckCircle2 className="size-4" />
-                      Strong match
+                <li key={m.matchId} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-3 last:border-0">
+                  <div className="flex min-w-0 flex-[1_1_100%] items-center gap-3 sm:flex-1">
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-label-md font-semibold text-accent-foreground">
+                      {m.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <Link href={`/candidates/${m.candidateId}`} className="block truncate font-medium text-foreground hover:text-primary">
+                        {m.name}
+                      </Link>
+                      <div className="truncate text-body-sm text-muted-foreground">{m.role ?? "—"}</div>
+                    </div>
+                    <span className={cn("shrink-0 rounded-lg px-2 py-0.5 text-label-md font-semibold", scoreBadgeClass(m.score))}>
+                      {m.score}%
                     </span>
-                  )}
-                  <span className={cn("shrink-0 rounded-lg px-2 py-0.5 text-label-md font-semibold", scoreBadgeClass(m.score))}>
-                    {m.score}%
-                  </span>
-                  <div className="flex shrink-0 items-center gap-1">
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 pl-12 sm:ml-auto sm:gap-3 sm:pl-0">
+                    {m.score >= TENDER_STRONG_MATCH_THRESHOLD && (
+                      <span className="inline-flex shrink-0 items-center gap-1 text-label-md text-success" title="Strong match">
+                        <CheckCircle2 className="size-4" />
+                        Strong match
+                      </span>
+                    )}
                     <Button variant="ghost" size="sm" onClick={() => setPlaceFor(m)}>
                       Place
                     </Button>

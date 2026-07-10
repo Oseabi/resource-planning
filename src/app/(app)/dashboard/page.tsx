@@ -96,32 +96,54 @@ export default async function DashboardPage() {
                 strong candidates here.
               </p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Candidate</TableHead>
-                    <TableHead>Requirement</TableHead>
-                    <TableHead className="text-right">Score</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              <>
+                {/* Desktop: table */}
+                <div className="hidden md:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Candidate</TableHead>
+                        <TableHead>Requirement</TableHead>
+                        <TableHead className="text-right">Score</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {urgent.map((u, i) => (
+                        <TableRow key={i}>
+                          <TableCell>
+                            <Link href={`/candidates/${u.candidateId}`} className="font-medium text-foreground hover:text-primary">
+                              {u.candidate}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">{u.requirement}</TableCell>
+                          <TableCell className="text-right">
+                            <span className={cn("rounded-lg px-2 py-0.5 text-label-md font-semibold", u.score >= 80 ? "bg-primary/10 text-primary" : "bg-strong-match/10 text-strong-match")}>
+                              {u.score}%
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Mobile: stacked cards */}
+                <ul className="divide-y divide-border md:hidden">
                   {urgent.map((u, i) => (
-                    <TableRow key={i}>
-                      <TableCell>
-                        <Link href={`/candidates/${u.candidateId}`} className="font-medium text-foreground hover:text-primary">
+                    <li key={i} className="flex items-start justify-between gap-3 px-4 py-3">
+                      <div className="min-w-0">
+                        <Link href={`/candidates/${u.candidateId}`} className="block truncate font-medium text-foreground hover:text-primary">
                           {u.candidate}
                         </Link>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{u.requirement}</TableCell>
-                      <TableCell className="text-right">
-                        <span className={cn("rounded-lg px-2 py-0.5 text-label-md font-semibold", u.score >= 80 ? "bg-primary/10 text-primary" : "bg-strong-match/10 text-strong-match")}>
-                          {u.score}%
-                        </span>
-                      </TableCell>
-                    </TableRow>
+                        <div className="truncate text-body-sm text-muted-foreground">{u.requirement}</div>
+                      </div>
+                      <span className={cn("shrink-0 rounded-lg px-2 py-0.5 text-label-md font-semibold", u.score >= 80 ? "bg-primary/10 text-primary" : "bg-strong-match/10 text-strong-match")}>
+                        {u.score}%
+                      </span>
+                    </li>
                   ))}
-                </TableBody>
-              </Table>
+                </ul>
+              </>
             )}
           </div>
 

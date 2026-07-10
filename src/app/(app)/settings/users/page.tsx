@@ -58,42 +58,68 @@ export default async function UsersSettingsPage() {
       </div>
 
       <div className="mt-6 rounded-lg border border-border bg-card shadow-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>User name</TableHead>
-              <TableHead>Email address</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {(profiles ?? []).map((profile) => (
-              <TableRow key={profile.id}>
-                <TableCell className="font-medium">{profile.full_name}</TableCell>
-                <TableCell className="text-muted-foreground">{profile.email}</TableCell>
-                <TableCell>
-                  <RoleSelect
-                    userId={profile.id}
-                    role={profile.role}
-                    disabled={profile.id === user.id}
-                  />
-                </TableCell>
-                <TableCell>
-                  {profile.must_change_password ? (
-                    <Badge variant="outline">Pending first login</Badge>
-                  ) : (
-                    <Badge className="bg-success text-success-foreground">Active</Badge>
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  <ResetPasswordDialog userId={profile.id} email={profile.email} />
-                </TableCell>
+        {/* Desktop: table */}
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>User name</TableHead>
+                <TableHead>Email address</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {(profiles ?? []).map((profile) => (
+                <TableRow key={profile.id}>
+                  <TableCell className="font-medium">{profile.full_name}</TableCell>
+                  <TableCell className="text-muted-foreground">{profile.email}</TableCell>
+                  <TableCell>
+                    <RoleSelect
+                      userId={profile.id}
+                      role={profile.role}
+                      disabled={profile.id === user.id}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    {profile.must_change_password ? (
+                      <Badge variant="outline">Pending first login</Badge>
+                    ) : (
+                      <Badge className="bg-success text-success-foreground">Active</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <ResetPasswordDialog userId={profile.id} email={profile.email} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Mobile: stacked cards */}
+        <ul className="divide-y divide-border md:hidden">
+          {(profiles ?? []).map((profile) => (
+            <li key={profile.id} className="space-y-3 px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate font-medium text-foreground">{profile.full_name}</div>
+                  <div className="truncate text-body-sm text-muted-foreground">{profile.email}</div>
+                </div>
+                {profile.must_change_password ? (
+                  <Badge variant="outline" className="shrink-0">Pending first login</Badge>
+                ) : (
+                  <Badge className="shrink-0 bg-success text-success-foreground">Active</Badge>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <RoleSelect userId={profile.id} role={profile.role} disabled={profile.id === user.id} />
+                <ResetPasswordDialog userId={profile.id} email={profile.email} />
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );
