@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Search, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MobileNav } from "@/components/layout/mobile-nav";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 
 export function Topbar({
   fullName,
@@ -37,6 +38,7 @@ export function Topbar({
         >
           Upload CV
         </Button>
+        <ThemeToggle />
         <button
           aria-label="Notifications"
           className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent"
