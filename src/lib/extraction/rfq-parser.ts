@@ -18,6 +18,7 @@ export interface ExtractedTenderFields {
   required_skills: string[];
   required_certifications: string[];
   sectors: string[];
+  min_experience_years: number | null;
 }
 
 export function emptyTenderFields(): ExtractedTenderFields {
@@ -32,7 +33,22 @@ export function emptyTenderFields(): ExtractedTenderFields {
     required_skills: [],
     required_certifications: [],
     sectors: [],
+    min_experience_years: null,
   };
+}
+
+/**
+ * Best-effort minimum-experience extraction: "minimum 5 years", "at least 8 years",
+ * "5+ years experience". Returns the smallest such figure (the requirement floor).
+ */
+export function parseMinExperience(text: string): number | null {
+  const re = /(?:minimum(?: of)?|at least|min\.?)\s+(\d{1,2})\s*\+?\s*years?|\b(\d{1,2})\s*\+\s*years?(?:['’]?\s*(?:of\s+)?experience)?/gi;
+  let min: number | null = null;
+  for (const m of text.matchAll(re)) {
+    const n = Number(m[1] ?? m[2]);
+    if (!Number.isNaN(n) && n > 0 && n < 50 && (min === null || n < min)) min = n;
+  }
+  return min;
 }
 
 const MONTHS: Record<string, number> = {
@@ -167,6 +183,7 @@ export function parseRfqText(text: string, filename?: string): ExtractedTenderFi
   fields.required_skills = matchDictionary(text, [...ALL_TECHNICAL_SKILLS, ...ALL_SKILLS]).slice(0, 15);
   fields.required_certifications = matchDictionary(text, [...ALL_CERTIFICATIONS]).slice(0, 10);
   fields.sectors = matchDictionary(text, [...ALL_SECTORS]).slice(0, 6);
+  fields.min_experience_years = parseMinExperience(text);
 
   return fields;
 }

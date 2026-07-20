@@ -95,6 +95,26 @@ describe("scoreCandidateForTender", () => {
     expect(result.breakdown.role).toBe(1); // no requirement => full marks
     expect(result.breakdown.skills).toBe(1);
   });
+
+  it("applies the tender's minimum-experience requirement", () => {
+    // Candidate has 7 years; a 14-year minimum halves the experience sub-score.
+    const result = scoreCandidateForTender(candidate, {
+      required_roles: ["ERP Consultant"],
+      required_skills: [],
+      required_certifications: [],
+      min_experience_years: 14,
+    });
+    expect(result.breakdown.experience).toBe(0.5);
+  });
+
+  it("gives full experience marks when no minimum is set", () => {
+    const result = scoreCandidateForTender(candidate, {
+      required_roles: ["ERP Consultant"],
+      required_skills: [],
+      required_certifications: [],
+    });
+    expect(result.breakdown.experience).toBe(1);
+  });
 });
 
 describe("poolStrength", () => {

@@ -34,6 +34,7 @@ function toForm(f: ExtractedTenderFields): TenderFormFields {
     required_skills: f.required_skills,
     required_certifications: f.required_certifications,
     sectors: f.sectors,
+    min_experience_years: f.min_experience_years,
     status: "draft",
   };
 }
@@ -50,6 +51,7 @@ function toFlags(f: ExtractedTenderFields): TenderExtractedFlags {
     required_skills: f.required_skills.length > 0,
     required_certifications: f.required_certifications.length > 0,
     sectors: f.sectors.length > 0,
+    min_experience_years: f.min_experience_years != null,
   };
 }
 

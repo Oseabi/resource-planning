@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseRfqText, parseDateToIso, parseMoney } from "@/lib/extraction/rfq-parser";
+import { parseRfqText, parseDateToIso, parseMoney, parseMinExperience } from "@/lib/extraction/rfq-parser";
 
 const SAMPLE_RFQ = `Request for Quotation: D365 Finance Implementation Partner
 Issued by: Gauteng Provincial Treasury
@@ -50,6 +50,20 @@ describe("parseMoney", () => {
   });
   it("returns null when no amount", () => {
     expect(parseMoney("no budget stated")).toBeNull();
+  });
+});
+
+describe("parseMinExperience", () => {
+  it("reads 'minimum N years' phrasings", () => {
+    expect(parseMinExperience("Candidates require a minimum of 5 years experience")).toBe(5);
+    expect(parseMinExperience("at least 8 years in the field")).toBe(8);
+    expect(parseMinExperience("10+ years experience required")).toBe(10);
+  });
+  it("takes the smallest requirement when several appear", () => {
+    expect(parseMinExperience("minimum 5 years for engineers, 10 years for leads")).toBe(5);
+  });
+  it("returns null when none stated", () => {
+    expect(parseMinExperience("No specific experience requirement.")).toBeNull();
   });
 });
 

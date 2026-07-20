@@ -100,6 +100,7 @@ create table public.tenders (
   required_skills text[] not null default '{}',
   required_certifications text[] not null default '{}',
   sectors text[] not null default '{}',
+  min_experience_years numeric,
   status text not null default 'draft' check (status in ('draft', 'live', 'submitted', 'won', 'lost')),
   source_document_path text,
   created_by uuid references public.profiles (id),

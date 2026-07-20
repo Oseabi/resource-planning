@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users } from "lucide-react";
+import { Users, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import {
   Table,
@@ -81,9 +81,13 @@ export default async function CandidatesPage({
             Manage and match engineering resources.
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
           <StatCard label="Total candidates" value={totalCount ?? 0} />
           <StatCard label="Available now" value={availableCount ?? 0} accent />
+          <Button render={<Link href="/candidates/new" />} nativeButton={false}>
+            <Plus className="size-4" />
+            Add Candidate
+          </Button>
         </div>
       </div>
 

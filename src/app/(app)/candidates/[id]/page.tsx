@@ -117,9 +117,21 @@ export default async function CandidateProfilePage({
                         {exp.is_current ? "Present" : (exp.end_date ?? "?")}
                       </span>
                     </div>
-                    {exp.company && <p className="text-body-sm text-muted-foreground">{exp.company}</p>}
+                    {(exp.company || exp.location || exp.employment_type) && (
+                      <p className="text-body-sm text-muted-foreground">
+                        {[exp.company, exp.location, exp.employment_type].filter(Boolean).join(" · ")}
+                      </p>
+                    )}
                     {exp.description && (
                       <p className="mt-1.5 whitespace-pre-wrap text-body-sm text-foreground">{exp.description}</p>
+                    )}
+                    {exp.achievements && (
+                      <div className="mt-1.5">
+                        <div className="text-label-sm uppercase tracking-wide text-muted-foreground">
+                          Key achievements
+                        </div>
+                        <p className="whitespace-pre-wrap text-body-sm text-foreground">{exp.achievements}</p>
+                      </div>
                     )}
                   </div>
                 </div>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil, Briefcase, MapPin, CalendarClock, Banknote } from "lucide-react";
+import { ArrowLeft, Pencil, Briefcase, MapPin, CalendarClock, Banknote, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { TenderStatusBadge } from "@/app/(app)/tenders/tender-badges";
@@ -71,6 +71,8 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
 
   const tags: { icon: React.ReactNode; label: string }[] = [];
   for (const r of tender.required_roles.slice(0, 4)) tags.push({ icon: <Briefcase className="size-3.5" />, label: r });
+  if (tender.min_experience_years != null)
+    tags.push({ icon: <Clock className="size-3.5" />, label: `${tender.min_experience_years}+ yrs` });
   if (tender.location) tags.push({ icon: <MapPin className="size-3.5" />, label: tender.location });
   if (tender.value != null) tags.push({ icon: <Banknote className="size-3.5" />, label: formatValue(tender.value) });
   if (tender.submission_deadline)

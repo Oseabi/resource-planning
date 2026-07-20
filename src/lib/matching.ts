@@ -99,14 +99,15 @@ export interface TenderScoringSource {
   required_roles: string[];
   required_skills: string[];
   required_certifications: string[];
+  min_experience_years?: number | null;
 }
 
 /**
  * Score a candidate against a tender. Tenders list multiple required roles;
  * the candidate is scored against each and the best result wins (mirroring how
- * a candidate's own multiple roles are handled). No experience/availability
- * requirement exists on tenders, so those criteria default per the engine
- * (experience full marks; availability rewards readiness).
+ * a candidate's own multiple roles are handled). Tenders have no availability
+ * requirement (availability rewards readiness per the engine); the optional
+ * minimum-experience requirement applies when set.
  */
 export function scoreCandidateForTender(
   candidate: Parameters<typeof candidateToScoringInput>[0],
@@ -120,7 +121,7 @@ export function scoreCandidateForTender(
       required_role: role,
       required_skills: tender.required_skills,
       required_certifications: tender.required_certifications,
-      min_experience_years: null,
+      min_experience_years: tender.min_experience_years ?? null,
       required_availability: null,
     });
     if (!best || result.total > best.total) best = result;
@@ -157,7 +158,7 @@ export function poolGapAnalysis(
         required_role: role,
         required_skills: tender.required_skills,
         required_certifications: tender.required_certifications,
-        min_experience_years: null,
+        min_experience_years: tender.min_experience_years ?? null,
         required_availability: null,
       });
       return result.total >= threshold;

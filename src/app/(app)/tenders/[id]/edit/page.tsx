@@ -22,6 +22,7 @@ export default async function EditTenderPage({ params }: { params: Promise<{ id:
     required_skills: tender.required_skills,
     required_certifications: tender.required_certifications,
     sectors: tender.sectors,
+    min_experience_years: tender.min_experience_years,
     status: tender.status,
   };
 

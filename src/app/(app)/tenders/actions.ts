@@ -19,6 +19,7 @@ export interface TenderFormFields {
   required_skills: string[];
   required_certifications: string[];
   sectors: string[];
+  min_experience_years: number | null;
   status: TenderStatus;
 }
 

@@ -5,17 +5,35 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { WorkExperience } from "@/lib/supabase/database.types";
 
 const EMPTY: WorkExperience = {
   title: "",
   company: "",
   location: null,
+  employment_type: null,
   start_date: null,
   end_date: null,
   is_current: false,
   description: null,
+  achievements: null,
 };
+
+const EMPLOYMENT_TYPES = [
+  "Full-time",
+  "Part-time",
+  "Contract",
+  "Freelance",
+  "Internship",
+  "Temporary",
+] as const;
 
 export function ExperienceEditor({
   value,
@@ -67,6 +85,34 @@ export function ExperienceEditor({
               />
             </div>
             <div className="space-y-1">
+              <Label className="text-label-sm">Location</Label>
+              <Input
+                value={entry.location ?? ""}
+                onChange={(e) => update(i, { location: e.target.value || null })}
+                placeholder="e.g. Johannesburg"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-label-sm">Employment type</Label>
+              <Select
+                value={entry.employment_type ?? ""}
+                onValueChange={(v) => update(i, { employment_type: v || null })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select type">
+                    {(v) => (v ? String(v) : "Select type")}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {EMPLOYMENT_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
               <Label className="text-label-sm">Start</Label>
               <Input
                 value={entry.start_date ?? ""}
@@ -102,7 +148,16 @@ export function ExperienceEditor({
               rows={2}
               value={entry.description ?? ""}
               onChange={(e) => update(i, { description: e.target.value || null })}
-              placeholder="Key responsibilities and achievements..."
+              placeholder="Key responsibilities in this role..."
+            />
+          </div>
+          <div className="mt-3 space-y-1">
+            <Label className="text-label-sm">Key achievements</Label>
+            <Textarea
+              rows={2}
+              value={entry.achievements ?? ""}
+              onChange={(e) => update(i, { achievements: e.target.value || null })}
+              placeholder="Notable results, e.g. Delivered D365 rollout 2 weeks early..."
             />
           </div>
           <div className="mt-2 flex justify-end">

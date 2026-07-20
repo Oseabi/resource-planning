@@ -35,6 +35,7 @@ export const EMPTY_TENDER: TenderFormFields = {
   required_skills: [],
   required_certifications: [],
   sectors: [],
+  min_experience_years: null,
   status: "draft",
 };
 
@@ -93,6 +94,18 @@ export function TenderFields({
       </Section>
 
       <Section title="Team requirements">
+        <Field label="Min. years experience" htmlFor="tf-minexp" highlight={extracted.min_experience_years}>
+          <Input
+            id="tf-minexp"
+            type="number"
+            min={0}
+            step={0.5}
+            className="sm:max-w-xs"
+            value={value.min_experience_years ?? ""}
+            onChange={(e) => set("min_experience_years", e.target.value === "" ? null : Number(e.target.value))}
+            placeholder="e.g. 5"
+          />
+        </Field>
         <Field label="Required roles" highlight={extracted.required_roles}>
           <TagInput value={value.required_roles} onChange={(v) => set("required_roles", v)} field="roles" context={ctx} placeholder="Roles this tender needs..." highlight={extracted.required_roles} />
         </Field>
