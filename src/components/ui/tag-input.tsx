@@ -14,6 +14,8 @@ interface TagInputProps {
   context?: { primaryRole?: string | null; sectors?: string[] };
   /** Explicit suggestions override (otherwise derived from `field`). */
   suggestions?: string[];
+  /** Explicit quick-add chips override (otherwise derived from `field` + context). */
+  quickAdd?: string[];
   placeholder?: string;
   id?: string;
   /** Highlight chips as "auto-extracted" until the user edits the field. */
@@ -26,6 +28,7 @@ export function TagInput({
   field,
   context,
   suggestions,
+  quickAdd: quickAddOverride,
   placeholder = "Type and press Enter...",
   id,
   highlight = false,
@@ -44,11 +47,11 @@ export function TagInput({
   // Quick-add chips: role/sector-aware curated set for this field, minus chosen
   // values (and, for the roles field, the primary role so it can't be added twice).
   const quickAdd = useMemo(() => {
-    if (!field) return [];
     const chosen = new Set(value.map((v) => v.toLowerCase()));
     if (context?.primaryRole) chosen.add(context.primaryRole.toLowerCase());
-    return suggestionsFor(field, context ?? {}, 10).filter((s) => !chosen.has(s.toLowerCase()));
-  }, [field, context, value]);
+    const base = quickAddOverride ?? (field ? suggestionsFor(field, context ?? {}, 10) : []);
+    return base.filter((s) => !chosen.has(s.toLowerCase()));
+  }, [field, context, value, quickAddOverride]);
 
   const filtered = useMemo(() => {
     const q = input.trim().toLowerCase();

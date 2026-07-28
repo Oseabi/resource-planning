@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { VOCABULARY } from "@/lib/vocabulary";
+import { CATEGORY_NAMES } from "@/lib/resource-categories";
 
 const STATUS_LABELS: Record<string, string> = {
   all: "Any status",
@@ -70,6 +71,25 @@ export function CandidatesFilters() {
           {VOCABULARY.roles.map((r) => (
             <SelectItem key={r} value={r}>
               {r}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={params.get("category") ?? "all"}
+        onValueChange={(v) => update("category", v)}
+      >
+        <SelectTrigger className="w-full sm:w-48">
+          <SelectValue placeholder="All categories">
+            {(v) => (!v || v === "all" ? "All categories" : String(v))}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All categories</SelectItem>
+          {CATEGORY_NAMES.map((c) => (
+            <SelectItem key={c} value={c}>
+              {c}
             </SelectItem>
           ))}
         </SelectContent>

@@ -12,6 +12,7 @@ import {
   type DuplicateMatch,
 } from "@/app/(app)/candidates/actions";
 import type { ExtractionResult } from "@/lib/extraction/types";
+import { deriveCategories } from "@/lib/resource-categories";
 
 export function EditCandidateForm({
   candidateId,
@@ -66,6 +67,15 @@ export function EditCandidateForm({
         if (f.languages.length) { next.languages = union(prev.languages, f.languages); nextFlags.languages = true; }
         if (f.work_experience.length) { next.work_experience = [...prev.work_experience, ...f.work_experience]; nextFlags.work_experience = true; }
         if (f.education.length) { next.education = [...prev.education, ...f.education]; nextFlags.education = true; }
+        // Suggest categories from the merged skills/roles (union with any existing).
+        const derived = deriveCategories(next);
+        if (derived.length) {
+          const merged = union(prev.resource_categories, derived);
+          if (merged.length !== prev.resource_categories.length) {
+            next.resource_categories = merged;
+            nextFlags.resource_categories = true;
+          }
+        }
         return next;
       });
       setFlags(nextFlags);

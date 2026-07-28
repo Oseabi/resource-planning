@@ -8,6 +8,7 @@ import {
   UserSquare2,
   FileText,
   BarChart3,
+  ShieldCheck,
   Settings,
   HelpCircle,
   Plus,
@@ -20,6 +21,7 @@ export const NAV_ITEMS = [
   { href: "/candidates", label: "Candidates", icon: Users },
   { href: "/job-requirements", label: "Job Requirements", icon: UserSquare2 },
   { href: "/tenders", label: "Tenders", icon: FileText },
+  { href: "/oem-letters", label: "OEM Letters", icon: ShieldCheck },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
 

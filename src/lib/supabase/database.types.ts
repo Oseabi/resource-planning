@@ -66,6 +66,7 @@ export interface Database {
           qualifications: string[];
           sectors: string[];
           languages: string[];
+          resource_categories: string[];
           linkedin_url: string | null;
           portfolio_url: string | null;
           work_experience: WorkExperience[];
@@ -86,6 +87,31 @@ export interface Database {
           full_name: string;
         };
         Update: Partial<Omit<Database["public"]["Tables"]["candidates"]["Row"], "search_text">>;
+        Relationships: [];
+      };
+      oem_letters: {
+        Row: {
+          id: string;
+          title: string;
+          oem_vendor: string;
+          /** Practice areas; shares vocabulary with candidates.resource_categories. */
+          categories: string[];
+          reference_number: string | null;
+          issued_to: string | null;
+          issue_date: string | null;
+          expiry_date: string | null;
+          notes: string | null;
+          file_path: string | null;
+          original_filename: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["oem_letters"]["Row"]> & {
+          title: string;
+          oem_vendor: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["oem_letters"]["Row"]>;
         Relationships: [];
       };
       job_requirements: {

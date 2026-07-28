@@ -1,6 +1,7 @@
 import "server-only";
 import mammoth from "mammoth";
 import { extractText as extractPdfText, getDocumentProxy } from "unpdf";
+import { extractPdfTextWithLines, type PdfDocumentLike } from "@/lib/extraction/pdf-lines";
 
 const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -22,6 +23,16 @@ export async function extractDocumentText(
 
   if (isPdf) {
     const pdf = await getDocumentProxy(new Uint8Array(buffer));
+
+    // Preferred: rebuild real lines from text-item positions. `mergePages` flattens
+    // the whole document into one line, which defeats all line-based parsing.
+    try {
+      const lined = await extractPdfTextWithLines(pdf as unknown as PdfDocumentLike);
+      if (lined.trim().length > 0) return lined;
+    } catch {
+      // Fall through to the flat extractor below.
+    }
+
     const { text } = await extractPdfText(pdf, { mergePages: true });
     return text;
   }

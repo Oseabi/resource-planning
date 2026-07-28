@@ -22,3 +22,21 @@ values (
   ]
 )
 on conflict (id) do nothing;
+
+-- The 'oem-letters' bucket holds manufacturer authorisation letters. Also PRIVATE,
+-- accessed only through service-role server actions.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'oem-letters',
+  'oem-letters',
+  false,
+  10485760, -- 10 MB
+  array[
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/msword',
+    'image/png',
+    'image/jpeg'
+  ]
+)
+on conflict (id) do nothing;

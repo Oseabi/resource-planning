@@ -11,11 +11,13 @@ import {
   guessRole,
   guessExperienceYears,
   parseListItems,
+  parseCertificationItems,
   classifySkills,
   parseExperience,
   parseEducation,
   extractLinks,
   extractLanguages,
+  explicitExperienceYears,
 } from "@/lib/extraction/heuristics";
 import { splitSections } from "@/lib/extraction/sections";
 import { emptyExtractedFields, type ExtractedCandidateFields } from "@/lib/extraction/types";
@@ -39,6 +41,18 @@ function without(values: string[], exclude: string[]): string[] {
   return values.filter((v) => !ex.has(v.toLowerCase()));
 }
 
+/** Drop items wholly contained in a longer sibling ("SuccessFactors" vs "SAP SuccessFactors"). */
+function dropSubsumed(values: string[]): string[] {
+  return values.filter((value) => {
+    const lower = value.toLowerCase();
+    return !values.some((other) => {
+      if (other === value) return false;
+      const otherLower = other.toLowerCase();
+      return otherLower.length > lower.length && otherLower.includes(lower);
+    });
+  });
+}
+
 /** Estimate total years from experience date ranges (current year for "present"). */
 function yearsFromExperience(entries: { start_date?: string | null; end_date?: string | null; is_current?: boolean }[]): number | null {
   const yearOf = (s?: string | null) => {
@@ -57,6 +71,28 @@ function yearsFromExperience(entries: { start_date?: string | null; end_date?: s
   if (minStart === null) return null;
   const span = (maxEnd ?? now) - minStart;
   return span > 0 && span < 60 ? span : null;
+}
+
+/**
+ * Roles from the headline under a candidate's name, e.g.
+ * "Enterprise Architect | Programme Executive | Delivery Leader". Contact lines
+ * (which also use pipes) are skipped via their digits/@ markers.
+ */
+function headlineRoles(preamble: string): string[] {
+  const lines = preamble.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const out: string[] = [];
+  for (const line of lines.slice(0, 5)) {
+    if (!line.includes("|")) continue;
+    if (line.includes("@") || /\d{3}/.test(line)) continue; // phone / email row
+    for (const part of line.split("|")) {
+      const value = part.trim().replace(/[.,;]+$/, "");
+      if (value.length < 4 || value.length > 60) continue;
+      if (value.split(/\s+/).length > 7) continue;
+      if (!/^[A-Za-z][A-Za-z\s&/'’-]*$/.test(value)) continue;
+      out.push(value);
+    }
+  }
+  return out;
 }
 
 /**
@@ -90,11 +126,13 @@ export function parseTextToFields(text: string, filename?: string): ExtractedCan
   // Anything under an explicit "technical skills" heading is technical.
   const explicitTech = parseListItems(sections.technical_skills ?? "");
 
-  const technical = dedupe([
-    ...matchDictionary(text, [...ALL_TECHNICAL_SKILLS]),
-    ...explicitTech,
-    ...classified.technical,
-  ]);
+  const technical = dropSubsumed(
+    dedupe([
+      ...matchDictionary(text, [...ALL_TECHNICAL_SKILLS]),
+      ...explicitTech,
+      ...classified.technical,
+    ]),
+  );
   const professional = without(
     dedupe([...matchDictionary(text, [...ALL_SKILLS]), ...classified.professional]),
     technical,
@@ -102,38 +140,43 @@ export function parseTextToFields(text: string, filename?: string): ExtractedCan
   fields.technical_skills = technical;
   fields.skills = professional;
 
-  // --- Certifications ---
-  fields.certifications = dedupe([
+  // --- Certifications (one per line; commas would shred awarding bodies) ---
+  const certItems = dedupe([
     ...matchDictionary(text, [...VOCABULARY.certifications]),
-    ...parseListItems(sections.certifications ?? ""),
+    ...parseCertificationItems(sections.certifications ?? ""),
   ]);
 
   // --- Sectors ---
   fields.sectors = matchDictionary(text, [...VOCABULARY.sectors]);
 
-  // --- Languages ---
-  fields.languages = dedupe([
-    ...extractLanguages(text),
-    ...parseListItems(sections.languages ?? ""),
-  ]);
+  // --- Languages (prefer the dedicated section so prose can't leak in) ---
+  fields.languages = dedupe(extractLanguages(sections.languages ?? text));
 
   // --- Education & Qualifications ---
   fields.education = parseEducation(sections.education ?? "");
+  const degreeText = fields.education.map((e) => e.qualification);
   fields.qualifications = dedupe([
     ...matchDictionary(text, [...VOCABULARY.qualifications]),
-    ...fields.education.map((e) => e.qualification),
+    ...degreeText,
   ]);
+  // A combined "Education & Certifications" heading feeds both sections, so drop
+  // anything already captured as a degree from the certification list.
+  fields.certifications = certItems.filter(
+    (c) => !degreeText.some((d) => d.toLowerCase().startsWith(c.toLowerCase().slice(0, 25))),
+  );
 
   // --- Experience & roles ---
   fields.work_experience = parseExperience(sections.experience ?? "");
   const experienceTitles = fields.work_experience
     .map((e) => e.title)
     .filter((t) => t && t !== "Role");
+  const headline = headlineRoles(preamble);
   const dictRole = guessRole(text, [...VOCABULARY.roles]);
-  const primary = experienceTitles[0] ?? dictRole;
+  const primary = experienceTitles[0] ?? headline[0] ?? dictRole;
   fields.current_role = primary ?? null;
   fields.additional_roles = without(
     dedupe([
+      ...headline,
       ...experienceTitles.slice(1),
       ...matchDictionary(text, [...VOCABULARY.roles]),
     ]),
@@ -141,7 +184,12 @@ export function parseTextToFields(text: string, filename?: string): ExtractedCan
   ).slice(0, 6);
 
   // --- Years of experience ---
-  fields.years_experience = yearsFromExperience(fields.work_experience) ?? guessExperienceYears(text);
+  // An explicit "19 years of experience" beats a date-span estimate, which
+  // over-counts when early-career odd jobs are listed.
+  fields.years_experience =
+    explicitExperienceYears(text) ??
+    yearsFromExperience(fields.work_experience) ??
+    guessExperienceYears(text);
 
   return fields;
 }

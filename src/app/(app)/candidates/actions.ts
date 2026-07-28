@@ -33,6 +33,7 @@ export interface CandidateFormFields {
   qualifications: string[];
   sectors: string[];
   languages: string[];
+  resource_categories: string[];
   linkedin_url: string | null;
   portfolio_url: string | null;
   work_experience: WorkExperience[];
@@ -121,6 +122,7 @@ function toCandidateColumns(fields: CandidateFormFields): CandidateUpdate & { fu
     qualifications: fields.qualifications,
     sectors: fields.sectors,
     languages: fields.languages,
+    resource_categories: fields.resource_categories,
     linkedin_url: fields.linkedin_url,
     portfolio_url: fields.portfolio_url,
     work_experience: fields.work_experience,

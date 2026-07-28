@@ -1,4 +1,15 @@
-import { Briefcase, Timer, Banknote, Trophy } from "lucide-react";
+import Link from "next/link";
+import {
+  Briefcase,
+  Timer,
+  Banknote,
+  Trophy,
+  Users,
+  ShieldCheck,
+  AlertTriangle,
+  TrendingUp,
+  Layers,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import {
   Table,
@@ -8,10 +19,28 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   PlacementTrendsChart,
   type MonthlyPlacements,
 } from "@/components/charts/placement-trends-chart";
+import {
+  categoryBreakdown,
+  experienceBands,
+  poolHealth,
+  skillGaps,
+  demandedSkills,
+  tenderPerformance,
+  winRateByClient,
+  deadlinesAtRisk,
+  complianceSummary,
+  certificationCoverage,
+  categoryReadiness,
+  avgTimeToFill,
+  recruiterLeaderboard,
+  requirementAgeing,
+  matchScoreBands,
+} from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 
 const MONTHS_SHOWN = 6;
@@ -19,10 +48,16 @@ const MONTHS_SHOWN = 6;
 function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
-
 function monthLabel(d: Date): string {
   return d.toLocaleDateString("en-GB", { month: "short", year: "2-digit" });
 }
+
+const money = (n: number) =>
+  new Intl.NumberFormat("en-ZA", {
+    style: "currency",
+    currency: "ZAR",
+    maximumFractionDigits: 0,
+  }).format(n);
 
 export default async function AnalyticsPage() {
   const supabase = await createClient();
@@ -32,52 +67,63 @@ export default async function AnalyticsPage() {
     { data: requirements },
     { data: tenders },
     { data: candidates },
+    { data: letters },
+    { data: matches },
+    { data: profiles },
   ] = await Promise.all([
-    supabase.from("placements").select("id, candidate_id, source_type, source_id, fee_value, created_at, created_by"),
-    supabase.from("job_requirements").select("id, title, client, status, created_at, required_skills"),
-    supabase.from("tenders").select("id, status, required_skills"),
-    supabase.from("candidates").select("id, status, availability, skills, technical_skills"),
+    supabase.from("placements").select("source_type, source_id, fee_value, created_at, created_by"),
+    supabase.from("job_requirements").select("id, status, created_at, required_skills"),
+    supabase
+      .from("tenders")
+      .select("id, status, client, value, submission_deadline, sectors, required_skills"),
+    supabase
+      .from("candidates")
+      .select(
+        "id, status, availability, years_experience, resource_categories, skills, technical_skills, certifications",
+      ),
+    supabase.from("oem_letters").select("oem_vendor, categories, expiry_date"),
+    supabase.from("matches").select("score"),
+    supabase.from("profiles").select("id, full_name"),
   ]);
 
   const allPlacements = placements ?? [];
   const allReqs = requirements ?? [];
   const allTenders = tenders ?? [];
   const allCandidates = candidates ?? [];
+  const allLetters = letters ?? [];
+  const allMatches = matches ?? [];
+  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
 
-  // --- KPIs -----------------------------------------------------------------
-  const totalPlacements = allPlacements.length;
+  // --- Computed metrics ------------------------------------------------------
+  const health = poolHealth(allCandidates);
+  const categories = categoryBreakdown(allCandidates);
+  const bands = experienceBands(allCandidates);
+  const gaps = skillGaps(demandedSkills(allReqs, allTenders), allCandidates);
+
+  const perf = tenderPerformance(allTenders);
+  const clients = winRateByClient(allTenders).slice(0, 8);
+  const atRisk = deadlinesAtRisk(allTenders, 30);
+
+  const compliance = complianceSummary(allLetters);
+  const certs = certificationCoverage(allCandidates);
+  const readiness = categoryReadiness(allCandidates, allLetters);
+
+  const timeToFill = avgTimeToFill(allPlacements, allReqs);
+  const recruiters = recruiterLeaderboard(allPlacements).slice(0, 8);
+  const ageing = requirementAgeing(allReqs);
+  const scoreBands = matchScoreBands(allMatches.map((m) => m.score));
+
   const totalRevenue = allPlacements.reduce((s, p) => s + (p.fee_value ?? 0), 0);
-  const recruiterCount = new Set(allPlacements.map((p) => p.created_by).filter(Boolean)).size;
-  const revenuePerRecruiter = recruiterCount ? Math.round(totalRevenue / recruiterCount) : 0;
 
-  const reqById = new Map(allReqs.map((r) => [r.id, r]));
-  const fillDays = allPlacements
-    .filter((p) => p.source_type === "job_requirement")
-    .map((p) => {
-      const req = reqById.get(p.source_id);
-      if (!req) return null;
-      const days =
-        (new Date(p.created_at).getTime() - new Date(req.created_at).getTime()) / 86_400_000;
-      return days >= 0 ? days : null;
-    })
-    .filter((d): d is number => d != null);
-  const avgTimeToFill = fillDays.length
-    ? Math.round(fillDays.reduce((s, d) => s + d, 0) / fillDays.length)
-    : null;
-
-  const won = allTenders.filter((t) => t.status === "won").length;
-  const lost = allTenders.filter((t) => t.status === "lost").length;
-  const winRate = won + lost > 0 ? Math.round((won / (won + lost)) * 100) : null;
-
-  // --- Placement trends (last 6 months) --------------------------------------
+  // Placement trends (last 6 months)
   const now = new Date();
-  const trendData: MonthlyPlacements[] = [];
+  const trend: MonthlyPlacements[] = [];
   const trendIndex = new Map<string, MonthlyPlacements>();
   for (let i = MONTHS_SHOWN - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const entry = { month: monthLabel(d), requirement: 0, tender: 0 };
     trendIndex.set(monthKey(d), entry);
-    trendData.push(entry);
+    trend.push(entry);
   }
   for (const p of allPlacements) {
     const entry = trendIndex.get(monthKey(new Date(p.created_at)));
@@ -86,227 +132,477 @@ export default async function AnalyticsPage() {
     else entry.requirement += 1;
   }
 
-  // --- Pool health ------------------------------------------------------------
-  const pool = allCandidates.filter((c) => c.status !== "placed");
-  const poolTotal = pool.length || 1;
-  const availability = {
-    available: pool.filter((c) => c.availability === "available").length,
-    notice_period: pool.filter((c) => c.availability === "notice_period").length,
-    unavailable: pool.filter((c) => c.availability === "unavailable").length,
-  };
-
-  // --- Top skills deficit -------------------------------------------------------
-  const demandedSkills = new Set<string>();
-  for (const r of allReqs.filter((r) => r.status === "open")) {
-    for (const s of r.required_skills) demandedSkills.add(s);
-  }
-  for (const t of allTenders.filter((t) => t.status === "live" || t.status === "draft")) {
-    for (const s of t.required_skills) demandedSkills.add(s);
-  }
-  const activePool = allCandidates.filter((c) => c.status === "active");
-  const skillCoverage = [...demandedSkills].map((skill) => {
-    const key = skill.toLowerCase();
-    const covered = activePool.filter(
-      (c) =>
-        c.skills.some((s) => s.toLowerCase() === key) ||
-        c.technical_skills.some((s) => s.toLowerCase() === key),
-    ).length;
-    return { skill, covered };
-  });
-  const deficits = skillCoverage
-    .filter((s) => s.covered <= 1)
-    .sort((a, b) => a.covered - b.covered)
-    .slice(0, 8);
-
-  // --- Client performance ---------------------------------------------------------
-  const placedByReq = new Map<string, number>();
-  for (const p of allPlacements.filter((p) => p.source_type === "job_requirement")) {
-    placedByReq.set(p.source_id, (placedByReq.get(p.source_id) ?? 0) + 1);
-  }
-  const clientRows = new Map<string, { openReqs: number; totalReqs: number; placements: number }>();
-  for (const r of allReqs) {
-    const client = r.client?.trim() || "—";
-    const row = clientRows.get(client) ?? { openReqs: 0, totalReqs: 0, placements: 0 };
-    row.totalReqs += 1;
-    if (r.status === "open") row.openReqs += 1;
-    row.placements += placedByReq.get(r.id) ?? 0;
-    clientRows.set(client, row);
-  }
-  const clients = [...clientRows.entries()].sort((a, b) => b[1].totalReqs - a[1].totalReqs);
-
-  const fmtMoney = (n: number) =>
-    new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR", maximumFractionDigits: 0 }).format(n);
-
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-display font-semibold text-foreground">Analytics Overview</h1>
+        <h1 className="text-display font-semibold text-foreground">Analytics</h1>
         <p className="mt-1 text-body-lg text-muted-foreground">
-          Performance metrics for placements, requirements, and tenders.
+          Pool strength, bid performance, compliance readiness, and delivery operations.
         </p>
       </div>
 
+      {/* Headline KPIs spanning every area */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi icon={<Briefcase className="size-4" />} label="Total placements" value={String(totalPlacements)} />
+        <Kpi
+          icon={<Briefcase className="size-4" />}
+          label="Total placements"
+          value={String(allPlacements.length)}
+          sub={`${money(totalRevenue)} in fees`}
+        />
         <Kpi
           icon={<Timer className="size-4" />}
           label="Avg time-to-fill"
-          value={avgTimeToFill != null ? `${avgTimeToFill} days` : "—"}
-        />
-        <Kpi
-          icon={<Banknote className="size-4" />}
-          label="Revenue / recruiter"
-          value={recruiterCount ? fmtMoney(revenuePerRecruiter) : "—"}
-          sub={`Total ${fmtMoney(totalRevenue)}`}
+          value={timeToFill != null ? `${timeToFill} days` : "—"}
         />
         <Kpi
           icon={<Trophy className="size-4" />}
           label="Tender win rate"
-          value={winRate != null ? `${winRate}%` : "—"}
-          sub={won + lost > 0 ? `${won} won · ${lost} lost` : "No decided tenders yet"}
+          value={perf.winRate != null ? `${perf.winRate}%` : "—"}
+          sub={perf.won + perf.lost > 0 ? `${perf.won} won · ${perf.lost} lost` : "No decided bids yet"}
+        />
+        <Kpi
+          icon={<ShieldCheck className="size-4" />}
+          label="OEM bid-ready"
+          value={compliance.total > 0 ? `${compliance.readyPct}%` : "—"}
+          sub={
+            compliance.total > 0
+              ? `${compliance.total} letters · ${compliance.expired} expired`
+              : "No letters on file"
+          }
+          tone={compliance.expired > 0 ? "bad" : undefined}
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_300px]">
-        <div className="rounded-lg border border-border bg-card shadow-card p-4">
-          <h2 className="mb-2 text-headline-sm font-semibold text-foreground">Placement Trends</h2>
-          <PlacementTrendsChart data={trendData} />
-        </div>
+      <Tabs defaultValue="pool">
+        <TabsList>
+          <TabsTrigger value="pool">Resource Pool</TabsTrigger>
+          <TabsTrigger value="tenders">Tenders &amp; Bids</TabsTrigger>
+          <TabsTrigger value="compliance">Compliance</TabsTrigger>
+          <TabsTrigger value="ops">Operations</TabsTrigger>
+        </TabsList>
 
-        <div className="space-y-4">
-          <div className="rounded-lg border border-border bg-card shadow-card p-4">
-            <h2 className="mb-3 text-headline-sm font-semibold text-foreground">Pool Health</h2>
-            <HealthBar label="Available" count={availability.available} total={poolTotal} barClass="bg-success" />
-            <HealthBar label="Notice period" count={availability.notice_period} total={poolTotal} barClass="bg-strong-match" />
-            <HealthBar label="Unavailable" count={availability.unavailable} total={poolTotal} barClass="bg-border" />
+        {/* ---------------- Resource pool ---------------- */}
+        <TabsContent value="pool" className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Kpi icon={<Users className="size-4" />} label="Total candidates" value={String(health.total)} />
+            <Kpi
+              icon={<Users className="size-4" />}
+              label="Available now"
+              value={String(health.available)}
+              sub={`${health.availablePct}% of the bench`}
+              tone="good"
+            />
+            <Kpi icon={<Users className="size-4" />} label="On notice" value={String(health.noticePeriod)} />
+            <Kpi icon={<Briefcase className="size-4" />} label="Currently placed" value={String(health.placed)} />
           </div>
 
-          <div className="rounded-lg border border-border bg-card shadow-card p-4">
-            <h2 className="mb-2 text-headline-sm font-semibold text-foreground">Top Skills Deficit</h2>
-            {deficits.length === 0 ? (
-              <p className="text-body-sm text-muted-foreground">
-                No demanded skills are under-covered right now.
-              </p>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Card title="Resource categories" icon={<Layers className="size-4" />}>
+              {categories.length === 0 ? (
+                <Empty>Tag candidates with resource categories to see the breakdown.</Empty>
+              ) : (
+                <div className="space-y-2.5">
+                  {categories.map((c) => (
+                    <div key={c.name}>
+                      <div className="flex items-baseline justify-between gap-2 text-body-sm">
+                        <Link
+                          href={`/candidates?category=${encodeURIComponent(c.name)}`}
+                          className="truncate font-medium text-foreground hover:text-primary"
+                        >
+                          {c.name}
+                        </Link>
+                        <span className="shrink-0 text-muted-foreground">
+                          {c.total} · {c.available} available
+                        </span>
+                      </div>
+                      <Bar value={c.total} total={categories[0].total} className="bg-primary" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            <Card title="Experience spread">
+              <div className="space-y-2.5">
+                {bands.map((b) => (
+                  <div key={b.name}>
+                    <div className="flex items-baseline justify-between gap-2 text-body-sm">
+                      <span className="text-foreground">{b.name}</span>
+                      <span className="text-muted-foreground">{b.count}</span>
+                    </div>
+                    <Bar
+                      value={b.count}
+                      total={Math.max(...bands.map((x) => x.count), 1)}
+                      className="bg-strong-match"
+                    />
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+
+          <Card title="Demanded skills with the thinnest cover" icon={<AlertTriangle className="size-4" />}>
+            {gaps.length === 0 ? (
+              <Empty>No open requirements or live tenders yet, so there is no demand to measure against.</Empty>
             ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {deficits.map((d) => (
+              <div className="flex flex-wrap gap-2">
+                {gaps.map((g) => (
                   <span
-                    key={d.skill}
+                    key={g.skill}
                     className={cn(
-                      "inline-flex items-center rounded-lg border px-2 py-0.5 text-label-md",
-                      d.covered === 0
-                        ? "border-destructive/30 bg-destructive/10 text-destructive"
-                        : "border-strong-match/30 bg-strong-match/10 text-strong-match",
+                      "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-label-md font-medium",
+                      g.covered === 0
+                        ? "bg-destructive/10 text-destructive"
+                        : "bg-strong-match/10 text-strong-match",
                     )}
-                    title={`${d.covered} active candidate(s) have this`}
                   >
-                    {d.skill}
+                    {g.skill}
+                    <span className="opacity-70">{g.covered === 0 ? "nobody" : g.covered}</span>
                   </span>
                 ))}
               </div>
             )}
+          </Card>
+        </TabsContent>
+
+        {/* ---------------- Tenders ---------------- */}
+        <TabsContent value="tenders" className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Kpi
+              icon={<Banknote className="size-4" />}
+              label="Pipeline value"
+              value={money(perf.pipelineValue)}
+              sub={`${perf.live} live · ${perf.submitted} submitted`}
+            />
+            <Kpi icon={<Trophy className="size-4" />} label="Value won" value={money(perf.wonValue)} tone="good" />
+            <Kpi icon={<TrendingUp className="size-4" />} label="Value lost" value={money(perf.lostValue)} />
+            <Kpi
+              icon={<Banknote className="size-4" />}
+              label="Avg deal size"
+              value={perf.avgDealSize != null ? money(perf.avgDealSize) : "—"}
+            />
           </div>
-        </div>
-      </div>
 
-      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-card">
-        <div className="border-b border-border px-4 py-3">
-          <h2 className="text-headline-sm font-semibold text-foreground">Client Performance</h2>
-        </div>
-        {clients.length === 0 ? (
-          <p className="px-4 py-8 text-center text-body-sm text-muted-foreground">
-            No clients yet — create job requirements to see per-client performance.
-          </p>
-        ) : (
-          <>
-            {/* Desktop: data table */}
-            <div className="hidden md:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Client</TableHead>
-                    <TableHead className="text-right">Open reqs</TableHead>
-                    <TableHead className="text-right">Total reqs</TableHead>
-                    <TableHead className="text-right">Placements</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {clients.map(([client, row]) => (
-                    <TableRow key={client}>
-                      <TableCell className="font-medium text-foreground">{client}</TableCell>
-                      <TableCell className="text-right text-foreground">{row.openReqs}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{row.totalReqs}</TableCell>
-                      <TableCell className="text-right text-foreground">{row.placements}</TableCell>
+          <Card title="Deadlines in the next 30 days" icon={<AlertTriangle className="size-4" />}>
+            {atRisk.length === 0 ? (
+              <Empty>No open bids with a deadline in the next 30 days.</Empty>
+            ) : (
+              <ul className="divide-y divide-border">
+                {atRisk.map((t) => (
+                  <li key={t.id} className="flex items-center justify-between gap-3 py-2">
+                    <Link
+                      href={`/tenders/${t.id}`}
+                      className="min-w-0 truncate font-medium text-foreground hover:text-primary"
+                    >
+                      {t.client ?? "Untitled bid"}
+                    </Link>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="text-body-sm text-muted-foreground">
+                        {t.value != null ? money(t.value) : "—"}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-lg px-2 py-0.5 text-label-md font-semibold",
+                          t.daysLeft < 0
+                            ? "bg-destructive/10 text-destructive"
+                            : t.daysLeft <= 7
+                              ? "bg-strong-match/10 text-strong-match"
+                              : "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {t.daysLeft < 0 ? `${Math.abs(t.daysLeft)}d overdue` : `${t.daysLeft}d left`}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          <Card title="Client bid record">
+            {clients.length === 0 ? (
+              <Empty>No tenders captured yet.</Empty>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Client</TableHead>
+                      <TableHead className="text-right">Bids</TableHead>
+                      <TableHead className="text-right">Won</TableHead>
+                      <TableHead className="text-right">Lost</TableHead>
+                      <TableHead className="text-right">Win rate</TableHead>
+                      <TableHead className="text-right">Value won</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {clients.map((c) => (
+                      <TableRow key={c.client}>
+                        <TableCell className="font-medium text-foreground">{c.client}</TableCell>
+                        <TableCell className="text-right">{c.bids}</TableCell>
+                        <TableCell className="text-right text-success">{c.won}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{c.lost}</TableCell>
+                        <TableCell className="text-right">
+                          {c.winRate != null ? `${c.winRate}%` : "—"}
+                        </TableCell>
+                        <TableCell className="text-right">{money(c.value)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </Card>
+        </TabsContent>
 
-            {/* Mobile: stacked cards */}
-            <ul className="divide-y divide-border md:hidden">
-              {clients.map(([client, row]) => (
-                <li key={client} className="px-4 py-3">
-                  <div className="font-medium text-foreground">{client}</div>
-                  <div className="mt-1 flex gap-4 text-body-sm text-muted-foreground">
-                    <span><span className="text-foreground">{row.openReqs}</span> open</span>
-                    <span><span className="text-foreground">{row.totalReqs}</span> total</span>
-                    <span><span className="text-foreground">{row.placements}</span> placed</span>
+        {/* ---------------- Compliance ---------------- */}
+        <TabsContent value="compliance" className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Kpi
+              icon={<ShieldCheck className="size-4" />}
+              label="Letters on file"
+              value={String(compliance.total)}
+              sub={`${compliance.vendors} vendors`}
+            />
+            <Kpi icon={<ShieldCheck className="size-4" />} label="Valid" value={String(compliance.valid)} tone="good" />
+            <Kpi
+              icon={<AlertTriangle className="size-4" />}
+              label="Expiring soon"
+              value={String(compliance.expiringSoon)}
+              tone={compliance.expiringSoon > 0 ? "warn" : undefined}
+            />
+            <Kpi
+              icon={<AlertTriangle className="size-4" />}
+              label="Expired"
+              value={String(compliance.expired)}
+              tone={compliance.expired > 0 ? "bad" : undefined}
+            />
+          </div>
+
+          <Card title="Capability vs paperwork by practice area" icon={<Layers className="size-4" />}>
+            {readiness.length === 0 ? (
+              <Empty>
+                Tag candidates and OEM letters with practice areas to see where you have people but no
+                authorisation — or authorisation but nobody to deliver.
+              </Empty>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Practice area</TableHead>
+                      <TableHead className="text-right">People</TableHead>
+                      <TableHead className="text-right">OEM letters</TableHead>
+                      <TableHead>Readiness</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {readiness.map((r) => {
+                      const missingPaperwork = r.people > 0 && r.letters === 0;
+                      const missingPeople = r.letters > 0 && r.people === 0;
+                      return (
+                        <TableRow key={r.name}>
+                          <TableCell className="font-medium text-foreground">{r.name}</TableCell>
+                          <TableCell className="text-right">{r.people}</TableCell>
+                          <TableCell className="text-right">{r.letters}</TableCell>
+                          <TableCell>
+                            {missingPaperwork ? (
+                              <span className="rounded-lg bg-strong-match/10 px-2 py-0.5 text-label-md text-strong-match">
+                                No OEM letter
+                              </span>
+                            ) : missingPeople ? (
+                              <span className="rounded-lg bg-muted px-2 py-0.5 text-label-md text-muted-foreground">
+                                No resources
+                              </span>
+                            ) : (
+                              <span className="rounded-lg bg-success/10 px-2 py-0.5 text-label-md text-success">
+                                Covered
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </Card>
+
+          <Card title="Certification coverage across the active pool">
+            {certs.length === 0 ? (
+              <Empty>No certifications captured on active candidates yet.</Empty>
+            ) : (
+              <div className="space-y-2.5">
+                {certs.map((c) => (
+                  <div key={c.name}>
+                    <div className="flex items-baseline justify-between gap-2 text-body-sm">
+                      <span className="truncate text-foreground">{c.name}</span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {c.count} {c.count === 1 ? "person" : "people"}
+                      </span>
+                    </div>
+                    <Bar value={c.count} total={certs[0].count} className="bg-success" />
                   </div>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </TabsContent>
+
+        {/* ---------------- Operations ---------------- */}
+        <TabsContent value="ops" className="space-y-4">
+          <Card title="Placement trends">
+            <PlacementTrendsChart data={trend} />
+          </Card>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Card title="Open requirement ageing">
+              <div className="space-y-2.5">
+                {ageing.map((a, i) => (
+                  <div key={a.name}>
+                    <div className="flex items-baseline justify-between gap-2 text-body-sm">
+                      <span className="text-foreground">{a.name}</span>
+                      <span className="text-muted-foreground">{a.count}</span>
+                    </div>
+                    <Bar
+                      value={a.count}
+                      total={Math.max(...ageing.map((x) => x.count), 1)}
+                      className={i >= 2 ? "bg-destructive" : "bg-primary"}
+                    />
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card title="Match quality distribution">
+              {allMatches.length === 0 ? (
+                <Empty>Run matching on a requirement or tender to populate this.</Empty>
+              ) : (
+                <div className="space-y-2.5">
+                  {scoreBands.map((b, i) => (
+                    <div key={b.name}>
+                      <div className="flex items-baseline justify-between gap-2 text-body-sm">
+                        <span className="text-foreground">{b.name}</span>
+                        <span className="text-muted-foreground">{b.count}</span>
+                      </div>
+                      <Bar
+                        value={b.count}
+                        total={Math.max(...scoreBands.map((x) => x.count), 1)}
+                        className={
+                          i === 0 ? "bg-success" : i === 1 ? "bg-strong-match" : "bg-muted-foreground/40"
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+
+          <Card title="Recruiter leaderboard">
+            {recruiters.length === 0 ? (
+              <Empty>No placements recorded yet.</Empty>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Recruiter</TableHead>
+                      <TableHead className="text-right">Placements</TableHead>
+                      <TableHead className="text-right">Fees</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {recruiters.map((r) => (
+                      <TableRow key={r.recruiterId}>
+                        <TableCell className="font-medium text-foreground">
+                          {nameById.get(r.recruiterId) ?? "Unattributed"}
+                        </TableCell>
+                        <TableCell className="text-right">{r.placements}</TableCell>
+                        <TableCell className="text-right">{money(r.revenue)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
+
+// --- Presentation helpers ----------------------------------------------------
 
 function Kpi({
   icon,
   label,
   value,
   sub,
+  tone,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   sub?: string;
+  tone?: "good" | "warn" | "bad";
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card shadow-card px-4 py-3">
-      <div className="flex items-center justify-between">
-        <span className="text-label-sm uppercase tracking-wide text-muted-foreground">{label}</span>
-        <span className="text-muted-foreground">{icon}</span>
+    <div className="rounded-lg border border-border bg-card p-4 shadow-card">
+      <div className="flex items-center gap-2 text-label-sm uppercase tracking-wide text-muted-foreground">
+        {icon}
+        {label}
       </div>
-      <div className="mt-1 text-display font-semibold text-foreground">{value}</div>
-      {sub && <div className="text-body-sm text-muted-foreground">{sub}</div>}
+      <div
+        className={cn(
+          "mt-1 text-display font-semibold",
+          tone === "good"
+            ? "text-success"
+            : tone === "warn"
+              ? "text-strong-match"
+              : tone === "bad"
+                ? "text-destructive"
+                : "text-foreground",
+        )}
+      >
+        {value}
+      </div>
+      {sub && <div className="mt-0.5 text-body-sm text-muted-foreground">{sub}</div>}
     </div>
   );
 }
 
-function HealthBar({
-  label,
-  count,
-  total,
-  barClass,
+function Card({
+  title,
+  icon,
+  children,
 }: {
-  label: string;
-  count: number;
-  total: number;
-  barClass: string;
+  title: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
 }) {
-  const pct = Math.round((count / total) * 100);
   return (
-    <div className="mb-3 last:mb-0">
-      <div className="flex items-center justify-between text-body-sm">
-        <span className="text-foreground">{label}</span>
-        <span className="text-muted-foreground">{pct}%</span>
-      </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
-        <div className={cn("h-full rounded-full", barClass)} style={{ width: `${pct}%` }} />
-      </div>
+    <div className="rounded-lg border border-border bg-card p-4 shadow-card">
+      <h2 className="mb-3 flex items-center gap-2 text-headline-sm font-semibold text-foreground">
+        {icon}
+        {title}
+      </h2>
+      {children}
     </div>
   );
+}
+
+function Bar({ value, total, className }: { value: number; total: number; className: string }) {
+  const width = total > 0 ? Math.round((value / total) * 100) : 0;
+  return (
+    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+      <div className={cn("h-full rounded-full", className)} style={{ width: `${width}%` }} />
+    </div>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="py-6 text-center text-body-sm text-muted-foreground">{children}</p>;
 }

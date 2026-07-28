@@ -34,6 +34,7 @@ export default async function EditCandidatePage({
     qualifications: candidate.qualifications,
     sectors: candidate.sectors,
     languages: candidate.languages,
+    resource_categories: candidate.resource_categories,
     linkedin_url: candidate.linkedin_url,
     portfolio_url: candidate.portfolio_url,
     work_experience: candidate.work_experience,

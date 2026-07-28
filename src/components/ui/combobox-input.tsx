@@ -8,7 +8,10 @@ import { autocompleteFor, suggestionsFor, type SuggestionField } from "@/lib/voc
 interface ComboboxInputProps {
   value: string | null;
   onChange: (value: string | null) => void;
-  field: SuggestionField;
+  /** Vocabulary field driving autocomplete; omit when passing `suggestions`. */
+  field?: SuggestionField;
+  /** Explicit option list, for vocabularies outside the candidate packs. */
+  suggestions?: string[];
   context?: { primaryRole?: string | null; sectors?: string[] };
   placeholder?: string;
   id?: string;
@@ -26,6 +29,7 @@ export function ComboboxInput({
   value,
   onChange,
   field,
+  suggestions,
   context,
   placeholder,
   id,
@@ -38,7 +42,10 @@ export function ComboboxInput({
   const listId = useId();
   const text = value ?? "";
 
-  const options = useMemo(() => autocompleteFor(field), [field]);
+  const options = useMemo(
+    () => suggestions ?? (field ? autocompleteFor(field) : []),
+    [suggestions, field],
+  );
 
   const filtered = useMemo(() => {
     const q = text.trim().toLowerCase();
@@ -50,10 +57,9 @@ export function ComboboxInput({
 
   const quickAdd = useMemo(() => {
     if (!showQuickAdd) return [];
-    return suggestionsFor(field, context ?? {}, 8).filter(
-      (s) => s.toLowerCase() !== text.trim().toLowerCase(),
-    );
-  }, [showQuickAdd, field, context, text]);
+    const base = field ? suggestionsFor(field, context ?? {}, 8) : (suggestions ?? []).slice(0, 8);
+    return base.filter((s) => s.toLowerCase() !== text.trim().toLowerCase());
+  }, [showQuickAdd, field, suggestions, context, text]);
 
   function choose(v: string) {
     onChange(v || null);

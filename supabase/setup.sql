@@ -50,6 +50,7 @@ create table public.candidates (
   qualifications text[] not null default '{}',
   sectors text[] not null default '{}',
   languages text[] not null default '{}',
+  resource_categories text[] not null default '{}',
   linkedin_url text,
   portfolio_url text,
   work_experience jsonb not null default '[]',
@@ -108,6 +109,24 @@ create table public.tenders (
   updated_at timestamptz not null default now()
 );
 
+create table public.oem_letters (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  oem_vendor text not null,
+  -- Practice areas, shared vocabulary with candidates.resource_categories.
+  categories text[] not null default '{}',
+  reference_number text,
+  issued_to text,
+  issue_date date,
+  expiry_date date,
+  notes text,
+  file_path text,
+  original_filename text,
+  created_by uuid references public.profiles (id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table public.matches (
   id uuid primary key default gen_random_uuid(),
   candidate_id uuid not null references public.candidates (id) on delete cascade,
@@ -154,6 +173,7 @@ create index candidates_phone_idx on public.candidates (phone);
 create index candidates_additional_roles_gin on public.candidates using gin (additional_roles);
 create index candidates_technical_skills_gin on public.candidates using gin (technical_skills);
 create index candidates_languages_gin on public.candidates using gin (languages);
+create index candidates_resource_categories_gin on public.candidates using gin (resource_categories);
 create index candidates_search_trgm on public.candidates using gin (search_text gin_trgm_ops);
 
 create index job_requirements_status_idx on public.job_requirements (status);
@@ -165,6 +185,10 @@ create index tenders_status_idx on public.tenders (status);
 create index tenders_skills_gin on public.tenders using gin (required_skills);
 create index tenders_roles_gin on public.tenders using gin (required_roles);
 create index tenders_sectors_gin on public.tenders using gin (sectors);
+
+create index oem_letters_vendor_idx on public.oem_letters (oem_vendor);
+create index oem_letters_expiry_idx on public.oem_letters (expiry_date);
+create index oem_letters_categories_gin on public.oem_letters using gin (categories);
 
 create index matches_candidate_idx on public.matches (candidate_id);
 create index matches_target_idx on public.matches (match_target_type, match_target_id);
@@ -222,7 +246,8 @@ begin
     array_to_string(coalesce(new.certifications, '{}'), ' ') || ' ' ||
     array_to_string(coalesce(new.qualifications, '{}'), ' ') || ' ' ||
     array_to_string(coalesce(new.sectors, '{}'), ' ') || ' ' ||
-    array_to_string(coalesce(new.languages, '{}'), ' ');
+    array_to_string(coalesce(new.languages, '{}'), ' ') || ' ' ||
+    array_to_string(coalesce(new.resource_categories, '{}'), ' ');
   return new;
 end;
 $$;
@@ -237,6 +262,10 @@ create trigger job_requirements_set_updated_at
 
 create trigger tenders_set_updated_at
   before update on public.tenders
+  for each row execute function public.set_updated_at();
+
+create trigger oem_letters_set_updated_at
+  before update on public.oem_letters
   for each row execute function public.set_updated_at();
 
 create function public.prevent_role_self_escalation()
@@ -281,6 +310,7 @@ alter table public.tenders enable row level security;
 alter table public.matches enable row level security;
 alter table public.match_alerts enable row level security;
 alter table public.placements enable row level security;
+alter table public.oem_letters enable row level security;
 
 -- profiles: all authenticated users can read; admins update any; users update own
 -- (role changes are blocked by the prevent_role_self_escalation trigger).
@@ -306,6 +336,11 @@ create policy "tenders_select" on public.tenders for select to authenticated usi
 create policy "tenders_insert" on public.tenders for insert to authenticated with check (true);
 create policy "tenders_update" on public.tenders for update to authenticated using (true) with check (true);
 create policy "tenders_delete" on public.tenders for delete to authenticated using (public.is_admin());
+
+create policy "oem_letters_select" on public.oem_letters for select to authenticated using (true);
+create policy "oem_letters_insert" on public.oem_letters for insert to authenticated with check (true);
+create policy "oem_letters_update" on public.oem_letters for update to authenticated using (true) with check (true);
+create policy "oem_letters_delete" on public.oem_letters for delete to authenticated using (public.is_admin());
 
 create policy "matches_select" on public.matches for select to authenticated using (true);
 create policy "matches_insert" on public.matches for insert to authenticated with check (true);

@@ -24,7 +24,7 @@ function sanitizeTerm(term: string): string {
 export default async function CandidatesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; role?: string; status?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; role?: string; category?: string; status?: string; page?: string }>;
 }) {
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page ?? "1") || 1);
@@ -39,6 +39,7 @@ export default async function CandidatesPage({
 
   if (sp.status) query = query.eq("status", sp.status as "active" | "inactive" | "placed");
   if (sp.role) query = query.ilike("current_role", `%${sp.role}%`);
+  if (sp.category) query = query.contains("resource_categories", [sp.category]);
 
   const term = sp.q ? sanitizeTerm(sp.q) : "";
   if (term) {
@@ -67,6 +68,7 @@ export default async function CandidatesPage({
     const next = new URLSearchParams();
     if (sp.q) next.set("q", sp.q);
     if (sp.role) next.set("role", sp.role);
+    if (sp.category) next.set("category", sp.category);
     if (sp.status) next.set("status", sp.status);
     next.set("page", String(p));
     return `/candidates?${next.toString()}`;
@@ -78,7 +80,7 @@ export default async function CandidatesPage({
         <div>
           <h1 className="text-display font-semibold text-foreground">Candidate Intelligence</h1>
           <p className="mt-1 text-body-lg text-muted-foreground">
-            Manage and match engineering resources.
+            Manage and match resources.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -139,6 +141,16 @@ export default async function CandidatesPage({
                           <div className="text-body-sm text-muted-foreground">
                             {c.years_experience != null ? `${c.years_experience} yrs exp` : "—"}
                           </div>
+                          {c.resource_categories.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {c.resource_categories.slice(0, 3).map((cat) => (
+                                <CategoryChip key={cat}>{cat}</CategoryChip>
+                              ))}
+                              {c.resource_categories.length > 3 && (
+                                <span className="text-label-md text-muted-foreground">+{c.resource_categories.length - 3}</span>
+                              )}
+                            </div>
+                          )}
                         </Link>
                       </TableCell>
                       <TableCell>
@@ -200,6 +212,9 @@ export default async function CandidatesPage({
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-1">
                         <StatusBadge status={c.status} />
+                        {c.resource_categories.slice(0, 2).map((cat) => (
+                          <CategoryChip key={cat}>{cat}</CategoryChip>
+                        ))}
                         {shown.slice(0, 3).map((s) => (
                           <Chip key={s}>{s}</Chip>
                         ))}
@@ -248,6 +263,14 @@ export default async function CandidatesPage({
         <CvUploadZone />
       </div>
     </div>
+  );
+}
+
+function CategoryChip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-lg bg-primary/10 px-2 py-0.5 text-label-md font-medium text-primary">
+      {children}
+    </span>
   );
 }
 

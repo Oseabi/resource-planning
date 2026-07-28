@@ -16,6 +16,7 @@ import { ExperienceEditor } from "@/app/(app)/candidates/experience-editor";
 import { EducationEditor } from "@/app/(app)/candidates/education-editor";
 import type { CandidateFormFields } from "@/app/(app)/candidates/actions";
 import type { CandidateAvailability, CandidateStatus } from "@/lib/supabase/database.types";
+import { CATEGORY_NAMES, deriveCategories } from "@/lib/resource-categories";
 
 const AVAILABILITY_LABELS: Record<string, string> = {
   available: "Available",
@@ -46,6 +47,15 @@ export function CandidateFields({
   }
 
   const ctx = { primaryRole: value.current_role, sectors: value.sectors };
+
+  // Categories auto-detected from the skills/roles already entered, offered as
+  // quick-add chips (the stored value stays explicit).
+  const suggestedCategories = deriveCategories({
+    skills: value.skills,
+    technical_skills: value.technical_skills,
+    current_role: value.current_role,
+    additional_roles: value.additional_roles,
+  });
 
   return (
     <div className="space-y-6">
@@ -117,6 +127,20 @@ export function CandidateFields({
         </div>
         <Field label="Additional roles" highlight={extracted.additional_roles}>
           <TagInput value={value.additional_roles} onChange={(v) => set("additional_roles", v)} field="roles" context={ctx} placeholder="Add another role this person can fill..." highlight={extracted.additional_roles} />
+        </Field>
+        <Field label="Resource categories" highlight={extracted.resource_categories}>
+          <TagInput
+            value={value.resource_categories}
+            onChange={(v) => set("resource_categories", v)}
+            suggestions={CATEGORY_NAMES}
+            quickAdd={suggestedCategories}
+            placeholder="e.g. ERP, EA, Data & BI..."
+            highlight={extracted.resource_categories}
+          />
+          <p className="mt-1 text-body-sm text-muted-foreground">
+            High-level practice areas for filtering (e.g. &ldquo;show me ERP resources&rdquo;). Chips below
+            are auto-detected from this person&apos;s skills &amp; roles.
+          </p>
         </Field>
         <Field label="Professional summary" htmlFor="cf-summary" highlight={extracted.professional_summary}>
           <Textarea id="cf-summary" rows={4} value={value.professional_summary ?? ""} onChange={(e) => set("professional_summary", e.target.value || null)} placeholder="A short professional summary..." />
@@ -219,6 +243,7 @@ export const EMPTY_CANDIDATE: CandidateFormFields = {
   qualifications: [],
   sectors: [],
   languages: [],
+  resource_categories: [],
   linkedin_url: null,
   portfolio_url: null,
   work_experience: [],

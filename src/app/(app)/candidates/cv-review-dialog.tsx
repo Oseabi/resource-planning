@@ -15,6 +15,17 @@ import { Button } from "@/components/ui/button";
 import { CandidateFields, type ExtractedFlags } from "@/app/(app)/candidates/candidate-fields";
 import { saveCandidate, type CandidateFormFields, type DuplicateMatch } from "@/app/(app)/candidates/actions";
 import type { ExtractionResult } from "@/lib/extraction/types";
+import { deriveCategories } from "@/lib/resource-categories";
+
+function derivedCategories(r: ExtractionResult): string[] {
+  const f = r.fields;
+  return deriveCategories({
+    skills: f.skills,
+    technical_skills: f.technical_skills,
+    current_role: f.current_role,
+    additional_roles: f.additional_roles,
+  });
+}
 
 function toFields(r: ExtractionResult): CandidateFormFields {
   const f = r.fields;
@@ -36,6 +47,7 @@ function toFields(r: ExtractionResult): CandidateFormFields {
     qualifications: f.qualifications,
     sectors: f.sectors,
     languages: f.languages,
+    resource_categories: derivedCategories(r),
     linkedin_url: f.linkedin_url,
     portfolio_url: f.portfolio_url,
     work_experience: f.work_experience,
@@ -59,6 +71,7 @@ function toFlags(r: ExtractionResult): ExtractedFlags {
     qualifications: f.qualifications.length > 0,
     sectors: f.sectors.length > 0,
     languages: f.languages.length > 0,
+    resource_categories: derivedCategories(r).length > 0,
     linkedin_url: !!f.linkedin_url,
     portfolio_url: !!f.portfolio_url,
     work_experience: f.work_experience.length > 0,

@@ -127,6 +127,24 @@ function matchDictionaryAll(text: string, terms: string[]): string[] {
 
 const YEARS_RE = /(\d{1,2})\s*\+?\s*years?/gi;
 
+// "19 years of overall experience", "15+ years' experience", "10 years experience"
+const EXPLICIT_YEARS_RE =
+  /(\d{1,2})\s*\+?\s*years?['’]?\s*(?:of\s+)?(?:overall\s+|total\s+|combined\s+|professional\s+|relevant\s+|industry\s+|hands[- ]on\s+)*experience/gi;
+
+/**
+ * Years of experience the CV states outright. Preferred over both the largest
+ * "N years" mention and any date-span estimate, because it is the candidate's
+ * own headline figure.
+ */
+export function explicitExperienceYears(text: string): number | null {
+  let max: number | null = null;
+  for (const match of text.matchAll(EXPLICIT_YEARS_RE)) {
+    const n = Number(match[1]);
+    if (!Number.isNaN(n) && n > 0 && n < 60 && (max === null || n > max)) max = n;
+  }
+  return max;
+}
+
 /** Largest "N years" figure mentioned; a rough proxy for total experience. */
 export function guessExperienceYears(text: string): number | null {
   let max: number | null = null;
@@ -142,26 +160,132 @@ export function guessExperienceYears(text: string): number | null {
  * commas, pipes, semicolons, slashes-between-spaces, and newlines. Drops empties,
  * dedupes case-insensitively, and skips prose-like lines that are clearly not tags.
  */
-export function parseListItems(text: string): string[] {
-  if (!text) return [];
-  const parts = text
-    .split(/\r?\n|[•·▪◦‣∙]|[,;|]|\s+\/\s+|\t/)
-    .map((p) => p.replace(/^[\s\-–—*•·]+/, "").replace(/[\s.]+$/, "").trim())
-    .filter(Boolean);
+const BULLET_START_RE = /^[\s]*[-–—*•·▪◦‣∙]\s*/;
 
-  const seen = new Set<string>();
+/**
+ * Re-join lines that a PDF/Word layout wrapped mid-item, so "Mentorship & Talent\n
+ * Development" becomes one item instead of two fragments. A line starts a new item
+ * only when it is bulleted or the previous line ended a sentence.
+ */
+/** Roughly the width at which a layout wraps a line rather than ending an item. */
+const WRAPPED_LINE_LENGTH = 60;
+
+/**
+ * Whether `line` continues `prev` rather than starting a new item. Only joins
+ * when `prev` looks genuinely unfinished, so a plain newline-separated list
+ * ("MongoDB\nPostgreSQL") stays as separate items.
+ */
+function isContinuation(prev: string, line: string): boolean {
+  if (/[.!?;:]$/.test(prev)) return false; // prev completed a sentence/label
+  if (/[-‐‑‒]$/.test(prev)) return true; // word split across the break
+  if (/[,&/+]$/.test(prev)) return true; // dangling separator
+  if (/\b(?:and|or|with|including|the|of|to|for|a|an|in|on)$/i.test(prev)) return true;
+  if (/^[a-z]/.test(line)) return true; // lowercase fragment
+  return prev.length > WRAPPED_LINE_LENGTH; // long enough to have been wrapped
+}
+
+export function unwrapLines(text: string): string[] {
   const out: string[] = [];
-  for (const raw of parts) {
-    // Skip sentence-like fragments (long, or ending in prose punctuation runs).
-    if (raw.length > 45) continue;
-    if (raw.split(/\s+/).length > 6) continue;
-    const key = raw.toLowerCase();
-    if (!seen.has(key)) {
-      seen.add(key);
-      out.push(raw);
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const prev = out[out.length - 1];
+
+    if (BULLET_START_RE.test(rawLine) || prev === undefined || !isContinuation(prev, line)) {
+      out.push(line);
+    } else if (/[-‐‑‒]$/.test(prev)) {
+      out[out.length - 1] = `${prev}${line}`;
+    } else {
+      out[out.length - 1] = `${prev} ${line}`;
     }
   }
   return out;
+}
+
+const LEADING_FILLER_RE = /^(?:and|or|including|incl\.?|such as|e\.?g\.?|etc\.?|with|plus)\s+/i;
+const FILLER_ITEMS = new Set([
+  "and", "or", "etc", "including", "the", "a", "an", "with", "across", "for", "to",
+  "of", "in", "on", "as", "by", "from", "other", "others", "various",
+]);
+/** Category labels that describe a group rather than being a skill themselves. */
+const META_LABEL_RE = /\b(skills?|competenc\w*|tools?|environments?|expertise|proficienc\w*|areas?|technolog\w*)\b/i;
+
+function cleanItem(raw: string): string | null {
+  let v = raw.replace(BULLET_START_RE, "").replace(/[\s.,;:]+$/, "").trim();
+  v = v.replace(LEADING_FILLER_RE, "").trim();
+  // Repair brackets orphaned by comma-splitting, e.g. "SAP (S/4HANA" / "SuccessFactors)".
+  if (v.includes("(") && !v.includes(")")) v = v.replace(/\s*\(\s*/, " ").trim();
+  if (v.includes(")") && !v.includes("(")) v = v.replace(/\s*\)\s*/, "").trim();
+  v = v.replace(/\s+/g, " ").trim();
+
+  if (v.length < 2 || v.length > 45) return null;
+  if (v.split(/\s+/).length > 6) return null;
+  if (FILLER_ITEMS.has(v.toLowerCase())) return null;
+  if (!/[A-Za-z]/.test(v)) return null;
+  return v;
+}
+
+/**
+ * Split a block (e.g. a Skills section) into individual items. Handles bullets,
+ * commas, pipes, semicolons, slashes-between-spaces, wrapped lines, and
+ * "Category: a, b, c" groupings. Drops filler and prose-like fragments.
+ */
+export function parseListItems(text: string): string[] {
+  if (!text) return [];
+  const chunks: string[] = [];
+
+  for (const entry of unwrapLines(text)) {
+    const body = entry.replace(BULLET_START_RE, "").trim();
+    if (!body) continue;
+
+    // "Programme & Project Leadership: Enterprise Programme Management, ..."
+    const grouped = body.match(/^([^:]{3,45}):\s*(.+)$/);
+    if (grouped) {
+      const label = grouped[1].trim();
+      if (!META_LABEL_RE.test(label)) chunks.push(label);
+      chunks.push(...grouped[2].split(/[,;|]|\s+\/\s+|\t/));
+    } else {
+      chunks.push(...body.split(/[,;|]|\s+\/\s+|\t/));
+    }
+  }
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const chunk of chunks) {
+    const cleaned = cleanItem(chunk);
+    if (!cleaned) continue;
+    const key = cleaned.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(cleaned);
+  }
+  return out;
+}
+
+const TRAILING_YEAR_RE = /\s*[–—-]?\s*(?:19|20)\d{2}\s*$/;
+
+/**
+ * Certifications are one-per-line and often carry an awarding body and year
+ * ("PRINCE2 – APMG International 2016"), so they need looser limits than tag-like
+ * list items — splitting them on commas would shred the name.
+ */
+export function parseCertificationItems(text: string): string[] {
+  if (!text) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const entry of unwrapLines(text)) {
+    let v = entry.replace(BULLET_START_RE, "").replace(TRAILING_YEAR_RE, "").trim();
+    v = v.replace(/[\s.,;:]+$/, "").trim();
+    if (v.length < 2 || v.length > 90) continue;
+    if (v.split(/\s+/).length > 12) continue;
+    if (!/[A-Za-z]/.test(v)) continue;
+    const key = v.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(v);
+  }
+  return out.slice(0, 20);
 }
 
 // Heuristic markers that a bare (non-dictionary) skill is technical.
@@ -179,9 +303,16 @@ export function classifySkills(items: string[]): { technical: string[]; professi
   return { technical, professional };
 }
 
+// Month names only — a generic [A-Za-z]{3,9} prefix would swallow real words,
+// e.g. "Financial Officer 2007 – 2009" would lose "Officer" from the title.
+const MONTH = String.raw`(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?`;
+const DATE_TOKEN = String.raw`(?:${MONTH}[\s/-]*)?\d{4}|\d{1,2}\/\d{4}`;
+
 // Matches "2019 - Present", "Jan 2020 – Dec 2022", "2018 to 2020", "03/2019 - 05/2021".
-const DATE_RANGE_RE =
-  /((?:[A-Za-z]{3,9}\.?\s*)?\d{4}|\d{1,2}\/\d{4})\s*(?:-|–|—|to)\s*((?:[A-Za-z]{3,9}\.?\s*)?\d{4}|\d{1,2}\/\d{4}|present|current|now)/i;
+const DATE_RANGE_RE = new RegExp(
+  String.raw`(${DATE_TOKEN})\s*(?:-|–|—|to|until)\s*(${DATE_TOKEN}|present|current|now|to date|ongoing)`,
+  "i",
+);
 
 function splitTitleCompany(line: string): { title: string; company: string | null } {
   const separators = [" at ", " @ ", " | ", " - ", " – ", ", "];
@@ -209,6 +340,8 @@ export function parseExperience(text: string): WorkExperience[] {
   let current: WorkExperience | null = null;
   let desc: string[] = [];
   let pendingHeader: string | null = null;
+  // Set right after an entry header; the following line is often the employer.
+  let awaitingCompany = false;
 
   const flush = () => {
     if (current) {
@@ -217,6 +350,7 @@ export function parseExperience(text: string): WorkExperience[] {
     }
     current = null;
     desc = [];
+    awaitingCompany = false;
   };
 
   for (let i = 0; i < lines.length; i++) {
@@ -224,7 +358,7 @@ export function parseExperience(text: string): WorkExperience[] {
     const dateMatch = line.match(DATE_RANGE_RE);
     if (dateMatch) {
       flush();
-      const isCurrent = /present|current|now/i.test(dateMatch[2]);
+      const isCurrent = /present|current|now|to date|ongoing/i.test(dateMatch[2]);
       let header = line.replace(DATE_RANGE_RE, "").replace(/[|\-–—,]\s*$/, "").trim();
       if (header.length < 3) header = pendingHeader ?? "";
       pendingHeader = null;
@@ -237,31 +371,69 @@ export function parseExperience(text: string): WorkExperience[] {
         is_current: isCurrent,
         description: null,
       };
-    } else {
-      const nextIsDate = i + 1 < lines.length && DATE_RANGE_RE.test(lines[i + 1]);
-      if (nextIsDate) {
-        pendingHeader = line; // header for the upcoming date entry
-      } else if (current) {
-        desc.push(line.replace(/^[\-–—*•·]\s*/, ""));
-      }
+      awaitingCompany = !company;
+      continue;
     }
+
+    const nextIsDate = i + 1 < lines.length && DATE_RANGE_RE.test(lines[i + 1]);
+    if (nextIsDate) {
+      pendingHeader = line; // header for the upcoming date entry
+      awaitingCompany = false;
+      continue;
+    }
+
+    if (!current) continue;
+
+    // The first plain, short line under a header is the employer, not prose.
+    if (awaitingCompany && isCompanyLine(line)) {
+      current.company = line.replace(/[.,;:]\s*$/, "").trim();
+      awaitingCompany = false;
+      continue;
+    }
+
+    awaitingCompany = false;
+    desc.push(line.replace(/^[\-–—*•·▪◦‣∙]\s*/, ""));
   }
   flush();
   return entries.slice(0, 15);
 }
 
+/** A short, non-bullet, non-sentence line directly under a role header. */
+function isCompanyLine(line: string): boolean {
+  if (/^[\-–—*•·▪◦‣∙]/.test(line)) return false;
+  if (line.length > 70) return false;
+  if (/[.!?]$/.test(line)) return false;
+  if (/:$/.test(line)) return false; // e.g. "Major Clients:"
+  if (line.split(/\s+/).length > 9) return false;
+  return true;
+}
+
 const QUALIFICATION_HINT_RE =
-  /\b(b\.?sc|b\.?eng|b\.?com|b\.?a\b|bba|m\.?sc|m\.?eng|mba|ph\.?d|honours|diploma|degree|certificate|matric|national senior certificate|hnd|hnc|nvq)\b/i;
+  /\b(b\.?sc|b\.?eng|b\.?com|b\.?a\b|bba|m\.?sc|m\.?eng|mba|ph\.?d|bachelor|master|magister|doctorate|doctoral|honours|postgraduate|undergraduate|diploma|degree|certificate|matric|national senior certificate|hnd|hnc|nvq)\b/i;
 const YEAR_RE = /\b(19|20)\d{2}\b/;
 
-/** Best-effort education parse: one entry per qualification-looking line. */
+const INSTITUTION_RE = /\b(university|universiteit|college|institute|academy|polytechnic|school of)\b/i;
+/** Lines that are clearly a certification/short course rather than a qualification. */
+const CERTIFICATE_LINE_RE = /^(?:certified\b|certification\b|certificate in\b)|\b(?:foundation|practitioner|training|course|programme|program)\b/i;
+const IN_PROGRESS_RE = /\((?:in progress|ongoing|current|incomplete|expected[^)]*|due[^)]*)\)/i;
+
+/**
+ * Best-effort education parse: one entry per qualification-looking line. Requires
+ * a degree/qualification word or a named institution — a bare year is too weak a
+ * signal, since combined "Education & Certifications" blocks list dated courses.
+ */
 export function parseEducation(text: string): Education[] {
   if (!text) return [];
-  const lines = text.split(/\r?\n/).map((l) => l.replace(/^[\s\-–—*•·]+/, "").trim()).filter(Boolean);
+  const lines = unwrapLines(text).map((l) => l.replace(BULLET_START_RE, "").trim()).filter(Boolean);
   const out: Education[] = [];
-  for (const line of lines) {
-    if (line.length > 120) continue;
-    if (!QUALIFICATION_HINT_RE.test(line) && !YEAR_RE.test(line)) continue;
+  for (const original of lines) {
+    if (original.length > 140) continue;
+    // Combined "Education & Certifications" blocks feed both parsers; keep
+    // certificate-style lines out of the education timeline.
+    if (CERTIFICATE_LINE_RE.test(original)) continue;
+    if (!QUALIFICATION_HINT_RE.test(original) && !INSTITUTION_RE.test(original)) continue;
+    const inProgress = IN_PROGRESS_RE.test(original);
+    const line = original.replace(IN_PROGRESS_RE, "").trim();
     const yearMatch = line.match(YEAR_RE);
     const year = yearMatch ? yearMatch[0] : null;
     let rest = line.replace(YEAR_RE, "").replace(/[()]/g, "").trim();
@@ -274,7 +446,12 @@ export function parseEducation(text: string): Education[] {
     }
     rest = qualification.replace(/[\s.,-]+$/, "").trim();
     if (!rest) continue;
-    out.push({ qualification: rest, field: null, institution, year });
+    out.push({
+      qualification: inProgress ? `${rest} (in progress)` : rest,
+      field: null,
+      institution,
+      year: inProgress ? null : year,
+    });
   }
   return out.slice(0, 10);
 }

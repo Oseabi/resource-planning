@@ -50,6 +50,18 @@ export default async function CandidateProfilePage({
               ))}
             </div>
           )}
+          {candidate.resource_categories.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {candidate.resource_categories.map((cat) => (
+                <span
+                  key={cat}
+                  className="inline-flex items-center rounded-lg bg-primary/10 px-2 py-0.5 text-label-md font-medium text-primary"
+                >
+                  {cat}
+                </span>
+              ))}
+            </div>
+          )}
           <div className="mt-3 flex items-center gap-2">
             <StatusBadge status={candidate.status} />
             <AvailabilityBadge availability={candidate.availability} />
