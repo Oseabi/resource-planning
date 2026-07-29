@@ -106,6 +106,151 @@ describe("extractRequiredRoles", () => {
   });
 });
 
+/**
+ * A second real-world shape: a tabular front page (labelled "Bid Number" /
+ * "Title of this RFB" with no colons), a dot-leader contents page, and
+ * multi-level section numbering. Previously this produced a title starting
+ * mid-sentence, "SANAS accredited Non-Mandatory" as the client, a value of 10,
+ * and the clarification cut-off as the closing date.
+ */
+const TABULAR_TENDER = `.
+FOR MORE INFORMATION ON TCTA, PLEASE VISIT OUR WEB SITE WWW.TCTA.CO.ZA
+APPOINTMENT OF A SERVICE PROVIDER FOR THE SUPPLY, IMPLEMENTATION, AND SUPPORT
+OF THE ENTERPRISE ARCHITECTURE TOOL FOR A PERIOD OF 60 MONTHS.
+Bid Number 022/2026/EWSS/SUPPORT/RFB
+Title of this RFB Appointment of a service provider for the supply, implementation
+and support of the Enterprise Architecture Tool for a period of 60
+months.
+RFB Issue Date 28 July 2026
+Clarification and enquiries NB: Kindly send all clarification questions to
+tenders02@tcta.co.za. Deadlines for clarifications will be on 20 August 2026 @16h00.
+RFB Closing Time & Date 28 August 2026 @ 10h00
+Delivery Address Bids must be hand delivered at Trans Caledon Tunnel Authority
+(TCTA), Building 9, Byls Bridge Office Park, Centurion, 0157
+TABLE OF CONTENTS
+3. BACKGROUND .................................................................................................................... 2
+3.1. SCOPE OF WORK ................................................................................................................ 3
+3.3. KEY PERSONNEL EXPERIENCE........................................................................................ 7
+9. CONDITIONS OF BID .........................................................................................................13
+Page | 1
+
+3. BACKGROUND
+TCTA requires an Enterprise Architecture tool to support its architecture practice.
+The current toolset is fragmented and cannot model the full application estate.
+3.1. SCOPE OF WORK
+The service provider shall supply, implement and support the tool.
+3.1.1. Functional Requirements
+• Capability and business process modelling across the enterprise
+• Application portfolio management with lifecycle tracking
+• Integration and data flow modelling between systems
+• Role-based access control and single sign-on
+• Reporting and dashboards for architecture governance
+3.1.2. Non-Functional Requirements
+• The solution must be available 99.5% of the time during business hours
+• All data must be hosted within South African borders
+• The tool must support at least 50 concurrent named users
+3.1.3. Implementation
+• Installation, configuration and environment setup
+• Migration of existing architecture artefacts
+• Integration with the existing identity provider
+3.1.4. Training and Knowledge Transfer
+• Administrator and end-user training for all licensed users
+• Documented handover of configuration and operating procedures
+3.3. KEY PERSONNEL EXPERIENCE
+The bidder must provide resources that have technical experience in implementing the solution. A
+minimum of seven (7) years of technical lead experience and five (5) years for project manager experience.
+3.4. CONTRACT DURATION
+The contract duration is for a period of 60 months
+4. STAGE 1: RETURNABLE DOCUMENTS (SUBMISSION REQUIREMENTS)
+ALL RETURNABLES ARE REQUIRED FOR PURPOSES OF EVALUATION.
+Page | 7
+`;
+
+describe("parseRfqText on a tabular front-page tender", () => {
+  const f = parseRfqText(TABULAR_TENDER, "EA-tool-advert.pdf");
+
+  it("joins a labelled title that wraps across table rows", () => {
+    expect(f.title).toContain("Enterprise Architecture Tool");
+    expect(f.title).toContain("period of 60");
+  });
+
+  it("reads a bid number that has no colon after the label", () => {
+    expect(f.reference_number).toBe("022/2026/EWSS/SUPPORT/RFB");
+  });
+
+  it("prefers the bid closing date over the clarification cut-off", () => {
+    expect(f.submission_deadline).toBe("2026-08-28");
+  });
+
+  it("recovers the issuing body from the 'Full Name (ACRONYM)' convention", () => {
+    expect(f.client).toBe("Trans Caledon Tunnel Authority (TCTA)");
+  });
+
+  it("takes the lowest stated experience floor across roles", () => {
+    // "seven (7) years ... and five (5) years for project manager experience"
+    expect(f.min_experience_years).toBe(5);
+  });
+
+  it("extracts the named personnel, ignoring the client's own acronym", () => {
+    expect(f.required_roles).toContain("Technical Lead");
+    expect(f.required_roles).toContain("Project Manager");
+    expect(f.required_roles).not.toContain("TCTA");
+  });
+
+  it("reports no value rather than inventing one", () => {
+    expect(f.value).toBeNull();
+  });
+});
+
+describe("tenderBody on multi-level numbering", () => {
+  it("anchors on the real heading, not the dot-leader contents entry", () => {
+    const body = tenderBody(TABULAR_TENDER);
+    expect(body.foundCore).toBe(true);
+    expect(body.core[0]).toBe("3. BACKGROUND");
+    expect(body.core.join("\n")).toContain("KEY PERSONNEL EXPERIENCE");
+  });
+
+  it("stops at the returnable-documents boilerplate", () => {
+    const body = tenderBody(TABULAR_TENDER);
+    expect(body.core.join("\n")).not.toContain("ALL RETURNABLES ARE REQUIRED");
+  });
+});
+
+describe("client screening", () => {
+  it("rejects prose that merely starts with a client label", () => {
+    const f = parseRfqText(
+      "SCOPE OF WORK\nClient sign-off on the system and reviews to be done against loaded KPIs.\n",
+    );
+    expect(f.client).toBeNull();
+  });
+
+  it("strips a cover-page classification stamp from the organisation name", () => {
+    const f = parseRfqText(
+      "Confidential Government Employees Pension Fund (GEPF)\nRequest for Proposals for a system.\n",
+    );
+    expect(f.client).toBe("Government Employees Pension Fund (GEPF)");
+  });
+
+  it("does not mistake a document-type acronym for the client", () => {
+    const f = parseRfqText("Request for Proposals (RFP) for the appointment of a provider.\n");
+    expect(f.client).toBeNull();
+  });
+});
+
+describe("value is only taken from a labelled field", () => {
+  it("ignores background prose mentioning large amounts", () => {
+    const f = parseRfqText(
+      "SCOPE OF WORK\nAs at 31 March 2025, the fund's assets were over R2.69 trillion.\n",
+    );
+    expect(f.value).toBeNull();
+  });
+
+  it("still reads an explicitly labelled value", () => {
+    const f = parseRfqText("Estimated Contract Value: R 12,500,000\nSCOPE OF WORK\nBuild it.\n");
+    expect(f.value).toBe(12_500_000);
+  });
+});
+
 describe("parseReferenceNumber", () => {
   it("reads a bid number sharing a line with other labels", () => {
     expect(

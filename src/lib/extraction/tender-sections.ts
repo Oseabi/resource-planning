@@ -14,21 +14,27 @@
 /** Repeated page furniture (running headers/footers) is dropped at this count. */
 const REPEAT_THRESHOLD = 3;
 
-/** Headings that mark the start of the substantive requirements. */
+/**
+ * Headings that mark the start of the substantive requirements. Matched against
+ * the heading text after section numbering has been stripped, so "3.1. SCOPE OF
+ * WORK" and "SCOPE OF WORK" behave identically.
+ */
 const CORE_START_PATTERNS = [
-  /^terms of reference$/i,
-  /^\d*\.?\s*scope of work\b/i,
-  /^\d*\.?\s*(?:the\s+)?specifications?$/i,
+  /^terms of reference\b/i,
+  /^scope of work\b/i,
+  /^(?:the\s+)?specifications?$/i,
   /^annexure\s+[a-z]\s*[-–:]?\s*(?:specifications?|terms of reference)/i,
   /^statement of work\b/i,
-  /^\d*\.?\s*background and mandate\b/i,
-  /^\d*\.?\s*project (?:scope|description|background)\b/i,
+  /^background(?:\s+and\s+mandate)?$/i,
+  /^project (?:scope|description|background)\b/i,
+  /^functional requirements?\b/i,
 ];
 
 /** Boilerplate section headings — everything from here is standard-form text. */
 const BOILERPLATE_PATTERNS = [
   /^sbd\s*\d/i,
   /^general conditions of contract\b/i,
+  /^special conditions of contract\b/i,
   /^terms and conditions for bidding\b/i,
   /^declaration of interest\b/i,
   /^preference points claim form\b/i,
@@ -38,7 +44,32 @@ const BOILERPLATE_PATTERNS = [
   /^pricing schedule\b/i,
   /^authority to sign\b/i,
   /^tax compliance\b/i,
+  /^sbd forms?\b/i,
+  /^returnable (?:documents|schedules)\b/i,
+  /^stage\s*\d*\s*:?\s*returnable/i,
+  /^guide to responses?\b/i,
 ];
+
+/**
+ * A contents-page entry rather than the section itself. These carry dot leaders
+ * or a trailing page reference, and appear long before the real heading — so
+ * matching one would anchor the body in the wrong place.
+ */
+function isContentsEntry(line: string): boolean {
+  return (
+    /\.{3,}/.test(line) || // "SCOPE OF WORK ............ 3"
+    /\b\d+\s+of\s+\d+\s*$/i.test(line) || // "Terms of Reference 04 of 52"
+    /\s{2,}\d{1,3}$/.test(line)
+  );
+}
+
+/** Strip section numbering ("3.1.", "1.4.1") so headings compare cleanly. */
+function headingText(line: string): string {
+  return line
+    .replace(/^[\s•·]*\d+(?:\.\d+)*\.?\s+/, "")
+    .replace(/[\s.:]+$/, "")
+    .trim();
+}
 
 /** Page-furniture lines that carry no information. */
 function isPageFurniture(line: string): boolean {
@@ -100,8 +131,9 @@ export function tenderBody(text: string): TenderBody {
   const starts: number[] = [];
   for (let i = 0; i < all.length; i++) {
     const line = all[i];
-    if (line.length > 60) continue; // a heading, not a sentence mentioning one
-    if (CORE_START_PATTERNS.some((re) => re.test(line))) starts.push(i);
+    if (line.length > 70) continue; // a heading, not a sentence mentioning one
+    if (isContentsEntry(line)) continue;
+    if (CORE_START_PATTERNS.some((re) => re.test(headingText(line)))) starts.push(i);
   }
 
   if (starts.length === 0) return { core: all, foundCore: false, all };
@@ -111,7 +143,12 @@ export function tenderBody(text: string): TenderBody {
     for (let i = startIndex; i < all.length; i++) {
       const line = all[i];
       // Trim any standard-form annexure that follows the requirements.
-      if (i > startIndex && line.length <= 60 && BOILERPLATE_PATTERNS.some((re) => re.test(line))) {
+      if (
+        i > startIndex &&
+        line.length <= 70 &&
+        !isContentsEntry(line) &&
+        BOILERPLATE_PATTERNS.some((re) => re.test(headingText(line)))
+      ) {
         break;
       }
       core.push(line);

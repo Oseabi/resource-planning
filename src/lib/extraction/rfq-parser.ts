@@ -61,8 +61,10 @@ export function parseMinExperience(text: string): number | null {
     new RegExp(String.raw`${QUALIFIER}\s+(?:[a-z]+\s+)?\((\d{1,2})\)\s*(?:years?|yrs?)`, "gi"),
     // "minimum of 3 years"
     new RegExp(String.raw`${QUALIFIER}\s+(\d{1,2})\s*\+?\s*(?:years?|yrs?)`, "gi"),
-    // "(3) years' experience" anywhere
-    /\((\d{1,2})\)\s*(?:years?|yrs?)['’]?\s*(?:of\s+)?experience/gi,
+    // "(5) years for project manager experience" — tenders list several roles'
+    // floors in one sentence, so the qualifier only precedes the first. The
+    // "experience" anchor keeps contract durations ("period of (3) years") out.
+    /\((\d{1,2})\)\s*(?:years?|yrs?)['’]?\s*(?:[\w&/-]+\s+){0,5}?experience/gi,
     // "5+ years experience"
     /\b(\d{1,2})\s*\+\s*(?:years?|yrs?)(?:['’]?\s*(?:of\s+)?experience)?/gi,
   ];
@@ -114,6 +116,10 @@ function cleanRole(raw: string): string | null {
   if (role.length < 4 || role.length > 45) return null;
   if (ROLE_NOISE_RE.test(role)) return null;
   if (!/[A-Za-z]{3}/.test(role)) return null;
+  // A bare acronym is an organisation ("TCTA", "GEPF"), never a job title.
+  if (/^[A-Z]{2,6}$/.test(role)) return null;
+  // Real titles are nouns, not the start of a sentence about the bidder.
+  if (/^(?:resources?|services?|solutions?|systems?|support|access)\b/i.test(role)) return null;
   // Require at least one capitalised word — role titles are proper nouns here.
   if (!/\b[A-Z][a-z]/.test(role) && role !== role.toUpperCase()) return null;
   return role;
@@ -220,21 +226,44 @@ export function parseMoney(raw: string): number | null {
   return value;
 }
 
-/** Value of the first line matching any of the label patterns ("Label: value"). */
-function labelledValue(lines: string[], labels: RegExp[]): string | null {
-  for (const line of lines) {
-    for (const label of labels) {
+/**
+ * Value of the first line matching any of the label patterns ("Label: value").
+ * Labels are tried in order across the whole document, so an earlier pattern in
+ * the list always wins over a later one regardless of page order.
+ */
+function labelledValue(
+  lines: string[],
+  labels: RegExp[],
+  rejectLine?: RegExp,
+): string | null {
+  for (const label of labels) {
+    for (const line of lines) {
+      if (rejectLine?.test(line)) continue;
       const m = line.match(label);
-      if (m) {
-        const value = line.slice((m.index ?? 0) + m[0].length).replace(/^[\s:—–-]+/, "").trim();
-        if (value) return value;
-      }
+      if (!m) continue;
+      const value = line.slice((m.index ?? 0) + m[0].length).replace(/^[\s:—–-]+/, "").trim();
+      if (value) return value;
     }
   }
   return null;
 }
 
-const DEADLINE_LABELS = [/submission deadline/i, /closing date/i, /closing time/i, /submission date/i, /deadline/i, /due date/i];
+// Ordered by authority: the bid's own closing date beats a generic "deadline",
+// which in practice often labels the clarification-questions cut-off instead.
+const DEADLINE_LABELS = [
+  /closing (?:time\s*(?:&|and)\s*date|date\s*(?:&|and)\s*time)/i,
+  /closing date/i,
+  /closing time/i,
+  /submission deadline/i,
+  /submission date/i,
+  /bid due/i,
+  /due date/i,
+  /deadline/i,
+];
+
+/** Deadline labels that belong to something other than the bid submission. */
+const DEADLINE_NOISE_RE =
+  /(clarification|enquir|question|briefing|gate access|validity|registration)/i;
 const START_LABELS = [/contract start/i, /commencement date/i, /start date/i, /anticipated start/i, /contract commencement/i];
 // NOTE: "on behalf of" was removed — it matched the SBD boilerplate line
 // "AUTHORITY TO SIGN ON BEHALF OF THE COMPANY" and yielded "THE COMPANY".
@@ -245,7 +274,9 @@ const CLIENT_LABELS = [
   /procuring entity/i,
   /contracting authority/i,
   /^name of (?:the )?(?:institution|department|entity|organ of state)\b/i,
-  /requirements of the\b/i,
+  /^(?:bid|tender|rfp|rfq) issued by\b/i,
+  // NOTE: a bare "requirements of the" pattern was removed — it matched ordinary
+  // prose mid-document and produced sentence fragments as the client name.
 ];
 const LOCATION_LABELS = [/^location\b/i, /project location/i, /site location/i, /place of (?:work|performance)/i];
 const VALUE_LABELS = [/estimated (?:contract )?value/i, /contract value/i, /tender value/i, /budget/i, /project value/i];
@@ -256,6 +287,22 @@ const VALUE_LABELS = [/estimated (?:contract )?value/i, /contract value/i, /tend
  * Takes the words before "invites" rather than a capitalisation pattern, since
  * these pages are frequently set entirely in capitals.
  */
+/**
+ * Whether a captured value reads as an organisation name rather than the tail of
+ * a sentence. Client labels ("Client", "Issued by") also occur in ordinary prose
+ * — "Client sign-off on the system…" — so every candidate is screened.
+ */
+function looksLikeOrganisation(value: string): boolean {
+  const name = value.trim();
+  if (name.length < 4 || name.length > 100) return false;
+  if (/[.]/.test(name)) return false; // sentence fragment
+  const words = name.split(/\s+/);
+  if (words.length < 2 || words.length > 10) return false;
+  // Organisation names are capitalised throughout (or fully upper-case).
+  const capitalised = words.filter((w) => /^[A-Z(]/.test(w) || /^[^a-z]+$/.test(w));
+  return capitalised.length >= Math.ceil(words.length * 0.7);
+}
+
 function clientFromInvitation(line: string): string | null {
   const m = line.match(/^(.*?)\s+(?:hereby\s+)?invites\b/i);
   if (!m) return null;
@@ -267,12 +314,83 @@ function clientFromInvitation(line: string): string | null {
     .replace(/^(?:the)\s+/i, "")
     .replace(/[\s,;:]+$/, "")
     .trim();
-  return name.length >= 4 && name.length <= 100 ? name : null;
+
+  return looksLikeOrganisation(name) ? name : null;
 }
 
 /** Lines mentioning a statutory threshold rather than this tender's value. */
 const THRESHOLD_NOISE_RE =
   /(preference point|threshold|pppfa|equal to or above|equal to or below|exceeds|less than|more than|rand value of (?:this )?bid is|80\/20|90\/10)/i;
+
+const TITLE_LABELS = [
+  /^(?:tender|rfq|rfi|rfp|rfb|bid) (?:title|name|description)\b/i,
+  // Tabular front pages label it "Title of this RFB <value>", with no colon.
+  /^title of (?:this|the)\s+\w+/i,
+  /^title\b/i,
+];
+
+/**
+ * A labelled title, including any continuation lines. Front-page tables wrap the
+ * value over several rows, so taking only the label's own line truncates it
+ * mid-phrase.
+ */
+function labelledTitle(lines: string[]): string | null {
+  for (const label of TITLE_LABELS) {
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(label);
+      if (!m) continue;
+      const first = lines[i].slice((m.index ?? 0) + m[0].length).replace(/^[\s:—–-]+/, "").trim();
+      if (!first) continue;
+
+      const parts = [first];
+      // Continuations are unlabelled lines that don't start a new field.
+      for (let j = i + 1; j < lines.length && parts.join(" ").length < 200; j++) {
+        const next = lines[j].trim();
+        if (!next || /[.]$/.test(parts[parts.length - 1])) break;
+        if (/@|www\.|http/i.test(next)) break;
+        // A new tabular field starts with a capitalised label followed by a value.
+        if (/^(?:[A-Z][a-z]+\s){1,3}(?:date|number|time|period|address|session|deadline)\b/i.test(next)) break;
+        parts.push(next);
+      }
+      const joined = parts.join(" ").replace(/\s+/g, " ").replace(/[\s.]+$/, "").trim();
+      if (joined.length >= 10) return joined;
+    }
+  }
+  return null;
+}
+
+/** Acronyms that denote a document or process, never the issuing organisation. */
+const NON_CLIENT_ACRONYMS = new Set([
+  "RFP", "RFQ", "RFB", "RFI", "ToR", "TOR", "SBD", "GCC", "SCC", "VAT", "PIN",
+  "SLA", "KPI", "BEE", "BBBEE", "EME", "QSE", "CSD", "NDA", "POPIA", "PFMA",
+  "BSC", "BEC", "BAC", "SSO", "API", "ICT", "IT", "BI", "QA", "UAT", "NQF",
+]);
+
+/**
+ * Issuing organisation written as "Full Name (ACRONYM)" — the near-universal
+ * convention on South African public-sector tender covers. The first few pages
+ * are searched as one string because cover layouts wrap the name across lines.
+ */
+function clientFromAcronymPattern(lines: string[]): string | null {
+  const head = lines.slice(0, 60).join(" ").replace(/\s+/g, " ");
+  const re = /\b([A-Z][A-Za-z]+(?:\s+(?:of|for|and|the)\s+|\s+)(?:[A-Z][A-Za-z]+\s*){1,6})\(([A-Za-z]{2,6})\)/g;
+
+  for (const m of head.matchAll(re)) {
+    const acronym = m[2];
+    if (NON_CLIENT_ACRONYMS.has(acronym.toUpperCase())) continue;
+    // Cover pages stamp a classification immediately before the organisation.
+    const name = m[1]
+      .replace(/\s+/g, " ")
+      .replace(/^(?:confidential|restricted|private|draft|final|official)\s+/i, "")
+      .trim();
+    if (name.split(/\s+/).length < 2) continue;
+    // The acronym should plausibly abbreviate the name.
+    const initials = name.split(/\s+/).map((w) => w[0].toUpperCase()).join("");
+    if (!initials.includes(acronym[0].toUpperCase())) continue;
+    return `${name} (${acronym})`;
+  }
+  return null;
+}
 
 /**
  * Tender titles routinely wrap across several lines. Join consecutive lines from
@@ -284,6 +402,13 @@ function joinWrappedTitle(lines: string[]): string | null {
   for (const line of lines.slice(0, 6)) {
     const t = line.trim();
     if (!t || /@|www\.|http/i.test(t)) break;
+    // A cover page runs the title straight into other front-matter fields.
+    if (/^(?:confidential|classification)\b/i.test(t)) break;
+    const cut = t.match(/^(.*?)\s*\b(?:bid|tender|rfp|rfq|rfb)\s*(?:no\.?|number)\b/i);
+    if (cut) {
+      if (cut[1].trim()) parts.push(cut[1].trim());
+      break;
+    }
     parts.push(t);
     // A line ending in a full stop (and not an abbreviation) closes the title.
     if (/[.]$/.test(t) && !/\b[A-Z]\.$/.test(t)) break;
@@ -301,26 +426,29 @@ function joinWrappedTitle(lines: string[]): string | null {
 export function parseReferenceNumber(lines: string[]): string | null {
   for (const line of lines) {
     const m = line.match(
-      /\b(?:bid|tender|rfp|rfq|rfi|reference|enquiry|quotation)\s*(?:number|no\.?|ref\.?)\s*[:\-–]?\s*([A-Za-z0-9][A-Za-z0-9/\-_]{4,40})/i,
+      // A second token is only absorbed when it carries a digit, so
+      // "GEPF 08/2026" stays whole while "H004…RFP00048 CLOSING" does not.
+      /\b(?:bid|tender|rfp|rfq|rfi|rfb|reference|enquiry|quotation)\s*(?:number|no\.?|ref\.?)\s*[:\-–]?\s*([A-Za-z0-9][A-Za-z0-9/\-_]*(?:\s[A-Za-z0-9/\-_]*\d[A-Za-z0-9/\-_]*)?)/i,
     );
     if (!m) continue;
-    const ref = m[1].replace(/[.,;:]+$/, "");
-    // Must contain a digit — otherwise it caught a following word like "CLOSING".
-    if (/\d/.test(ref)) return ref;
+    const ref = m[1].replace(/[.,;:]+$/, "").trim();
+    // Must contain a digit and be substantial — otherwise it caught a following
+    // word such as "CLOSING" or a stray label fragment.
+    if (ref.length >= 5 && /\d/.test(ref)) return ref;
   }
   return null;
 }
 
 /** Best-effort tender title: an explicit label, else the (wrapped) opening block. */
 function guessTitle(lines: string[], filename?: string): string | null {
-  const labelled = labelledValue(lines, [/^(?:tender|rfq|rfi|rfp|bid) (?:title|name|description)\b/i, /^title\b/i]);
+  const labelled = labelledTitle(lines);
   if (labelled) return labelled.slice(0, 200);
 
   const wrapped = joinWrappedTitle(lines);
   if (wrapped) {
     return (
       wrapped
-        .replace(/^(request for (?:quotation|information|proposal)|rfq|rfi|rfp|tender)[\s:—–-]*/i, "")
+        .replace(/^(request for (?:quotations?|informations?|proposals?|bids?)|rfq|rfi|rfp|rfb|tender)[\s:—–-]*/i, "")
         .replace(/[\s.]+$/, "")
         .trim()
         .slice(0, 200) || wrapped.slice(0, 200)
@@ -360,10 +488,15 @@ export function parseRfqText(text: string, filename?: string): ExtractedTenderFi
     }
   }
   if (!fields.client) {
-    fields.client = labelledValue(all, CLIENT_LABELS)?.slice(0, 100) ?? null;
+    const labelled = labelledValue(all, CLIENT_LABELS);
+    // Screened, because these labels also head ordinary prose lines.
+    if (labelled && looksLikeOrganisation(labelled)) fields.client = labelled.slice(0, 100);
+  }
+  if (!fields.client) {
+    fields.client = clientFromAcronymPattern(all)?.slice(0, 100) ?? null;
   }
 
-  const deadlineRaw = labelledValue(all, DEADLINE_LABELS);
+  const deadlineRaw = labelledValue(all, DEADLINE_LABELS, DEADLINE_NOISE_RE);
   fields.submission_deadline = deadlineRaw ? parseDateToIso(deadlineRaw) : null;
   const startRaw = labelledValue(all, START_LABELS);
   fields.contract_start_date = startRaw ? parseDateToIso(startRaw) : null;
@@ -371,19 +504,12 @@ export function parseRfqText(text: string, filename?: string): ExtractedTenderFi
   // Value: a labelled line is authoritative. Otherwise take the largest figure
   // from the requirements section only, skipping statutory thresholds — the
   // preference-points table quotes R50m on every ZA tender regardless of size.
-  const valueRaw = labelledValue(all, VALUE_LABELS);
-  if (valueRaw && !THRESHOLD_NOISE_RE.test(valueRaw)) {
-    fields.value = parseMoney(valueRaw);
-  }
-  if (fields.value == null) {
-    let best: number | null = null;
-    for (const line of core) {
-      if (THRESHOLD_NOISE_RE.test(line)) continue;
-      const v = parseMoney(line);
-      if (v != null && (best == null || v > best)) best = v;
-    }
-    fields.value = best;
-  }
+  // Only a labelled value is trusted. Scanning the document for the largest
+  // amount reliably picks up something else — a statutory threshold, a contract
+  // duration, or background prose ("the fund's assets were over R2.69 trillion").
+  // Most tenders never state a value at all; null is more useful than a guess.
+  const valueRaw = labelledValue(all, VALUE_LABELS, THRESHOLD_NOISE_RE);
+  fields.value = valueRaw ? parseMoney(valueRaw) : null;
 
   // Roles: tender-specific personnel requirements first, then dictionary hits.
   const statedRoles = extractRequiredRoles(core);
