@@ -94,6 +94,11 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
             <TenderStatusBadge status={tender.status} />
           </div>
           <h1 className="mt-1 text-display font-semibold text-foreground">{tender.title}</h1>
+          {tender.reference_number && (
+            <p className="mt-1 font-mono text-body-sm text-muted-foreground">
+              Bid no. {tender.reference_number}
+            </p>
+          )}
           {tags.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">
               {tags.map((t, i) => (

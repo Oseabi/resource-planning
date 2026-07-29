@@ -26,6 +26,7 @@ export type TenderExtractedFlags = Partial<Record<keyof TenderFormFields, boolea
 
 export const EMPTY_TENDER: TenderFormFields = {
   title: "",
+  reference_number: null,
   client: null,
   location: null,
   value: null,
@@ -60,6 +61,9 @@ export function TenderFields({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Title" htmlFor="tf-title" required highlight={extracted.title}>
             <Input id="tf-title" value={value.title} onChange={(e) => set("title", e.target.value)} required />
+          </Field>
+          <Field label="Bid / reference number" htmlFor="tf-ref" highlight={extracted.reference_number}>
+            <Input id="tf-ref" value={value.reference_number ?? ""} onChange={(e) => set("reference_number", e.target.value || null)} placeholder="e.g. H004L2705RFP00048" />
           </Field>
           <Field label="Client" htmlFor="tf-client" highlight={extracted.client}>
             <Input id="tf-client" value={value.client ?? ""} onChange={(e) => set("client", e.target.value || null)} />

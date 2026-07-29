@@ -13,6 +13,7 @@ export default async function EditTenderPage({ params }: { params: Promise<{ id:
 
   const initial: TenderFormFields = {
     title: tender.title,
+    reference_number: tender.reference_number,
     client: tender.client,
     location: tender.location,
     value: tender.value,

@@ -48,7 +48,12 @@ function escapeRegExp(value: string): string {
 export function matchDictionary(text: string, terms: string[]): string[] {
   const found: string[] = [];
   for (const term of terms) {
-    const re = new RegExp(`(?<![A-Za-z0-9])${escapeRegExp(term)}(?![A-Za-z0-9])`, "i");
+    // Very short terms ("Go", "R", "C#") collide with ordinary words, so they
+    // must match the dictionary's own casing and may not sit inside a compound
+    // ("Go-Live" is not the Go language); longer terms stay case-insensitive.
+    const isShort = term.replace(/[^A-Za-z]/g, "").length <= 2;
+    const trailing = isShort ? "(?![A-Za-z0-9-])" : "(?![A-Za-z0-9])";
+    const re = new RegExp(`(?<![A-Za-z0-9])${escapeRegExp(term)}${trailing}`, isShort ? "" : "i");
     if (re.test(text)) found.push(term);
   }
 

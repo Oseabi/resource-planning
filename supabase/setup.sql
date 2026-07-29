@@ -92,6 +92,8 @@ create table public.job_requirements (
 create table public.tenders (
   id uuid primary key default gen_random_uuid(),
   title text not null,
+  -- Bid/reference number used by the issuing authority on all submissions.
+  reference_number text,
   client text,
   location text,
   value numeric,
@@ -182,6 +184,7 @@ create index job_requirements_certifications_gin on public.job_requirements usin
 create index job_requirements_sectors_gin on public.job_requirements using gin (sectors);
 
 create index tenders_status_idx on public.tenders (status);
+create index tenders_reference_number_idx on public.tenders (reference_number);
 create index tenders_skills_gin on public.tenders using gin (required_skills);
 create index tenders_roles_gin on public.tenders using gin (required_roles);
 create index tenders_sectors_gin on public.tenders using gin (sectors);

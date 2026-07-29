@@ -1,0 +1,86 @@
+TERMS OF REFERENCE (ToR) FOR THE APPOINTMENT OF A SERVICE PROVIDER FOR THE DESIGN,
+DEVELOPMENT, IMPLEMENTATION, SUPPORT, AND MAINTENANCE OF THE BMA ADMINISTRATIVE FINES
+MANAGEMENT SYSTEM.
+THE BORDER MANAGEMENT AUTHORITY (BMA) HEREBY INVITES SUITABLY QUALIFIED
+SERVICE PROVIDERS TO SUBMIT PROPOSALS FOR THE DESIGN, DEVELOPMENT,
+IMPLEMENTATION, SUPPORT, AND MAINTENANCE OF THE ADMINISTRATIVE FINES
+MANAGEMENT SYSTEM FOR A PERIOD OF 36 MONTHS, WITH AN OPTION TO RENEW FOR A
+FURTHER 24 MONTHS BASED ON PERFORMANCE.
+The closing date 17 AUGUST 2026 and closing time for Tenders is 11H00.
+Page 1 of 49
+
+TERMS OF REFERENCE (ToR) FOR THE APPOINTMENT OF A SERVICE PROVIDER FOR THE DESIGN,
+DEVELOPMENT, IMPLEMENTATION, SUPPORT, AND MAINTENANCE OF THE BMA ADMINISTRATIVE FINES
+MANAGEMENT SYSTEM.
+BORDER MANAGEMENT AUTHORITY BID FORMS
+ANNEXURE A STANDARD BIDDING DOCUMENT
+SECTION B SBD 1 - TERMS AND CONDITIONS FOR BIDDING
+SECTION F PRICING SCHEDULE
+SECTION H PREFERENCE POINTS CLAIM FORM (SBD6.1)
+ANNEXURE B GENERAL CONDITIONS OF CONTRACT (GCC)
+ANNEXURE C SPECIFICATIONS / TERMS OF REFERENCE
+Page 2 of 49
+
+TERMS OF REFERENCE (ToR) FOR THE APPOINTMENT OF A SERVICE PROVIDER FOR THE DESIGN,
+DEVELOPMENT, IMPLEMENTATION, SUPPORT, AND MAINTENANCE OF THE BMA ADMINISTRATIVE FINES
+MANAGEMENT SYSTEM.
+SBD1
+INVITATION TO BID
+YOU ARE HEREBY INVITED TO BID FOR REQUIREMENTS OF THE BORDER MANAGEMENT ENTITY
+BID NUMBER: H004L2705RFP00048 CLOSING DATE: 17 AUGUST 2026 CLOSING TIME: 11H00
+E-MAIL ADDRESS suppliers.enquiries@bma.gov.za
+Page 3 of 49
+
+PREFERENCE POINTS CLAIM FORM
+The applicable preference point system is the 80/20 system where the Rand value of this bid is
+equal to or below R50 000 000. The 90/10 system applies where the Rand value exceeds
+R50 000 000.
+Bidders must submit a Tax Compliance Status PIN issued by SARS.
+Page 12 of 49
+
+GENERAL CONDITIONS OF CONTRACT
+The supplier shall provide such packing of the goods as is required to prevent their damage.
+The supplier may be required to provide a certified cheque for performance security.
+Page 25 of 49
+
+TERMS OF REFERENCE
+THE BORDER MANAGEMENT AUTHORITY (BMA) HEREBY INVITES SUITABLY QUALIFIED SERVICE
+PROVIDERS TO SUBMIT PROPOSALS FOR THE DESIGN, DEVELOPMENT, IMPLEMENTATION,
+SUPPORT, AND MAINTENANCE OF THE ADMINISTRATIVE FINES MANAGEMENT SYSTEM.
+1.BACKGROUND AND MANDATE
+The Border Management Authority (BMA) is established in terms of the Border Management
+Authority Act, 2020 as a single, integrated authority responsible for border law enforcement.
+3.SCOPE OF WORK
+The Service Provider shall provide a complete end-to-end solution for the design, development,
+implementation, support, and maintenance of a digital Fines Management System.
+3.1.1 Project Management
+The Service Provider shall develop and maintain a detailed project plan with defined milestones.
+3.1.3 Integration
+Financial systems for payment reconciliation and financial reporting (e.g Sage X3),
+Microsoft Entra ID for authentication and Single Sign-On (SSO),
+Other systems as may be required through secure API-based integration mechanisms.
+Go-Live support shall be provided for a period of two weeks.
+3.1.5 Quality Assurance and Testing
+Conduct unit, system, integration, performance, and participate in user acceptance testing.
+Stage 2: Mandatory Requirements
+MANDATORY REQUIREMENTS REQUIREMENTS
+Project Manager: Qualification The bidder must provide a designated Project Manager who holds a
+minimum qualification of NQF Level 6 or higher in Information and
+Communication Technology (ICT) or Project Management.
+Project Manager: Experience The bidder's proposed Project Manager must have a minimum of three
+(3) years' experience in managing ICT system development.
+Lead Implementation Specialist: The bidder must provide a Lead Implementation Specialist that will be
+Experience responsible for the system development, configuration and deployment.
+The specialist must have a minimum of five (5) years' experience in
+the implementation of ICT systems.
+Project Team: Business Analyst (BA) The bidder must provide a Business Analyst with a minimum of three
+(3) years' experience in business analysis for ICT projects.
+Project Team: Quality Assurance (QA) The bidder must provide a Quality Assurance (QA) Specialist with a
+Specialist minimum of three (3) years' experience in software quality assurance.
+Project Team: Change Management The bidder must provide a Change Management Specialist with a
+Specialist minimum of three (3) years' experience in change management for
+ICT projects.
+Bidder Previous Experience The bidder must demonstrate proven experience in the successful
+delivery of bespoke system implementation projects completed within
+the past seven (7) years.
+Page 44 of 49
