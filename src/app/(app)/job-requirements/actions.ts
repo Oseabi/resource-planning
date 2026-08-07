@@ -68,8 +68,42 @@ export async function updateRequirement(
 
 export async function deleteRequirement(id: string): Promise<{ error: string | null }> {
   const supabase = await createClient();
+
+  // Placements reference a requirement by a plain source_id, so the database
+  // cannot cascade them — they are removed here along with the requirement.
+  const { data: placements } = await supabase
+    .from("placements")
+    .select("id, candidate_id")
+    .eq("source_type", "job_requirement")
+    .eq("source_id", id);
+
+  const affectedCandidates = [...new Set((placements ?? []).map((p) => p.candidate_id))];
+
+  if ((placements ?? []).length > 0) {
+    const { error: placementError } = await supabase
+      .from("placements")
+      .delete()
+      .eq("source_type", "job_requirement")
+      .eq("source_id", id);
+    if (placementError) return { error: placementError.message };
+  }
+
+  // RLS restricts DELETE to admins; a non-admin call is rejected here.
   const { error } = await supabase.from("job_requirements").delete().eq("id", id);
   if (error) return { error: error.message };
+
+  // A placement marks its candidate "placed" via trigger, and nothing reverses
+  // that on delete. Free anyone left with no remaining placement, otherwise they
+  // stay hidden from matching with no record explaining why.
+  for (const candidateId of affectedCandidates) {
+    const { count } = await supabase
+      .from("placements")
+      .select("id", { count: "exact", head: true })
+      .eq("candidate_id", candidateId);
+    if ((count ?? 0) === 0) {
+      await supabase.from("candidates").update({ status: "active" }).eq("id", candidateId);
+    }
+  }
 
   // Clean up computed match scores for this requirement.
   await supabase
@@ -79,6 +113,11 @@ export async function deleteRequirement(id: string): Promise<{ error: string | n
     .eq("match_target_id", id);
 
   revalidatePath("/job-requirements");
+  // Candidate statuses and the placement-derived metrics may both have changed.
+  if (affectedCandidates.length > 0) {
+    revalidatePath("/candidates");
+    revalidatePath("/analytics");
+  }
   return { error: null };
 }
 

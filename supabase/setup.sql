@@ -13,6 +13,7 @@ drop table if exists public.placements cascade;
 drop table if exists public.candidates cascade;
 drop table if exists public.job_requirements cascade;
 drop table if exists public.tenders cascade;
+drop table if exists public.oem_letters cascade;
 drop table if exists public.profiles cascade;
 drop function if exists public.is_admin() cascade;
 drop function if exists public.set_updated_at() cascade;
@@ -61,7 +62,7 @@ create table public.candidates (
   cv_file_path text,
   cv_original_filename text,
   notes text,
-  created_by uuid references public.profiles (id),
+  created_by uuid references public.profiles (id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   -- Populated by the candidates_set_search_text trigger (defined below). A plain
@@ -84,7 +85,7 @@ create table public.job_requirements (
   required_availability text,
   manager_email text,
   status text not null default 'open' check (status in ('open', 'closed', 'on_hold')),
-  created_by uuid references public.profiles (id),
+  created_by uuid references public.profiles (id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -92,6 +93,8 @@ create table public.job_requirements (
 create table public.tenders (
   id uuid primary key default gen_random_uuid(),
   title text not null,
+  -- Bid/reference number used by the issuing authority on all submissions.
+  reference_number text,
   client text,
   location text,
   value numeric,
@@ -104,7 +107,7 @@ create table public.tenders (
   min_experience_years numeric,
   status text not null default 'draft' check (status in ('draft', 'live', 'submitted', 'won', 'lost')),
   source_document_path text,
-  created_by uuid references public.profiles (id),
+  created_by uuid references public.profiles (id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -122,7 +125,7 @@ create table public.oem_letters (
   notes text,
   file_path text,
   original_filename text,
-  created_by uuid references public.profiles (id),
+  created_by uuid references public.profiles (id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -155,7 +158,7 @@ create table public.placements (
   source_id uuid not null,
   fee_value numeric not null,
   start_date date not null,
-  created_by uuid references public.profiles (id),
+  created_by uuid references public.profiles (id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -182,6 +185,7 @@ create index job_requirements_certifications_gin on public.job_requirements usin
 create index job_requirements_sectors_gin on public.job_requirements using gin (sectors);
 
 create index tenders_status_idx on public.tenders (status);
+create index tenders_reference_number_idx on public.tenders (reference_number);
 create index tenders_skills_gin on public.tenders using gin (required_skills);
 create index tenders_roles_gin on public.tenders using gin (required_roles);
 create index tenders_sectors_gin on public.tenders using gin (sectors);

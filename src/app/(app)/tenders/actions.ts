@@ -10,6 +10,7 @@ const DOC_BUCKET = "cvs"; // shared private bucket; tender docs live under tende
 
 export interface TenderFormFields {
   title: string;
+  reference_number: string | null;
   client: string | null;
   location: string | null;
   value: number | null;

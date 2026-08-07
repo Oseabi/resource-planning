@@ -25,6 +25,7 @@ interface RfqExtraction {
 function toForm(f: ExtractedTenderFields): TenderFormFields {
   return {
     title: f.title ?? "",
+    reference_number: f.reference_number,
     client: f.client,
     location: f.location,
     value: f.value,
@@ -42,6 +43,7 @@ function toForm(f: ExtractedTenderFields): TenderFormFields {
 function toFlags(f: ExtractedTenderFields): TenderExtractedFlags {
   return {
     title: !!f.title,
+    reference_number: !!f.reference_number,
     client: !!f.client,
     location: !!f.location,
     value: f.value != null,

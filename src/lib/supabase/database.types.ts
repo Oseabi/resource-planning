@@ -143,6 +143,8 @@ export interface Database {
         Row: {
           id: string;
           title: string;
+          /** Bid/reference number from the issuing authority. */
+          reference_number: string | null;
           client: string | null;
           location: string | null;
           value: number | null;

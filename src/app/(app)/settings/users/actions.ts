@@ -96,6 +96,50 @@ export async function resetUserPassword(
   };
 }
 
+/**
+ * Permanently remove a user's account.
+ *
+ * Deleting the auth user cascades to their profile, and every `created_by`
+ * reference is set to null (migration 0011) so their candidates, requirements,
+ * tenders, OEM letters and placements survive — only the attribution is lost.
+ */
+export async function deleteUser(userId: string): Promise<{ error: string | null }> {
+  const currentUser = await requireAdmin();
+
+  if (!userId) return { error: "Missing user id." };
+  if (userId === currentUser.id) {
+    return { error: "You cannot delete your own account." };
+  }
+
+  const admin = createAdminClient();
+
+  const { data: target } = await admin
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .single();
+
+  if (!target) return { error: "That user no longer exists." };
+
+  // Removing the last admin would leave nobody able to manage users or delete
+  // records, which cannot be undone from inside the app.
+  if (target.role === "admin") {
+    const { count } = await admin
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("role", "admin");
+    if ((count ?? 0) <= 1) {
+      return { error: "This is the only admin. Promote another admin before deleting this one." };
+    }
+  }
+
+  const { error } = await admin.auth.admin.deleteUser(userId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings/users");
+  return { error: null };
+}
+
 export async function updateUserRole(userId: string, role: ProfileRole) {
   await requireAdmin();
 
