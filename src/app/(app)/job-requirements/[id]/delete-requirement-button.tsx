@@ -14,15 +14,17 @@ import {
 import { deleteRequirement } from "@/app/(app)/job-requirements/actions";
 
 /**
- * Admin-only requirement removal. The action refuses when placements exist, so
- * the error surfaces here rather than silently orphaning revenue records.
+ * Admin-only requirement removal. Deleting also removes the requirement's
+ * placements, so the fee history is called out before the admin confirms.
  */
 export function DeleteRequirementButton({
   requirementId,
   title,
+  placementCount = 0,
 }: {
   requirementId: string;
   title: string;
+  placementCount?: number;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -59,6 +61,18 @@ export function DeleteRequirementButton({
               will be permanently removed. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
+
+          {placementCount > 0 && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-body-sm text-destructive">
+              <p className="font-medium">
+                {placementCount} placement{placementCount === 1 ? "" : "s"} will also be deleted.
+              </p>
+              <p className="mt-1">
+                Their fees drop out of revenue and time-to-fill reporting, and any candidate left
+                without another placement returns to Active.
+              </p>
+            </div>
+          )}
 
           {error && <p className="text-body-sm text-destructive">{error}</p>}
 

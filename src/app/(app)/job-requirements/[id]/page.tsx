@@ -35,6 +35,13 @@ export default async function RequirementDetailPage({
     : { data: null };
   const isAdmin = profile?.role === "admin";
 
+  // Deleting the requirement also deletes these, so the count is surfaced first.
+  const { count: placementCount } = await supabase
+    .from("placements")
+    .select("id", { count: "exact", head: true })
+    .eq("source_type", "job_requirement")
+    .eq("source_id", id);
+
   const { data: matchRows } = await supabase
     .from("matches")
     .select("id, candidate_id, score, score_breakdown, alert_sent")
@@ -114,7 +121,13 @@ export default async function RequirementDetailPage({
             <Pencil className="size-4" />
             Edit Req
           </Button>
-          {isAdmin && <DeleteRequirementButton requirementId={id} title={req.title} />}
+          {isAdmin && (
+            <DeleteRequirementButton
+              requirementId={id}
+              title={req.title}
+              placementCount={placementCount ?? 0}
+            />
+          )}
         </div>
       </div>
 

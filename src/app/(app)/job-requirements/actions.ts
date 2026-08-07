@@ -70,23 +70,40 @@ export async function deleteRequirement(id: string): Promise<{ error: string | n
   const supabase = await createClient();
 
   // Placements reference a requirement by a plain source_id, so the database
-  // cannot protect them. They record real commercial events (fee, start date)
-  // and feed the revenue and time-to-fill metrics, so refuse rather than orphan.
-  const { count: placementCount } = await supabase
+  // cannot cascade them — they are removed here along with the requirement.
+  const { data: placements } = await supabase
     .from("placements")
-    .select("id", { count: "exact", head: true })
+    .select("id, candidate_id")
     .eq("source_type", "job_requirement")
     .eq("source_id", id);
 
-  if ((placementCount ?? 0) > 0) {
-    return {
-      error: `This requirement has ${placementCount} placement${placementCount === 1 ? "" : "s"} recorded against it. Remove the placement${placementCount === 1 ? "" : "s"} first to keep revenue reporting accurate.`,
-    };
+  const affectedCandidates = [...new Set((placements ?? []).map((p) => p.candidate_id))];
+
+  if ((placements ?? []).length > 0) {
+    const { error: placementError } = await supabase
+      .from("placements")
+      .delete()
+      .eq("source_type", "job_requirement")
+      .eq("source_id", id);
+    if (placementError) return { error: placementError.message };
   }
 
   // RLS restricts DELETE to admins; a non-admin call is rejected here.
   const { error } = await supabase.from("job_requirements").delete().eq("id", id);
   if (error) return { error: error.message };
+
+  // A placement marks its candidate "placed" via trigger, and nothing reverses
+  // that on delete. Free anyone left with no remaining placement, otherwise they
+  // stay hidden from matching with no record explaining why.
+  for (const candidateId of affectedCandidates) {
+    const { count } = await supabase
+      .from("placements")
+      .select("id", { count: "exact", head: true })
+      .eq("candidate_id", candidateId);
+    if ((count ?? 0) === 0) {
+      await supabase.from("candidates").update({ status: "active" }).eq("id", candidateId);
+    }
+  }
 
   // Clean up computed match scores for this requirement.
   await supabase
@@ -96,6 +113,11 @@ export async function deleteRequirement(id: string): Promise<{ error: string | n
     .eq("match_target_id", id);
 
   revalidatePath("/job-requirements");
+  // Candidate statuses and the placement-derived metrics may both have changed.
+  if (affectedCandidates.length > 0) {
+    revalidatePath("/candidates");
+    revalidatePath("/analytics");
+  }
   return { error: null };
 }
 
