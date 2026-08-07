@@ -68,6 +68,23 @@ export async function updateRequirement(
 
 export async function deleteRequirement(id: string): Promise<{ error: string | null }> {
   const supabase = await createClient();
+
+  // Placements reference a requirement by a plain source_id, so the database
+  // cannot protect them. They record real commercial events (fee, start date)
+  // and feed the revenue and time-to-fill metrics, so refuse rather than orphan.
+  const { count: placementCount } = await supabase
+    .from("placements")
+    .select("id", { count: "exact", head: true })
+    .eq("source_type", "job_requirement")
+    .eq("source_id", id);
+
+  if ((placementCount ?? 0) > 0) {
+    return {
+      error: `This requirement has ${placementCount} placement${placementCount === 1 ? "" : "s"} recorded against it. Remove the placement${placementCount === 1 ? "" : "s"} first to keep revenue reporting accurate.`,
+    };
+  }
+
+  // RLS restricts DELETE to admins; a non-admin call is rejected here.
   const { error } = await supabase.from("job_requirements").delete().eq("id", id);
   if (error) return { error: error.message };
 

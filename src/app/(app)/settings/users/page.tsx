@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { CreateUserDialog } from "@/app/(app)/settings/users/create-user-dialog";
 import { ResetPasswordDialog } from "@/app/(app)/settings/users/reset-password-dialog";
 import { RoleSelect } from "@/app/(app)/settings/users/role-select";
+import { DeleteUserDialog } from "@/app/(app)/settings/users/delete-user-dialog";
 
 export default async function UsersSettingsPage() {
   const supabase = await createClient();
@@ -89,8 +90,16 @@ export default async function UsersSettingsPage() {
                       <Badge className="bg-success text-success-foreground">Active</Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-right">
-                    <ResetPasswordDialog userId={profile.id} email={profile.email} />
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-2">
+                      <ResetPasswordDialog userId={profile.id} email={profile.email} />
+                      <DeleteUserDialog
+                        userId={profile.id}
+                        fullName={profile.full_name}
+                        email={profile.email}
+                        disabled={profile.id === user.id}
+                      />
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -115,7 +124,15 @@ export default async function UsersSettingsPage() {
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <RoleSelect userId={profile.id} role={profile.role} disabled={profile.id === user.id} />
-                <ResetPasswordDialog userId={profile.id} email={profile.email} />
+                <div className="flex items-center gap-2">
+                  <ResetPasswordDialog userId={profile.id} email={profile.email} />
+                  <DeleteUserDialog
+                    userId={profile.id}
+                    fullName={profile.full_name}
+                    email={profile.email}
+                    disabled={profile.id === user.id}
+                  />
+                </div>
               </div>
             </li>
           ))}

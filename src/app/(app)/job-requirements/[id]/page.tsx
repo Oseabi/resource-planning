@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { RequirementStatusBadge } from "@/app/(app)/job-requirements/requirement-badges";
 import { MatchingResults, type MatchView } from "@/app/(app)/job-requirements/[id]/matching-results";
+import { DeleteRequirementButton } from "@/app/(app)/job-requirements/[id]/delete-requirement-button";
 import { isEmailConfigured } from "@/lib/email/resend";
 
 interface BreakdownParts {
@@ -25,6 +26,14 @@ export default async function RequirementDetailPage({
 
   const { data: req } = await supabase.from("job_requirements").select("*").eq("id", id).single();
   if (!req) notFound();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: profile } = user
+    ? await supabase.from("profiles").select("role").eq("id", user.id).single()
+    : { data: null };
+  const isAdmin = profile?.role === "admin";
 
   const { data: matchRows } = await supabase
     .from("matches")
@@ -100,10 +109,13 @@ export default async function RequirementDetailPage({
             </div>
           )}
         </div>
-        <Button variant="outline" size="sm" render={<Link href={`/job-requirements/${id}/edit`} />} nativeButton={false}>
-          <Pencil className="size-4" />
-          Edit Req
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button variant="outline" size="sm" render={<Link href={`/job-requirements/${id}/edit`} />} nativeButton={false}>
+            <Pencil className="size-4" />
+            Edit Req
+          </Button>
+          {isAdmin && <DeleteRequirementButton requirementId={id} title={req.title} />}
+        </div>
       </div>
 
       <MatchingResults
