@@ -15,6 +15,8 @@ import { poolStrength, poolGapAnalysis } from "@/lib/matching";
 import { loadPositionViews } from "@/lib/positions-repo";
 import { fillSummary } from "@/lib/positions";
 import { PositionMatches } from "@/app/(app)/position-matches";
+import { findBidConflicts } from "@/app/(app)/assignment-actions";
+import { ConfirmTeamBanner } from "@/app/(app)/tenders/[id]/confirm-team-banner";
 
 function formatValue(value: number | null): string {
   if (value == null) return "—";
@@ -48,6 +50,19 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
     positionViews.flatMap((p) =>
       Array.from({ length: p.filled }, () => ({ position_id: p.id })),
     ),
+  );
+
+  // Bidding the same senior person on several open tenders is normal, but the
+  // exposure should be visible on the row before anyone commits them again.
+  const proposedCount = positionViews.reduce(
+    (sum, p) => sum + p.assigned.filter((a) => a.status === "proposed").length,
+    0,
+  );
+
+  const shortlisted = [...new Set(positionViews.flatMap((p) => p.matches.map((m) => m.candidateId)))];
+  const conflicts = await findBidConflicts(shortlisted, id);
+  const conflictsByCandidate: Record<string, string[]> = Object.fromEntries(
+    conflicts.map((c) => [c.candidateId, c.tenderTitles]),
   );
 
   const candidateIds = (matchRows ?? []).map((m) => m.candidate_id);
@@ -136,7 +151,14 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
             {fill.filledSeats} of {fill.totalSeats} seat{fill.totalSeats === 1 ? "" : "s"} filled
           </span>
         </div>
-        <PositionMatches positions={positionViews} />
+        {tender.status === "won" && (
+          <ConfirmTeamBanner tenderId={id} proposedCount={proposedCount} />
+        )}
+        <PositionMatches
+          positions={positionViews}
+          parentType="tender"
+          conflicts={conflictsByCandidate}
+        />
       </div>
 
       <TenderMatchingResults

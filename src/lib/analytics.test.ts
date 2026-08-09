@@ -209,18 +209,36 @@ describe("deadlinesAtRisk", () => {
 });
 
 describe("demandedSkills", () => {
-  it("unions skills across open requirements and in-flight tenders", () => {
-    const skills = demandedSkills(
-      [
-        { status: "open", required_skills: ["SAP"] },
-        { status: "closed", required_skills: ["Ignored"] },
-      ],
-      [
-        { status: "live", required_skills: ["TOGAF", "SAP"] },
-        { status: "won", required_skills: ["AlsoIgnored"] },
-      ],
-    );
-    expect(skills.sort()).toEqual(["SAP", "TOGAF"]);
+  const requirements = [
+    { id: "r-open", status: "open" },
+    { id: "r-closed", status: "closed" },
+  ];
+  const tenders = [
+    { id: "t-live", status: "live" },
+    { id: "t-won", status: "won" },
+  ];
+  const positions = [
+    { parent_type: "job_requirement", parent_id: "r-open", required_skills: ["SAP"] },
+    { parent_type: "job_requirement", parent_id: "r-closed", required_skills: ["Ignored"] },
+    { parent_type: "tender", parent_id: "t-live", required_skills: ["TOGAF", "SAP"] },
+    { parent_type: "tender", parent_id: "t-won", required_skills: ["AlsoIgnored"] },
+  ];
+
+  it("unions position skills across open requirements and in-flight tenders", () => {
+    expect(demandedSkills(requirements, tenders, positions).sort()).toEqual(["SAP", "TOGAF"]);
+  });
+
+  it("ignores positions whose parent is closed or already decided", () => {
+    const skills = demandedSkills(requirements, tenders, positions);
+    expect(skills).not.toContain("Ignored");
+    expect(skills).not.toContain("AlsoIgnored");
+  });
+
+  it("does not credit demand to a position with no live parent", () => {
+    const orphan = [
+      { parent_type: "tender", parent_id: "missing", required_skills: ["Ghost"] },
+    ];
+    expect(demandedSkills(requirements, tenders, orphan)).toEqual([]);
   });
 });
 

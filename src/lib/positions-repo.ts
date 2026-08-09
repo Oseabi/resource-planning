@@ -117,10 +117,19 @@ export async function loadPositionViews(
       .eq("match_target_type", "position")
       .in("match_target_id", positionIds)
       .order("score", { ascending: false }),
-    supabase.from("assignments").select("position_id, candidate_id").in("position_id", positionIds),
+    supabase
+      .from("assignments")
+      .select("position_id, candidate_id, status")
+      .in("position_id", positionIds),
   ]);
 
-  const candidateIds = [...new Set((matchRows ?? []).map((m) => m.candidate_id))];
+  // Names are needed for everyone shortlisted *and* everyone already seated.
+  const candidateIds = [
+    ...new Set([
+      ...(matchRows ?? []).map((m) => m.candidate_id),
+      ...(assignmentRows ?? []).map((a) => a.candidate_id),
+    ]),
+  ];
   const candById = new Map<string, { full_name: string; current_role: string | null }>();
   if (candidateIds.length > 0) {
     const { data: candidates } = await supabase
@@ -132,9 +141,19 @@ export async function loadPositionViews(
     }
   }
 
-  const filledByPosition = new Map<string, number>();
+  const assignedByPosition = new Map<
+    string,
+    { candidateId: string; name: string; role: string | null; status: string }[]
+  >();
   for (const a of assignmentRows ?? []) {
-    filledByPosition.set(a.position_id, (filledByPosition.get(a.position_id) ?? 0) + 1);
+    const list = assignedByPosition.get(a.position_id) ?? [];
+    list.push({
+      candidateId: a.candidate_id,
+      name: candById.get(a.candidate_id)?.full_name ?? "Unknown candidate",
+      role: candById.get(a.candidate_id)?.current_role ?? null,
+      status: a.status,
+    });
+    assignedByPosition.set(a.position_id, list);
   }
 
   return positions.map((position) => ({
@@ -144,7 +163,8 @@ export async function loadPositionViews(
     minExperienceYears: position.min_experience_years,
     requiredSkills: position.required_skills,
     requiredCertifications: position.required_certifications,
-    filled: filledByPosition.get(position.id) ?? 0,
+    filled: (assignedByPosition.get(position.id) ?? []).length,
+    assigned: assignedByPosition.get(position.id) ?? [],
     matches: (matchRows ?? [])
       .filter((m) => m.match_target_id === position.id)
       .map((m) => ({

@@ -70,6 +70,7 @@ export default async function AnalyticsPage() {
     { data: letters },
     { data: matches },
     { data: profiles },
+    { data: positions },
   ] = await Promise.all([
     supabase.from("placements").select("source_type, source_id, fee_value, created_at, created_by"),
     supabase.from("job_requirements").select("id, status, created_at, required_skills"),
@@ -84,6 +85,7 @@ export default async function AnalyticsPage() {
     supabase.from("oem_letters").select("oem_vendor, categories, expiry_date"),
     supabase.from("matches").select("score"),
     supabase.from("profiles").select("id, full_name"),
+    supabase.from("positions").select("parent_type, parent_id, required_skills"),
   ]);
 
   const allPlacements = placements ?? [];
@@ -98,7 +100,7 @@ export default async function AnalyticsPage() {
   const health = poolHealth(allCandidates);
   const categories = categoryBreakdown(allCandidates);
   const bands = experienceBands(allCandidates);
-  const gaps = skillGaps(demandedSkills(allReqs, allTenders), allCandidates);
+  const gaps = skillGaps(demandedSkills(allReqs, allTenders, positions ?? []), allCandidates);
 
   const perf = tenderPerformance(allTenders);
   const clients = winRateByClient(allTenders).slice(0, 8);
