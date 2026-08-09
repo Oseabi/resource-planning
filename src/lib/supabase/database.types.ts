@@ -5,8 +5,13 @@ export type CandidateAvailability = "available" | "notice_period" | "unavailable
 export type CandidateStatus = "active" | "inactive" | "placed";
 export type JobRequirementStatus = "open" | "closed" | "on_hold";
 export type TenderStatus = "draft" | "live" | "submitted" | "won" | "lost";
-export type MatchTargetType = "job_requirement" | "tender";
+/** Matching runs per position; the two parent types remain for legacy rows. */
+export type MatchTargetType = "job_requirement" | "tender" | "position";
 export type PlacementSourceType = "job_requirement" | "tender";
+/** A position hangs off either a job requirement or a tender. */
+export type PositionParentType = "job_requirement" | "tender";
+/** A tender seat is proposed until the bid is won; a vacancy places at once. */
+export type AssignmentStatus = "proposed" | "placed";
 
 export interface WorkExperience {
   title: string;
@@ -87,6 +92,47 @@ export interface Database {
           full_name: string;
         };
         Update: Partial<Omit<Database["public"]["Tables"]["candidates"]["Row"], "search_text">>;
+        Relationships: [];
+      };
+      positions: {
+        Row: {
+          id: string;
+          parent_type: PositionParentType;
+          parent_id: string;
+          role: string;
+          /** Number of seats needed for this role. */
+          quantity: number;
+          min_experience_years: number | null;
+          required_skills: string[];
+          required_certifications: string[];
+          required_availability: string | null;
+          sort_order: number;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["positions"]["Row"]> & {
+          parent_type: PositionParentType;
+          parent_id: string;
+          role: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["positions"]["Row"]>;
+        Relationships: [];
+      };
+      assignments: {
+        Row: {
+          id: string;
+          position_id: string;
+          candidate_id: string;
+          status: AssignmentStatus;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["assignments"]["Row"]> & {
+          position_id: string;
+          candidate_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["assignments"]["Row"]>;
         Relationships: [];
       };
       oem_letters: {
@@ -211,6 +257,8 @@ export interface Database {
           candidate_id: string;
           source_type: PlacementSourceType;
           source_id: string;
+          /** Which seat this filled; null for placements predating positions. */
+          position_id: string | null;
           fee_value: number;
           start_date: string;
           created_by: string | null;

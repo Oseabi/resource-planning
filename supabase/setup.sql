@@ -7,6 +7,8 @@
 -- ============================================================================
 
 -- --- Clean slate (safe to re-run) --------------------------------------------
+drop table if exists public.assignments cascade;
+drop table if exists public.positions cascade;
 drop table if exists public.match_alerts cascade;
 drop table if exists public.matches cascade;
 drop table if exists public.placements cascade;
@@ -130,10 +132,42 @@ create table public.oem_letters (
   updated_at timestamptz not null default now()
 );
 
+-- The roles a requirement or tender needs staffed. Each line carries its own
+-- seat count, experience floor, skills and certifications, so a bid needing
+-- three analysts at 3 years and a lead at 5 is expressed exactly.
+create table public.positions (
+  id uuid primary key default gen_random_uuid(),
+  parent_type text not null check (parent_type in ('job_requirement', 'tender')),
+  parent_id uuid not null,
+  role text not null,
+  quantity int not null default 1 check (quantity > 0),
+  min_experience_years numeric,
+  required_skills text[] not null default '{}',
+  required_certifications text[] not null default '{}',
+  required_availability text,
+  sort_order int not null default 0,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Seat allocation. Separate from placements: a tender team is PROPOSED while
+-- the bid is open and must not inflate revenue or mark anyone unavailable.
+create table public.assignments (
+  id uuid primary key default gen_random_uuid(),
+  position_id uuid not null references public.positions (id) on delete cascade,
+  candidate_id uuid not null references public.candidates (id) on delete cascade,
+  status text not null default 'proposed' check (status in ('proposed', 'placed')),
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (position_id, candidate_id)
+);
+
 create table public.matches (
   id uuid primary key default gen_random_uuid(),
   candidate_id uuid not null references public.candidates (id) on delete cascade,
-  match_target_type text not null check (match_target_type in ('job_requirement', 'tender')),
+  -- Matching runs per position; the parent types remain for legacy rows.
+  match_target_type text not null check (match_target_type in ('job_requirement', 'tender', 'position')),
   match_target_id uuid not null,
   score numeric not null,
   score_breakdown jsonb not null default '{}',
@@ -156,6 +190,8 @@ create table public.placements (
   candidate_id uuid not null references public.candidates (id) on delete cascade,
   source_type text not null check (source_type in ('job_requirement', 'tender')),
   source_id uuid not null,
+  -- Which seat this filled; null for placements predating positions.
+  position_id uuid references public.positions (id) on delete set null,
   fee_value numeric not null,
   start_date date not null,
   created_by uuid references public.profiles (id) on delete set null,
@@ -193,6 +229,12 @@ create index tenders_sectors_gin on public.tenders using gin (sectors);
 create index oem_letters_vendor_idx on public.oem_letters (oem_vendor);
 create index oem_letters_expiry_idx on public.oem_letters (expiry_date);
 create index oem_letters_categories_gin on public.oem_letters using gin (categories);
+
+create index positions_parent_idx on public.positions (parent_type, parent_id);
+create index positions_role_idx on public.positions (role);
+create index assignments_position_idx on public.assignments (position_id);
+create index assignments_candidate_idx on public.assignments (candidate_id);
+create index placements_position_idx on public.placements (position_id);
 
 create index matches_candidate_idx on public.matches (candidate_id);
 create index matches_target_idx on public.matches (match_target_type, match_target_id);
@@ -268,6 +310,10 @@ create trigger tenders_set_updated_at
   before update on public.tenders
   for each row execute function public.set_updated_at();
 
+create trigger positions_set_updated_at
+  before update on public.positions
+  for each row execute function public.set_updated_at();
+
 create trigger oem_letters_set_updated_at
   before update on public.oem_letters
   for each row execute function public.set_updated_at();
@@ -315,6 +361,8 @@ alter table public.matches enable row level security;
 alter table public.match_alerts enable row level security;
 alter table public.placements enable row level security;
 alter table public.oem_letters enable row level security;
+alter table public.positions enable row level security;
+alter table public.assignments enable row level security;
 
 -- profiles: all authenticated users can read; admins update any; users update own
 -- (role changes are blocked by the prevent_role_self_escalation trigger).
@@ -340,6 +388,19 @@ create policy "tenders_select" on public.tenders for select to authenticated usi
 create policy "tenders_insert" on public.tenders for insert to authenticated with check (true);
 create policy "tenders_update" on public.tenders for update to authenticated using (true) with check (true);
 create policy "tenders_delete" on public.tenders for delete to authenticated using (public.is_admin());
+
+create policy "positions_select" on public.positions for select to authenticated using (true);
+create policy "positions_insert" on public.positions for insert to authenticated with check (true);
+create policy "positions_update" on public.positions for update to authenticated using (true) with check (true);
+-- Positions are rewritten wholesale on every form save, so removing a line
+-- must not require an admin.
+create policy "positions_delete" on public.positions for delete to authenticated using (true);
+
+create policy "assignments_select" on public.assignments for select to authenticated using (true);
+create policy "assignments_insert" on public.assignments for insert to authenticated with check (true);
+create policy "assignments_update" on public.assignments for update to authenticated using (true) with check (true);
+-- Unassigning a seat is normal recruiter work, not an admin action.
+create policy "assignments_delete" on public.assignments for delete to authenticated using (true);
 
 create policy "oem_letters_select" on public.oem_letters for select to authenticated using (true);
 create policy "oem_letters_insert" on public.oem_letters for insert to authenticated with check (true);

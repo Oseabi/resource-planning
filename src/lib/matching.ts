@@ -12,6 +12,12 @@ import {
   type Availability,
 } from "@/lib/scoring";
 import type { Database } from "@/lib/supabase/database.types";
+import {
+  positionToScoringInput,
+  fillSummary,
+  seatCount,
+  type PositionInput,
+} from "@/lib/positions";
 
 type CandidateRow = Database["public"]["Tables"]["candidates"]["Row"];
 type RequirementRow = Database["public"]["Tables"]["job_requirements"]["Row"];
@@ -164,6 +170,71 @@ export function poolGapAnalysis(
       return result.total >= threshold;
     }).length;
     return { role, covered };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Position matching
+//
+// A position carries its own role, skills, certifications and experience floor,
+// so unlike `scoreCandidateForTender` — which scores every role against one
+// shared criteria set — each seat is scored on its own terms.
+// ---------------------------------------------------------------------------
+
+/** Score a candidate against a single position. */
+export function scoreCandidateForPosition(
+  candidate: Parameters<typeof candidateToScoringInput>[0],
+  position: PositionInput,
+): ScoreResult {
+  return scoreCandidate(candidateToScoringInput(candidate), positionToScoringInput(position));
+}
+
+export interface PositionCoverage {
+  positionId: string;
+  role: string;
+  quantity: number;
+  filled: number;
+  remaining: number;
+  /** Candidates scoring ≥ the strong-match threshold for this position. */
+  strongMatches: number;
+  /** Open seats with nobody strong enough to fill them. */
+  isGap: boolean;
+}
+
+/**
+ * Per-position coverage: how many seats each role needs, how many are taken,
+ * and how many candidates could credibly fill the rest. A position is a gap when
+ * seats remain and no candidate clears the threshold — the "you need more X"
+ * signal, now seat-aware rather than role-aware.
+ */
+export function positionCoverage(
+  candidates: Parameters<typeof candidateToScoringInput>[0][],
+  positions: (PositionInput & { id: string })[],
+  assignments: { position_id: string }[] = [],
+  threshold = TENDER_STRONG_MATCH_THRESHOLD,
+): PositionCoverage[] {
+  const { perPosition } = fillSummary(positions, assignments);
+  const fillById = new Map(perPosition.map((p) => [p.positionId, p]));
+
+  return positions.map((position) => {
+    const fill = fillById.get(position.id);
+    const quantity = fill?.quantity ?? seatCount(position);
+    const filled = fill?.filled ?? 0;
+    const remaining = fill?.remaining ?? quantity;
+
+    const strongMatches = candidates.filter(
+      (c) => scoreCandidateForPosition(c, position).total >= threshold,
+    ).length;
+
+    return {
+      positionId: position.id,
+      role: position.role,
+      quantity,
+      filled,
+      remaining,
+      strongMatches,
+      isGap: remaining > 0 && strongMatches === 0,
+    };
   });
 }
 

@@ -4,14 +4,18 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { JobRequirementStatus, Json } from "@/lib/supabase/database.types";
 import {
-  scoreCandidateForRequirement,
+  scoreCandidateForPosition,
   toScoreBreakdownJson,
   decideAlert,
 } from "@/lib/matching";
+import { replacePositions, loadPositions, toPositionInputs } from "@/lib/positions-repo";
+import type { PositionInput } from "@/lib/positions";
 import { sendMatchAlert, isEmailConfigured } from "@/lib/email/resend";
 
 export interface RequirementFormFields {
   title: string;
+  /** Roles this requirement must staff; persisted to the positions table. */
+  positions: PositionInput[];
   client: string | null;
   required_role: string | null;
   required_skills: string[];
@@ -37,13 +41,25 @@ export async function createRequirement(
   if (!user) return { error: "Not authenticated." };
   if (!fields.title?.trim()) return { error: "Title is required." };
 
+  // Positions live in their own table, so they must not reach this insert.
+  const { positions, ...requirementColumns } = fields;
+
   const { data, error } = await supabase
     .from("job_requirements")
-    .insert({ ...fields, title: fields.title.trim(), created_by: user.id })
+    .insert({ ...requirementColumns, title: fields.title.trim(), created_by: user.id })
     .select("id")
     .single();
 
   if (error || !data) return { error: error?.message ?? "Could not create requirement." };
+
+  const positionsResult = await replacePositions(
+    supabase,
+    "job_requirement",
+    data.id,
+    positions ?? [],
+  );
+  if (positionsResult.error) return { error: positionsResult.error };
+
   revalidatePath("/job-requirements");
   return { id: data.id };
 }
@@ -55,12 +71,18 @@ export async function updateRequirement(
   const supabase = await createClient();
   if (!fields.title?.trim()) return { error: "Title is required." };
 
+  const { positions, ...requirementColumns } = fields;
+
   const { error } = await supabase
     .from("job_requirements")
-    .update({ ...fields, title: fields.title.trim() })
+    .update({ ...requirementColumns, title: fields.title.trim() })
     .eq("id", id);
 
   if (error) return { error: error.message };
+
+  const positionsResult = await replacePositions(supabase, "job_requirement", id, positions ?? []);
+  if (positionsResult.error) return { error: positionsResult.error };
+
   revalidatePath("/job-requirements");
   revalidatePath(`/job-requirements/${id}`);
   return { id };
@@ -145,6 +167,11 @@ export async function runMatch(
     .single();
   if (reqErr || !requirement) return { error: "Requirement not found." };
 
+  const positions = toPositionInputs(await loadPositions(supabase, "job_requirement", requirementId));
+  if (positions.length === 0) {
+    return { error: "Add at least one role to this requirement before matching." };
+  }
+
   let candidatesQuery = supabase
     .from("candidates")
     .select(
@@ -156,16 +183,20 @@ export async function runMatch(
   if (candErr) return { error: candErr.message };
   if (!candidates || candidates.length === 0) return { matched: 0, alertsSent: 0 };
 
-  const rows = candidates.map((c) => {
-    const result = scoreCandidateForRequirement(c, requirement);
-    return {
-      candidate_id: c.id,
-      match_target_type: "job_requirement" as const,
-      match_target_id: requirementId,
-      score: result.total,
-      score_breakdown: toScoreBreakdownJson(result) as unknown as Json,
-    };
-  });
+  // One row per (candidate, position): each seat has its own skills, certs and
+  // experience floor, so a candidate scores differently against each.
+  const rows = positions.flatMap((position) =>
+    candidates.map((c) => {
+      const result = scoreCandidateForPosition(c, position);
+      return {
+        candidate_id: c.id,
+        match_target_type: "position" as const,
+        match_target_id: position.id!,
+        score: result.total,
+        score_breakdown: toScoreBreakdownJson(result) as unknown as Json,
+      };
+    }),
+  );
 
   // Upsert: preserves alert_sent / alerted_score on existing rows (not in payload).
   const { error: upsertErr } = await supabase

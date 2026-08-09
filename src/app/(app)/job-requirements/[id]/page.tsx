@@ -8,6 +8,9 @@ import { RequirementStatusBadge } from "@/app/(app)/job-requirements/requirement
 import { MatchingResults, type MatchView } from "@/app/(app)/job-requirements/[id]/matching-results";
 import { DeleteRequirementButton } from "@/app/(app)/job-requirements/[id]/delete-requirement-button";
 import { isEmailConfigured } from "@/lib/email/resend";
+import { loadPositionViews } from "@/lib/positions-repo";
+import { fillSummary } from "@/lib/positions";
+import { PositionMatches } from "@/app/(app)/position-matches";
 
 interface BreakdownParts {
   role: number;
@@ -28,7 +31,7 @@ export default async function RequirementDetailPage({
   // Everything except the candidate lookup is independent, so it all goes out at
   // once rather than in four sequential waves. isCurrentUserAdmin is
   // request-cached — the layout has already resolved it, so it costs nothing.
-  const [{ data: req }, isAdmin, { count: placementCount }, { data: matchRows }] =
+  const [{ data: req }, isAdmin, { count: placementCount }, { data: matchRows }, positionViews] =
     await Promise.all([
       supabase.from("job_requirements").select("*").eq("id", id).single(),
       isCurrentUserAdmin(),
@@ -43,9 +46,17 @@ export default async function RequirementDetailPage({
         .eq("match_target_type", "job_requirement")
         .eq("match_target_id", id)
         .order("score", { ascending: false }),
+      loadPositionViews(supabase, "job_requirement", id),
     ]);
 
   if (!req) notFound();
+
+  const fill = fillSummary(
+    positionViews.map((p) => ({ id: p.id, quantity: p.quantity })),
+    positionViews.flatMap((p) =>
+      Array.from({ length: p.filled }, () => ({ position_id: p.id })),
+    ),
+  );
 
   const candidateIds = (matchRows ?? []).map((m) => m.candidate_id);
   const candById = new Map<string, { full_name: string; current_role: string | null; status: string }>();
@@ -127,6 +138,16 @@ export default async function RequirementDetailPage({
             />
           )}
         </div>
+      </div>
+
+      <div>
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-headline-sm font-semibold text-foreground">Roles required</h2>
+          <span className="text-body-sm text-muted-foreground">
+            {fill.filledSeats} of {fill.totalSeats} seat{fill.totalSeats === 1 ? "" : "s"} filled
+          </span>
+        </div>
+        <PositionMatches positions={positionViews} />
       </div>
 
       <MatchingResults

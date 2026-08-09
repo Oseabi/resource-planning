@@ -12,6 +12,9 @@ import {
   type TenderMatchView,
 } from "@/app/(app)/tenders/[id]/tender-matching-results";
 import { poolStrength, poolGapAnalysis } from "@/lib/matching";
+import { loadPositionViews } from "@/lib/positions-repo";
+import { fillSummary } from "@/lib/positions";
+import { PositionMatches } from "@/app/(app)/position-matches";
 
 function formatValue(value: number | null): string {
   if (value == null) return "—";
@@ -27,7 +30,7 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
   // The tender and its match rows are independent, so they go out together
   // rather than one after the other. isCurrentUserAdmin is request-cached — the
   // layout has already resolved it, so it adds no round-trip.
-  const [{ data: tender }, isAdmin, { data: matchRows }] = await Promise.all([
+  const [{ data: tender }, isAdmin, { data: matchRows }, positionViews] = await Promise.all([
     supabase.from("tenders").select("*").eq("id", id).single(),
     isCurrentUserAdmin(),
     supabase
@@ -36,8 +39,16 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
       .eq("match_target_type", "tender")
       .eq("match_target_id", id)
       .order("score", { ascending: false }),
+    loadPositionViews(supabase, "tender", id),
   ]);
   if (!tender) notFound();
+
+  const fill = fillSummary(
+    positionViews.map((p) => ({ id: p.id, quantity: p.quantity })),
+    positionViews.flatMap((p) =>
+      Array.from({ length: p.filled }, () => ({ position_id: p.id })),
+    ),
+  );
 
   const candidateIds = (matchRows ?? []).map((m) => m.candidate_id);
   const candById = new Map<string, { full_name: string; current_role: string | null }>();
@@ -116,6 +127,16 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
           </Button>
           {isAdmin && <DeleteTenderButton tenderId={tender.id} tenderTitle={tender.title} />}
         </div>
+      </div>
+
+      <div>
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-headline-sm font-semibold text-foreground">Team required</h2>
+          <span className="text-body-sm text-muted-foreground">
+            {fill.filledSeats} of {fill.totalSeats} seat{fill.totalSeats === 1 ? "" : "s"} filled
+          </span>
+        </div>
+        <PositionMatches positions={positionViews} />
       </div>
 
       <TenderMatchingResults

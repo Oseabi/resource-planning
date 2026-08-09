@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TagInput } from "@/components/ui/tag-input";
+import { PositionsEditor } from "@/app/(app)/positions-editor";
 import type { TenderFormFields } from "@/app/(app)/tenders/actions";
 import type { TenderStatus } from "@/lib/supabase/database.types";
 
@@ -26,6 +27,7 @@ export type TenderExtractedFlags = Partial<Record<keyof TenderFormFields, boolea
 
 export const EMPTY_TENDER: TenderFormFields = {
   title: "",
+  positions: [],
   reference_number: null,
   client: null,
   location: null,
@@ -97,28 +99,21 @@ export function TenderFields({
         </div>
       </Section>
 
-      <Section title="Team requirements">
-        <Field label="Min. years experience" htmlFor="tf-minexp" highlight={extracted.min_experience_years}>
-          <Input
-            id="tf-minexp"
-            type="number"
-            min={0}
-            step={0.5}
-            className="sm:max-w-xs"
-            value={value.min_experience_years ?? ""}
-            onChange={(e) => set("min_experience_years", e.target.value === "" ? null : Number(e.target.value))}
-            placeholder="e.g. 5"
-          />
-        </Field>
-        <Field label="Required roles" highlight={extracted.required_roles}>
-          <TagInput value={value.required_roles} onChange={(v) => set("required_roles", v)} field="roles" context={ctx} placeholder="Roles this tender needs..." highlight={extracted.required_roles} />
-        </Field>
-        <Field label="Required skills" highlight={extracted.required_skills}>
-          <TagInput value={value.required_skills} onChange={(v) => set("required_skills", v)} field="technical_skills" context={ctx} placeholder="Add a required skill..." highlight={extracted.required_skills} />
-        </Field>
-        <Field label="Required certifications" highlight={extracted.required_certifications}>
-          <TagInput value={value.required_certifications} onChange={(v) => set("required_certifications", v)} field="certifications" context={ctx} placeholder="Add a certification..." highlight={extracted.required_certifications} />
-        </Field>
+      <Section title="Team required">
+        <p className="text-body-sm text-muted-foreground">
+          One line per role. Set how many of each and the bar they must clear — a bid needing
+          three analysts at 3 years and a lead at 5 is captured exactly, and each seat is
+          matched on its own terms.
+        </p>
+        <PositionsEditor
+          value={value.positions}
+          onChange={(v) => set("positions", v)}
+          sectors={value.sectors}
+          highlight={extracted.positions}
+        />
+      </Section>
+
+      <Section title="Classification">
         <Field label="Sectors" highlight={extracted.sectors}>
           <TagInput value={value.sectors} onChange={(v) => set("sectors", v)} field="sectors" context={ctx} placeholder="Add a sector..." highlight={extracted.sectors} />
         </Field>
