@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Pencil, Link2, Globe, Mail, Phone, MapPin, Briefcase, GraduationCap } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { StatusBadge, AvailabilityBadge, Chip } from "@/app/(app)/candidates/candidate-badges";
@@ -15,19 +16,15 @@ export default async function CandidateProfilePage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  const [{ data: candidate }, { data: profile }] = await Promise.all([
+  // isCurrentUserAdmin is request-cached: the layout has already resolved it, so
+  // this adds no round-trip.
+  const [{ data: candidate }, isAdmin] = await Promise.all([
     supabase.from("candidates").select("*").eq("id", id).single(),
-    user
-      ? supabase.from("profiles").select("role").eq("id", user.id).single()
-      : Promise.resolve({ data: null }),
+    isCurrentUserAdmin(),
   ]);
 
   if (!candidate) notFound();
-  const isAdmin = profile?.role === "admin";
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">

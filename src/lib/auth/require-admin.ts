@@ -1,25 +1,18 @@
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/auth/current-user";
 
 export async function requireAdmin() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Request-cached, so calling this alongside other auth reads in the same
+  // action costs a single auth + profile round-trip rather than one each.
+  const profile = await getCurrentProfile();
 
-  if (!user) {
+  if (!profile) {
     throw new Error("Not authenticated.");
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  if (profile?.role !== "admin") {
+  if (!profile.isAdmin) {
     throw new Error("Only admins can perform this action.");
   }
 
-  return user;
+  return profile;
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Pencil, Folder } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { Button } from "@/components/ui/button";
 import { ExpiryBadge } from "@/app/(app)/oem-letters/expiry-badge";
 import {
@@ -16,19 +17,15 @@ export default async function OemLetterDetailPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  const [{ data: letter }, { data: profile }] = await Promise.all([
+  // isCurrentUserAdmin is request-cached: the layout has already resolved it, so
+  // this adds no round-trip.
+  const [{ data: letter }, isAdmin] = await Promise.all([
     supabase.from("oem_letters").select("*").eq("id", id).single(),
-    user
-      ? supabase.from("profiles").select("role").eq("id", user.id).single()
-      : Promise.resolve({ data: null }),
+    isCurrentUserAdmin(),
   ]);
 
   if (!letter) notFound();
-  const isAdmin = profile?.role === "admin";
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">

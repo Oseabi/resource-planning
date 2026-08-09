@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/auth/current-user";
 import {
   Table,
   TableBody,
@@ -16,21 +17,14 @@ import { DeleteUserDialog } from "@/app/(app)/settings/users/delete-user-dialog"
 
 export default async function UsersSettingsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Request-cached — already resolved by the layout, so this is free.
+  const current = await getCurrentProfile();
 
-  if (!user) {
+  if (!current) {
     redirect("/login");
   }
 
-  const { data: currentProfile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  if (currentProfile?.role !== "admin") {
+  if (!current.isAdmin) {
     return (
       <div>
         <h1 className="text-display font-semibold text-foreground">User Management</h1>
@@ -80,7 +74,7 @@ export default async function UsersSettingsPage() {
                     <RoleSelect
                       userId={profile.id}
                       role={profile.role}
-                      disabled={profile.id === user.id}
+                      disabled={profile.id === current.id}
                     />
                   </TableCell>
                   <TableCell>
@@ -97,7 +91,7 @@ export default async function UsersSettingsPage() {
                         userId={profile.id}
                         fullName={profile.full_name}
                         email={profile.email}
-                        disabled={profile.id === user.id}
+                        disabled={profile.id === current.id}
                       />
                     </div>
                   </TableCell>
@@ -123,14 +117,14 @@ export default async function UsersSettingsPage() {
                 )}
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <RoleSelect userId={profile.id} role={profile.role} disabled={profile.id === user.id} />
+                <RoleSelect userId={profile.id} role={profile.role} disabled={profile.id === current.id} />
                 <div className="flex items-center gap-2">
                   <ResetPasswordDialog userId={profile.id} email={profile.email} />
                   <DeleteUserDialog
                     userId={profile.id}
                     fullName={profile.full_name}
                     email={profile.email}
-                    disabled={profile.id === user.id}
+                    disabled={profile.id === current.id}
                   />
                 </div>
               </div>

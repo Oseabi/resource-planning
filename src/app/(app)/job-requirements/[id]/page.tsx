@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Pencil, Briefcase, Award, Clock, MapPin } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { Button } from "@/components/ui/button";
 import { RequirementStatusBadge } from "@/app/(app)/job-requirements/requirement-badges";
 import { MatchingResults, type MatchView } from "@/app/(app)/job-requirements/[id]/matching-results";
@@ -27,20 +28,16 @@ export default async function RequirementDetailPage({
   const { data: req } = await supabase.from("job_requirements").select("*").eq("id", id).single();
   if (!req) notFound();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { data: profile } = user
-    ? await supabase.from("profiles").select("role").eq("id", user.id).single()
-    : { data: null };
-  const isAdmin = profile?.role === "admin";
-
-  // Deleting the requirement also deletes these, so the count is surfaced first.
-  const { count: placementCount } = await supabase
-    .from("placements")
-    .select("id", { count: "exact", head: true })
-    .eq("source_type", "job_requirement")
-    .eq("source_id", id);
+  // isCurrentUserAdmin is request-cached (resolved by the layout), and the
+  // placement count is only needed for the delete warning — run them together.
+  const [isAdmin, { count: placementCount }] = await Promise.all([
+    isCurrentUserAdmin(),
+    supabase
+      .from("placements")
+      .select("id", { count: "exact", head: true })
+      .eq("source_type", "job_requirement")
+      .eq("source_id", id),
+  ]);
 
   const { data: matchRows } = await supabase
     .from("matches")
