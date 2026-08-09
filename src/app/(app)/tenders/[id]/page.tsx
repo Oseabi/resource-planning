@@ -24,20 +24,20 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const supabase = await createClient();
 
-  // isCurrentUserAdmin is request-cached: the layout has already resolved it, so
-  // this adds no round-trip.
-  const [{ data: tender }, isAdmin] = await Promise.all([
+  // The tender and its match rows are independent, so they go out together
+  // rather than one after the other. isCurrentUserAdmin is request-cached — the
+  // layout has already resolved it, so it adds no round-trip.
+  const [{ data: tender }, isAdmin, { data: matchRows }] = await Promise.all([
     supabase.from("tenders").select("*").eq("id", id).single(),
     isCurrentUserAdmin(),
+    supabase
+      .from("matches")
+      .select("id, candidate_id, score")
+      .eq("match_target_type", "tender")
+      .eq("match_target_id", id)
+      .order("score", { ascending: false }),
   ]);
   if (!tender) notFound();
-
-  const { data: matchRows } = await supabase
-    .from("matches")
-    .select("id, candidate_id, score")
-    .eq("match_target_type", "tender")
-    .eq("match_target_id", id)
-    .order("score", { ascending: false });
 
   const candidateIds = (matchRows ?? []).map((m) => m.candidate_id);
   const candById = new Map<string, { full_name: string; current_role: string | null }>();

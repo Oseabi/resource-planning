@@ -25,26 +25,27 @@ export default async function RequirementDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: req } = await supabase.from("job_requirements").select("*").eq("id", id).single();
+  // Everything except the candidate lookup is independent, so it all goes out at
+  // once rather than in four sequential waves. isCurrentUserAdmin is
+  // request-cached — the layout has already resolved it, so it costs nothing.
+  const [{ data: req }, isAdmin, { count: placementCount }, { data: matchRows }] =
+    await Promise.all([
+      supabase.from("job_requirements").select("*").eq("id", id).single(),
+      isCurrentUserAdmin(),
+      supabase
+        .from("placements")
+        .select("id", { count: "exact", head: true })
+        .eq("source_type", "job_requirement")
+        .eq("source_id", id),
+      supabase
+        .from("matches")
+        .select("id, candidate_id, score, score_breakdown, alert_sent")
+        .eq("match_target_type", "job_requirement")
+        .eq("match_target_id", id)
+        .order("score", { ascending: false }),
+    ]);
+
   if (!req) notFound();
-
-  // isCurrentUserAdmin is request-cached (resolved by the layout), and the
-  // placement count is only needed for the delete warning — run them together.
-  const [isAdmin, { count: placementCount }] = await Promise.all([
-    isCurrentUserAdmin(),
-    supabase
-      .from("placements")
-      .select("id", { count: "exact", head: true })
-      .eq("source_type", "job_requirement")
-      .eq("source_id", id),
-  ]);
-
-  const { data: matchRows } = await supabase
-    .from("matches")
-    .select("id, candidate_id, score, score_breakdown, alert_sent")
-    .eq("match_target_type", "job_requirement")
-    .eq("match_target_id", id)
-    .order("score", { ascending: false });
 
   const candidateIds = (matchRows ?? []).map((m) => m.candidate_id);
   const candById = new Map<string, { full_name: string; current_role: string | null; status: string }>();
