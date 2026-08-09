@@ -106,14 +106,14 @@ export async function loadPositionViews(
   parentId: string,
 ) {
   const positions = await loadPositions(supabase, parentType, parentId);
-  if (positions.length === 0) return [];
+  if (positions.length === 0) return { positions: [], aggregated: [] };
 
   const positionIds = positions.map((p) => p.id);
 
   const [{ data: matchRows }, { data: assignmentRows }] = await Promise.all([
     supabase
       .from("matches")
-      .select("candidate_id, match_target_id, score")
+      .select("id, candidate_id, match_target_id, score, score_breakdown, alert_sent")
       .eq("match_target_type", "position")
       .in("match_target_id", positionIds)
       .order("score", { ascending: false }),
@@ -130,14 +130,21 @@ export async function loadPositionViews(
       ...(assignmentRows ?? []).map((a) => a.candidate_id),
     ]),
   ];
-  const candById = new Map<string, { full_name: string; current_role: string | null }>();
+  const candById = new Map<
+    string,
+    { full_name: string; current_role: string | null; status: string }
+  >();
   if (candidateIds.length > 0) {
     const { data: candidates } = await supabase
       .from("candidates")
-      .select("id, full_name, current_role")
+      .select("id, full_name, current_role, status")
       .in("id", candidateIds);
     for (const c of candidates ?? []) {
-      candById.set(c.id, { full_name: c.full_name, current_role: c.current_role });
+      candById.set(c.id, {
+        full_name: c.full_name,
+        current_role: c.current_role,
+        status: c.status,
+      });
     }
   }
 
@@ -156,7 +163,7 @@ export async function loadPositionViews(
     assignedByPosition.set(a.position_id, list);
   }
 
-  return positions.map((position) => ({
+  const positionViews = positions.map((position) => ({
     id: position.id,
     role: position.role,
     quantity: position.quantity,
@@ -174,6 +181,40 @@ export async function loadPositionViews(
         score: m.score,
       })),
   }));
+
+  // Parent-level shortlist: a candidate's best score across every seat. Matching
+  // is per position now, so without this roll-up the overall panel — which owns
+  // the Match button, export and alerts — would have nothing to show.
+  const zero = { role: 0, skills: 0, certifications: 0, experience: 0, availability: 0 };
+  type MatchRow = NonNullable<typeof matchRows>[number];
+  const bestByCandidate = new Map<string, MatchRow>();
+  for (const m of matchRows ?? []) {
+    const current = bestByCandidate.get(m.candidate_id);
+    if (!current || m.score > current.score) bestByCandidate.set(m.candidate_id, m);
+  }
+
+  const aggregated = [...bestByCandidate.values()]
+    .sort((a, b) => b.score - a.score)
+    .map((m) => {
+      const sb = (m.score_breakdown ?? {}) as {
+        breakdown?: typeof zero;
+        points?: typeof zero;
+      };
+      const cand = candById.get(m.candidate_id);
+      return {
+        matchId: m.id,
+        candidateId: m.candidate_id,
+        name: cand?.full_name ?? "Unknown candidate",
+        role: cand?.current_role ?? null,
+        status: cand?.status ?? "active",
+        score: m.score,
+        breakdown: sb.breakdown ?? zero,
+        points: sb.points ?? zero,
+        alertSent: m.alert_sent,
+      };
+    });
+
+  return { positions: positionViews, aggregated };
 }
 
 /** Map DB rows back to the form shape. */

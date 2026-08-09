@@ -32,18 +32,14 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
   // The tender and its match rows are independent, so they go out together
   // rather than one after the other. isCurrentUserAdmin is request-cached — the
   // layout has already resolved it, so it adds no round-trip.
-  const [{ data: tender }, isAdmin, { data: matchRows }, positionViews] = await Promise.all([
+  const [{ data: tender }, isAdmin, positionData] = await Promise.all([
     supabase.from("tenders").select("*").eq("id", id).single(),
     isCurrentUserAdmin(),
-    supabase
-      .from("matches")
-      .select("id, candidate_id, score")
-      .eq("match_target_type", "tender")
-      .eq("match_target_id", id)
-      .order("score", { ascending: false }),
     loadPositionViews(supabase, "tender", id),
   ]);
   if (!tender) notFound();
+
+  const positionViews = positionData.positions;
 
   const fill = fillSummary(
     positionViews.map((p) => ({ id: p.id, quantity: p.quantity })),
@@ -65,21 +61,12 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
     conflicts.map((c) => [c.candidateId, c.tenderTitles]),
   );
 
-  const candidateIds = (matchRows ?? []).map((m) => m.candidate_id);
-  const candById = new Map<string, { full_name: string; current_role: string | null }>();
-  if (candidateIds.length) {
-    const { data: cands } = await supabase
-      .from("candidates")
-      .select("id, full_name, current_role")
-      .in("id", candidateIds);
-    for (const c of cands ?? []) candById.set(c.id, { full_name: c.full_name, current_role: c.current_role });
-  }
-
-  const matches: TenderMatchView[] = (matchRows ?? []).map((m) => ({
-    matchId: m.id,
-    candidateId: m.candidate_id,
-    name: candById.get(m.candidate_id)?.full_name ?? "Unknown candidate",
-    role: candById.get(m.candidate_id)?.current_role ?? null,
+  // Each candidate's best score across the tender's seats.
+  const matches: TenderMatchView[] = positionData.aggregated.map((m) => ({
+    matchId: m.matchId,
+    candidateId: m.candidateId,
+    name: m.name,
+    role: m.role,
     score: m.score,
   }));
 

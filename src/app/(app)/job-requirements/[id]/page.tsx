@@ -31,25 +31,20 @@ export default async function RequirementDetailPage({
   // Everything except the candidate lookup is independent, so it all goes out at
   // once rather than in four sequential waves. isCurrentUserAdmin is
   // request-cached — the layout has already resolved it, so it costs nothing.
-  const [{ data: req }, isAdmin, { count: placementCount }, { data: matchRows }, positionViews] =
-    await Promise.all([
-      supabase.from("job_requirements").select("*").eq("id", id).single(),
-      isCurrentUserAdmin(),
-      supabase
-        .from("placements")
-        .select("id", { count: "exact", head: true })
-        .eq("source_type", "job_requirement")
-        .eq("source_id", id),
-      supabase
-        .from("matches")
-        .select("id, candidate_id, score, score_breakdown, alert_sent")
-        .eq("match_target_type", "job_requirement")
-        .eq("match_target_id", id)
-        .order("score", { ascending: false }),
-      loadPositionViews(supabase, "job_requirement", id),
-    ]);
+  const [{ data: req }, isAdmin, { count: placementCount }, positionData] = await Promise.all([
+    supabase.from("job_requirements").select("*").eq("id", id).single(),
+    isCurrentUserAdmin(),
+    supabase
+      .from("placements")
+      .select("id", { count: "exact", head: true })
+      .eq("source_type", "job_requirement")
+      .eq("source_id", id),
+    loadPositionViews(supabase, "job_requirement", id),
+  ]);
 
   if (!req) notFound();
+
+  const positionViews = positionData.positions;
 
   const fill = fillSummary(
     positionViews.map((p) => ({ id: p.id, quantity: p.quantity })),
@@ -58,37 +53,9 @@ export default async function RequirementDetailPage({
     ),
   );
 
-  const candidateIds = (matchRows ?? []).map((m) => m.candidate_id);
-  const candById = new Map<string, { full_name: string; current_role: string | null; status: string }>();
-  if (candidateIds.length) {
-    const { data: cands } = await supabase
-      .from("candidates")
-      .select("id, full_name, current_role, status")
-      .in("id", candidateIds);
-    for (const c of cands ?? []) {
-      candById.set(c.id, { full_name: c.full_name, current_role: c.current_role, status: c.status });
-    }
-  }
-
-  const matches: MatchView[] = (matchRows ?? []).map((m) => {
-    const sb = (m.score_breakdown ?? {}) as {
-      breakdown?: BreakdownParts;
-      points?: BreakdownParts;
-    };
-    const cand = candById.get(m.candidate_id);
-    const zero = { role: 0, skills: 0, certifications: 0, experience: 0, availability: 0 };
-    return {
-      matchId: m.id,
-      candidateId: m.candidate_id,
-      name: cand?.full_name ?? "Unknown candidate",
-      role: cand?.current_role ?? null,
-      status: cand?.status ?? "active",
-      score: m.score,
-      breakdown: sb.breakdown ?? zero,
-      points: sb.points ?? zero,
-      alertSent: m.alert_sent,
-    };
-  });
+  // Each candidate's best score across the requirement's seats, so the overall
+  // panel — which owns the Match button, export and alerts — has a shortlist.
+  const matches: MatchView[] = positionData.aggregated;
 
   const tags: { icon: React.ReactNode; label: string }[] = [];
   if (req.required_role) tags.push({ icon: <Briefcase className="size-3.5" />, label: req.required_role });
