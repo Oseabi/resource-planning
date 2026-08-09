@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Pencil, Briefcase, Award, Clock, MapPin } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { Button } from "@/components/ui/button";
 import { RequirementStatusBadge } from "@/app/(app)/job-requirements/requirement-badges";
 import { MatchingResults, type MatchView } from "@/app/(app)/job-requirements/[id]/matching-results";
@@ -24,30 +25,27 @@ export default async function RequirementDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: req } = await supabase.from("job_requirements").select("*").eq("id", id).single();
+  // Everything except the candidate lookup is independent, so it all goes out at
+  // once rather than in four sequential waves. isCurrentUserAdmin is
+  // request-cached — the layout has already resolved it, so it costs nothing.
+  const [{ data: req }, isAdmin, { count: placementCount }, { data: matchRows }] =
+    await Promise.all([
+      supabase.from("job_requirements").select("*").eq("id", id).single(),
+      isCurrentUserAdmin(),
+      supabase
+        .from("placements")
+        .select("id", { count: "exact", head: true })
+        .eq("source_type", "job_requirement")
+        .eq("source_id", id),
+      supabase
+        .from("matches")
+        .select("id, candidate_id, score, score_breakdown, alert_sent")
+        .eq("match_target_type", "job_requirement")
+        .eq("match_target_id", id)
+        .order("score", { ascending: false }),
+    ]);
+
   if (!req) notFound();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { data: profile } = user
-    ? await supabase.from("profiles").select("role").eq("id", user.id).single()
-    : { data: null };
-  const isAdmin = profile?.role === "admin";
-
-  // Deleting the requirement also deletes these, so the count is surfaced first.
-  const { count: placementCount } = await supabase
-    .from("placements")
-    .select("id", { count: "exact", head: true })
-    .eq("source_type", "job_requirement")
-    .eq("source_id", id);
-
-  const { data: matchRows } = await supabase
-    .from("matches")
-    .select("id, candidate_id, score, score_breakdown, alert_sent")
-    .eq("match_target_type", "job_requirement")
-    .eq("match_target_id", id)
-    .order("score", { ascending: false });
 
   const candidateIds = (matchRows ?? []).map((m) => m.candidate_id);
   const candById = new Map<string, { full_name: string; current_role: string | null; status: string }>();

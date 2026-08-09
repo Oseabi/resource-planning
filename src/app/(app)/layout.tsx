@@ -1,26 +1,25 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/auth/current-user";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { Topbar } from "@/components/layout/topbar";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Cached for the whole render, so pages that also need the user or their role
+  // reuse this instead of issuing their own auth + profile round-trips.
+  const profile = await getCurrentProfile();
 
-  if (!user) {
+  if (!profile) {
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, role")
-    .eq("id", user.id)
-    .single();
+  // Enforced here rather than in middleware, which would cost a profiles query
+  // on every request. /set-password is outside (app), so this cannot loop.
+  if (profile.mustChangePassword) {
+    redirect("/set-password");
+  }
 
-  const fullName = profile?.full_name ?? user.email ?? "User";
-  const roleLabel = profile?.role === "admin" ? "Admin" : "Recruiter";
+  const fullName = profile.fullName;
+  const roleLabel = profile.isAdmin ? "Admin" : "Recruiter";
 
   return (
     <div className="flex h-screen">

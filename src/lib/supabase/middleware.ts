@@ -50,28 +50,12 @@ export async function updateSession(request: NextRequest) {
     return isPublicPath ? response : redirectTo("/login");
   }
 
-  let mustChangePassword = false;
-  try {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("must_change_password")
-      .eq("id", user.id)
-      .single();
-    mustChangePassword = profile?.must_change_password ?? false;
-  } catch {
-    return response;
-  }
-
-  if (mustChangePassword && path !== "/set-password" && !isPublicPath) {
-    return redirectTo("/set-password");
-  }
-
-  if (!mustChangePassword && path === "/set-password") {
-    return redirectTo("/dashboard");
-  }
-
+  // The must-change-password gate used to be enforced here, which cost a
+  // profiles query on every single request. It now lives in the (app) layout,
+  // which already loads the profile — see getCurrentProfile. /set-password sits
+  // outside (app), so there is no redirect loop.
   if (path === "/login") {
-    return redirectTo(mustChangePassword ? "/set-password" : "/dashboard");
+    return redirectTo("/dashboard");
   }
 
   return response;

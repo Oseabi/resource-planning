@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Pencil, Briefcase, MapPin, CalendarClock, Banknote, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { Button } from "@/components/ui/button";
 import { TenderStatusBadge } from "@/app/(app)/tenders/tender-badges";
 import { CvDownloadButton } from "@/app/(app)/candidates/[id]/cv-download-button";
@@ -23,25 +24,20 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const [{ data: tender }, { data: profile }] = await Promise.all([
+  // The tender and its match rows are independent, so they go out together
+  // rather than one after the other. isCurrentUserAdmin is request-cached — the
+  // layout has already resolved it, so it adds no round-trip.
+  const [{ data: tender }, isAdmin, { data: matchRows }] = await Promise.all([
     supabase.from("tenders").select("*").eq("id", id).single(),
-    user
-      ? supabase.from("profiles").select("role").eq("id", user.id).single()
-      : Promise.resolve({ data: null }),
+    isCurrentUserAdmin(),
+    supabase
+      .from("matches")
+      .select("id, candidate_id, score")
+      .eq("match_target_type", "tender")
+      .eq("match_target_id", id)
+      .order("score", { ascending: false }),
   ]);
   if (!tender) notFound();
-  const isAdmin = profile?.role === "admin";
-
-  const { data: matchRows } = await supabase
-    .from("matches")
-    .select("id, candidate_id, score")
-    .eq("match_target_type", "tender")
-    .eq("match_target_id", id)
-    .order("score", { ascending: false });
 
   const candidateIds = (matchRows ?? []).map((m) => m.candidate_id);
   const candById = new Map<string, { full_name: string; current_role: string | null }>();
