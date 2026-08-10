@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { Bell } from "lucide-react";
+import { Search, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { GlobalSearch } from "@/components/layout/global-search";
 
 export function Topbar({
   fullName,
@@ -15,7 +14,14 @@ export function Topbar({
   return (
     <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border bg-card px-4 shadow-[0_1px_2px_0_oklch(0.28_0.06_262/0.04)] sm:gap-4 sm:px-6">
       <MobileNav fullName={fullName} roleLabel={roleLabel} />
-      <GlobalSearch />
+      <div className="relative min-w-0 max-w-md flex-1">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          type="search"
+          placeholder="Search candidates, skills, or job refs..."
+          className="w-full rounded-md border border-input bg-background py-2 pl-9 pr-3 text-body-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
+        />
+      </div>
       <div className="flex items-center gap-2">
         <Button
           variant="outline"

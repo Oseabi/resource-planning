@@ -24,8 +24,6 @@ export interface CandidateFormFields {
   years_experience: number | null;
   professional_summary: string | null;
   availability: CandidateAvailability;
-  /** Manual override for when they next come free; null means now. */
-  available_from: string | null;
   status: CandidateStatus;
   location: string | null;
   notes: string | null;
@@ -115,7 +113,6 @@ function toCandidateColumns(fields: CandidateFormFields): CandidateUpdate & { fu
     years_experience: fields.years_experience,
     professional_summary: fields.professional_summary,
     availability: fields.availability,
-    available_from: fields.available_from,
     status: fields.status,
     location: fields.location,
     notes: fields.notes,

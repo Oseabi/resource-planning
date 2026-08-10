@@ -5,17 +5,7 @@
  * experience floor, skills and certifications. Pure helpers only (no I/O), so
  * every rule here is unit-testable.
  */
-import type { CandidateInput, RequirementInput } from "@/lib/scoring";
-
-/**
- * Everything needed to re-score a candidate against a seat, plus enough to name
- * them. Sent to the client once per candidate rather than once per match, since
- * the same person appears under every seat they were scored for.
- */
-export interface CandidateProfile extends CandidateInput {
-  id: string;
-  full_name: string;
-}
+import type { RequirementInput } from "@/lib/scoring";
 
 /** A position as the forms and the matcher see it (id absent until saved). */
 export interface PositionInput {

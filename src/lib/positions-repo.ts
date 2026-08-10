@@ -1,7 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, PositionParentType } from "@/lib/supabase/database.types";
-import { cleanPositions, type CandidateProfile, type PositionInput } from "@/lib/positions";
+import { cleanPositions, type PositionInput } from "@/lib/positions";
 
 type Client = SupabaseClient<Database>;
 
@@ -106,9 +106,7 @@ export async function loadPositionViews(
   parentId: string,
 ) {
   const positions = await loadPositions(supabase, parentType, parentId);
-  if (positions.length === 0) {
-    return { positions: [], aggregated: [], candidatePool: {} as Record<string, CandidateProfile> };
-  }
+  if (positions.length === 0) return { positions: [], aggregated: [] };
 
   const positionIds = positions.map((p) => p.id);
 
@@ -136,15 +134,10 @@ export async function loadPositionViews(
     string,
     { full_name: string; current_role: string | null; status: string }
   >();
-  // Keyed by id so the client can re-score a candidate against any seat without
-  // another round-trip. One entry per person, not one per match row.
-  const candidatePool: Record<string, CandidateProfile> = {};
   if (candidateIds.length > 0) {
     const { data: candidates } = await supabase
       .from("candidates")
-      .select(
-        "id, full_name, current_role, status, additional_roles, skills, technical_skills, certifications, years_experience, availability",
-      )
+      .select("id, full_name, current_role, status")
       .in("id", candidateIds);
     for (const c of candidates ?? []) {
       candById.set(c.id, {
@@ -152,17 +145,6 @@ export async function loadPositionViews(
         current_role: c.current_role,
         status: c.status,
       });
-      candidatePool[c.id] = {
-        id: c.id,
-        full_name: c.full_name,
-        current_role: c.current_role,
-        additional_roles: c.additional_roles,
-        skills: c.skills,
-        technical_skills: c.technical_skills,
-        certifications: c.certifications,
-        years_experience: c.years_experience,
-        availability: c.availability,
-      };
     }
   }
 
@@ -232,7 +214,7 @@ export async function loadPositionViews(
       };
     });
 
-  return { positions: positionViews, aggregated, candidatePool };
+  return { positions: positionViews, aggregated };
 }
 
 /** Map DB rows back to the form shape. */

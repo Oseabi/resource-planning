@@ -13,8 +13,6 @@ import {
 } from "@/app/(app)/tenders/[id]/tender-matching-results";
 import { poolStrength, TENDER_STRONG_MATCH_THRESHOLD } from "@/lib/matching";
 import { loadPositionViews } from "@/lib/positions-repo";
-import { loadActivity } from "@/app/(app)/activity-actions";
-import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import { fillSummary } from "@/lib/positions";
 import { PositionMatches } from "@/app/(app)/position-matches";
 import { findBidConflicts } from "@/app/(app)/assignment-actions";
@@ -34,11 +32,10 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
   // The tender and its match rows are independent, so they go out together
   // rather than one after the other. isCurrentUserAdmin is request-cached, the
   // layout has already resolved it, so it adds no round-trip.
-  const [{ data: tender }, isAdmin, positionData, activity] = await Promise.all([
+  const [{ data: tender }, isAdmin, positionData] = await Promise.all([
     supabase.from("tenders").select("*").eq("id", id).single(),
     isCurrentUserAdmin(),
     loadPositionViews(supabase, "tender", id),
-    loadActivity("tender", id),
   ]);
   if (!tender) notFound();
 
@@ -150,7 +147,6 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
           positions={positionViews}
           parentType="tender"
           conflicts={conflictsByCandidate}
-          candidatePool={positionData.candidatePool}
         />
       </div>
 
@@ -161,8 +157,6 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
         poolStrengthValue={strength}
         poolGaps={poolGaps}
       />
-
-      <ActivityTimeline entityType="tender" entityId={id} entries={activity} />
     </div>
   );
 }

@@ -3,13 +3,8 @@
 -- Paste this whole file into the Supabase dashboard SQL Editor and click "Run".
 --
 -- Demo rows are identified purely by their UUID prefix, so nothing real is at
--- risk: candidates 'deadbee1-…', tenders 'deadbee2-…', positions 'deadbee3-…',
--- OEM letters 'deadbee4-…'.
+-- risk: candidates 'deadbee1-…', tenders 'deadbee2-…', positions 'deadbee3-…'.
 -- Anything you created yourself has an ordinary random UUID and is untouched.
---
--- This also covers supabase/seed_oem_letters.sql. It does not undo
--- supabase/seed_candidate_details.sql, which only fills columns on the
--- 'deadbee1-…' candidates removed below.
 --
 -- Order matters. matches.match_target_id and placements.source_id have no
 -- foreign keys (both are polymorphic), so those rows must be deleted explicitly
@@ -55,10 +50,6 @@ where id::text like 'deadbee2-%';
 
 delete from public.candidates
 where id::text like 'deadbee1-%';
-
--- Demo OEM letters. Nothing references these, so ordering does not matter.
-delete from public.oem_letters
-where id::text like 'deadbee4-%';
 
 -- Nothing reverses the placed flag when a placement is deleted (the trigger has
 -- no counterpart), so free any real candidate left marked placed with no
