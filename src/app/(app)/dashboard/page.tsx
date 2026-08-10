@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { JOB_ALERT_THRESHOLD, TENDER_STRONG_MATCH_THRESHOLD } from "@/lib/scoring";
 import { deadlinesAtRisk, poolHealth, categoryBreakdown, complianceSummary } from "@/lib/analytics";
+import { benchForecast } from "@/lib/availability";
 import { seatCount } from "@/lib/positions";
 import { expiryStatus, daysUntilExpiry } from "@/lib/oem-letters";
 import { ExpiryBadge } from "@/app/(app)/oem-letters/expiry-badge";
@@ -26,21 +27,24 @@ const ALL_DEADLINES = 3650;
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  const [{ data: tenders }, { data: letters }, { data: candidates }] = await Promise.all([
-    supabase
-      .from("tenders")
-      .select("id, title, client, status, value, submission_deadline, sectors, required_skills"),
-    supabase.from("oem_letters").select("id, title, oem_vendor, categories, expiry_date"),
-    supabase
-      .from("candidates")
-      .select(
-        "id, status, availability, years_experience, resource_categories, skills, technical_skills, certifications",
-      ),
-  ]);
+  const [{ data: tenders }, { data: letters }, { data: candidates }, { data: placements }] =
+    await Promise.all([
+      supabase
+        .from("tenders")
+        .select("id, title, client, status, value, submission_deadline, sectors, required_skills"),
+      supabase.from("oem_letters").select("id, title, oem_vendor, categories, expiry_date"),
+      supabase
+        .from("candidates")
+        .select(
+          "id, status, availability, available_from, years_experience, resource_categories, skills, technical_skills, certifications",
+        ),
+      supabase.from("placements").select("candidate_id, start_date, end_date"),
+    ]);
 
   const allTenders = tenders ?? [];
   const allLetters = letters ?? [];
   const allCandidates = candidates ?? [];
+  const allPlacements = placements ?? [];
 
   // Only bids still being put together can act on what this page says.
   const openTenders = allTenders.filter((t) => t.status === "draft" || t.status === "live");
@@ -157,6 +161,9 @@ export default async function DashboardPage() {
 
   // --- Pool and compliance ----------------------------------------------------
   const health = poolHealth(allCandidates);
+  // Six months is far enough to plan a bid team around and short enough that the
+  // dates behind it are still worth anything.
+  const forecast = benchForecast(allCandidates, allPlacements, 6);
   const categories = categoryBreakdown(allCandidates).slice(0, 6);
   const compliance = complianceSummary(allLetters);
   const watchLetters = allLetters
@@ -316,6 +323,37 @@ export default async function DashboardPage() {
               <BenchRow label="Placed" count={health.placed} total={health.total} tone="bg-primary" />
               <p className="pt-1 text-body-sm text-muted-foreground">
                 {health.availablePct}% of the unplaced pool is free right now.
+              </p>
+            </div>
+
+            {/* The forward view. The rows above describe today; this answers
+                "who will be free when the bid actually starts". */}
+            <div className="border-t border-border px-4 py-3">
+              <div className="text-label-sm uppercase tracking-wide text-muted-foreground">
+                Free by month
+              </div>
+              <div className="mt-2 flex items-end gap-1">
+                {forecast.map((m) => {
+                  const peak = Math.max(...forecast.map((f) => f.cumulative), 1);
+                  return (
+                    <div key={m.month} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+                      <span className="text-label-sm text-muted-foreground">{m.cumulative}</span>
+                      <div
+                        className="w-full rounded-t bg-primary/70"
+                        style={{ height: `${Math.max(3, (m.cumulative / peak) * 40)}px` }}
+                        title={`${m.cumulative} free by ${m.label}`}
+                      />
+                      <span className="truncate text-label-sm text-muted-foreground">
+                        {m.label.slice(0, 3)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="pt-2 text-body-sm text-muted-foreground">
+                {forecast.at(-1)!.cumulative - forecast[0].cumulative > 0
+                  ? `${forecast.at(-1)!.cumulative - forecast[0].cumulative} more come free by ${forecast.at(-1)!.label}.`
+                  : "Nobody is scheduled to come free in the next six months."}
               </p>
             </div>
           </SectionCard>

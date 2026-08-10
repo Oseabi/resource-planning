@@ -398,6 +398,7 @@ function PlaceOnVacancyDialog({
 }) {
   const [fee, setFee] = useState("");
   const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [isPending, startTransition] = useTransition();
 
   function submit() {
@@ -406,6 +407,7 @@ function PlaceOnVacancyDialog({
       const result = await assignCandidate(pending.position.id, pending.candidateId, {
         feeValue: Number(fee || 0),
         startDate,
+        endDate,
       });
       if (result.error) {
         onError(result.error);
@@ -414,6 +416,7 @@ function PlaceOnVacancyDialog({
       }
       setFee("");
       setStartDate("");
+      setEndDate("");
       onDone();
     });
   }
@@ -442,15 +445,31 @@ function PlaceOnVacancyDialog({
               placeholder="e.g. 85000"
             />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="assign-start">Start date</Label>
-            <Input
-              id="assign-start"
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="assign-start">Start date</Label>
+              <Input
+                id="assign-start"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="assign-end">End date</Label>
+              <Input
+                id="assign-end"
+                type="date"
+                min={startDate || undefined}
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
           </div>
+          <p className="text-body-sm text-muted-foreground">
+            Leave the end date blank for an open-ended placement. With a date, they reappear on the
+            bench forecast in the month it falls.
+          </p>
         </div>
 
         <div className="flex justify-end gap-2">
