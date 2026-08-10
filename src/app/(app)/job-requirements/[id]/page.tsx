@@ -106,7 +106,11 @@ export default async function RequirementDetailPage({
             {fill.filledSeats} of {fill.totalSeats} seat{fill.totalSeats === 1 ? "" : "s"} filled
           </span>
         </div>
-        <PositionMatches positions={positionViews} parentType="job_requirement" />
+        <PositionMatches
+          positions={positionViews}
+          parentType="job_requirement"
+          candidatePool={positionData.candidatePool}
+        />
       </div>
 
       <MatchingResults

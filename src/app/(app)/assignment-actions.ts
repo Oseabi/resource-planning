@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { seatCount } from "@/lib/positions";
+import { recordEvent } from "@/app/(app)/activity-actions";
 
 export type AssignResult = { error: string | null };
 
@@ -24,7 +25,7 @@ function parentPath(parentType: string, parentId: string): string {
 export async function assignCandidate(
   positionId: string,
   candidateId: string,
-  options: { feeValue?: number; startDate?: string } = {},
+  options: { feeValue?: number; startDate?: string; endDate?: string } = {},
 ): Promise<AssignResult> {
   const supabase = await createClient();
   const {
@@ -92,6 +93,9 @@ export async function assignCandidate(
       position_id: positionId,
       fee_value: Number(options.feeValue),
       start_date: options.startDate!,
+      // Optional. Null means open ended, which keeps them off the forecast
+      // rather than freeing them on a date nobody has actually agreed.
+      end_date: options.endDate || null,
       created_by: user.id,
     });
     if (placementError) {
@@ -100,6 +104,23 @@ export async function assignCandidate(
       return { error: placementError.message };
     }
   }
+
+  // Logged on both sides: the bid needs to show who joined the team, and the
+  // person needs to show what they were put forward for.
+  const { data: candidate } = await supabase
+    .from("candidates")
+    .select("full_name")
+    .eq("id", candidateId)
+    .single();
+  const action = isVacancy ? "placed" : "assigned";
+
+  await Promise.all([
+    recordEvent(position.parent_type, position.parent_id, action, {
+      candidate: candidate?.full_name ?? "Unknown candidate",
+      role: position.role,
+    }),
+    recordEvent("candidate", candidateId, action, { role: position.role }),
+  ]);
 
   revalidatePath(parentPath(position.parent_type, position.parent_id));
   revalidatePath("/candidates");
@@ -115,10 +136,17 @@ export async function unassignCandidate(
 
   const { data: position } = await supabase
     .from("positions")
-    .select("id, parent_type, parent_id")
+    .select("id, parent_type, parent_id, role")
     .eq("id", positionId)
     .single();
   if (!position) return { error: "That role no longer exists." };
+
+  // Read the name before the assignment goes, so the trail can say who left.
+  const { data: candidate } = await supabase
+    .from("candidates")
+    .select("full_name")
+    .eq("id", candidateId)
+    .single();
 
   const { error } = await supabase
     .from("assignments")
@@ -144,6 +172,14 @@ export async function unassignCandidate(
       await supabase.from("candidates").update({ status: "active" }).eq("id", candidateId);
     }
   }
+
+  await Promise.all([
+    recordEvent(position.parent_type, position.parent_id, "unassigned", {
+      candidate: candidate?.full_name ?? "Unknown candidate",
+      role: position.role,
+    }),
+    recordEvent("candidate", candidateId, "unassigned", { role: position.role }),
+  ]);
 
   revalidatePath(parentPath(position.parent_type, position.parent_id));
   revalidatePath("/candidates");
@@ -259,6 +295,11 @@ export async function confirmTenderTeam(
       proposed.map((a) => a.id),
     );
   if (statusError) return { error: statusError.message };
+
+  await recordEvent("tender", tenderId, "team_confirmed", {
+    placed: proposed.length,
+    start_date: startDate,
+  });
 
   revalidatePath(`/tenders/${tenderId}`);
   revalidatePath("/candidates");

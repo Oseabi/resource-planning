@@ -124,6 +124,19 @@ export function CandidateFields({
               </SelectContent>
             </Select>
           </Field>
+          {/* Only needed when no placement explains the gap, e.g. parental leave
+              or a candidate who has told you a date directly. */}
+          <Field label="Available from" htmlFor="cf-available-from">
+            <Input
+              id="cf-available-from"
+              type="date"
+              value={value.available_from ?? ""}
+              onChange={(e) => set("available_from", e.target.value || null)}
+            />
+            <p className="mt-1 text-body-sm text-muted-foreground">
+              Leave blank unless they are unavailable for a reason no placement records.
+            </p>
+          </Field>
         </div>
         <Field label="Additional roles" highlight={extracted.additional_roles}>
           <TagInput value={value.additional_roles} onChange={(v) => set("additional_roles", v)} field="roles" context={ctx} placeholder="Add another role this person can fill..." highlight={extracted.additional_roles} />
@@ -234,6 +247,7 @@ export const EMPTY_CANDIDATE: CandidateFormFields = {
   years_experience: null,
   professional_summary: null,
   availability: "available",
+  available_from: null,
   status: "active",
   location: null,
   notes: null,

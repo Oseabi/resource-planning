@@ -12,6 +12,10 @@ export type PlacementSourceType = "job_requirement" | "tender";
 export type PositionParentType = "job_requirement" | "tender";
 /** A tender seat is proposed until the bid is won; a vacancy places at once. */
 export type AssignmentStatus = "proposed" | "placed";
+/** What a timeline entry hangs off. Polymorphic, so no FK backs it. */
+export type ActivityEntityType = "candidate" | "tender" | "job_requirement" | "oem_letter";
+/** A note is written by a person; an event is recorded by the system. */
+export type ActivityKind = "note" | "event";
 
 export interface WorkExperience {
   title: string;
@@ -77,6 +81,8 @@ export interface Database {
           work_experience: WorkExperience[];
           education: Education[];
           availability: CandidateAvailability;
+          /** Manual override for when they next come free; null means now. */
+          available_from: string | null;
           status: CandidateStatus;
           location: string | null;
           cv_file_path: string | null;
@@ -261,6 +267,8 @@ export interface Database {
           position_id: string | null;
           fee_value: number;
           start_date: string;
+          /** Null means open ended, so the candidate stays committed. */
+          end_date: string | null;
           created_by: string | null;
           created_at: string;
         };
@@ -272,6 +280,30 @@ export interface Database {
           start_date: string;
         };
         Update: Partial<Database["public"]["Tables"]["placements"]["Row"]>;
+        Relationships: [];
+      };
+      activity: {
+        Row: {
+          id: string;
+          entity_type: ActivityEntityType;
+          entity_id: string;
+          kind: ActivityKind;
+          /** Events only: what happened. */
+          action: string | null;
+          /** Notes only: what the user wrote. */
+          body: string | null;
+          detail: Json;
+          /** Null once the user who caused it has been removed. */
+          actor_id: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["activity"]["Row"]> & {
+          entity_type: ActivityEntityType;
+          entity_id: string;
+          kind: ActivityKind;
+        };
+        // No update policy exists; the trail is immutable once written.
+        Update: never;
         Relationships: [];
       };
     };

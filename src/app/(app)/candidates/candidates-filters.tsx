@@ -111,6 +111,21 @@ export function CandidatesFilters() {
           <SelectItem value="placed">Placed</SelectItem>
         </SelectContent>
       </Select>
+
+      {/* A date rather than a preset list, because the date that matters is
+          whenever the bid actually starts. */}
+      <div className="flex items-center gap-2">
+        <label htmlFor="free-by" className="shrink-0 text-body-sm text-muted-foreground">
+          Free by
+        </label>
+        <Input
+          id="free-by"
+          type="date"
+          className="w-full sm:w-40"
+          value={params.get("freeBy") ?? ""}
+          onChange={(e) => update("freeBy", e.target.value || null)}
+        />
+      </div>
     </div>
   );
 }
