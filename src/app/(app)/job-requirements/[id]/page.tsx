@@ -12,14 +12,6 @@ import { loadPositionViews } from "@/lib/positions-repo";
 import { fillSummary } from "@/lib/positions";
 import { PositionMatches } from "@/app/(app)/position-matches";
 
-interface BreakdownParts {
-  role: number;
-  skills: number;
-  certifications: number;
-  experience: number;
-  availability: number;
-}
-
 export default async function RequirementDetailPage({
   params,
 }: {

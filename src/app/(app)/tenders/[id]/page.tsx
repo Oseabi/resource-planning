@@ -11,7 +11,7 @@ import {
   TenderMatchingResults,
   type TenderMatchView,
 } from "@/app/(app)/tenders/[id]/tender-matching-results";
-import { poolStrength, poolGapAnalysis } from "@/lib/matching";
+import { poolStrength, TENDER_STRONG_MATCH_THRESHOLD } from "@/lib/matching";
 import { loadPositionViews } from "@/lib/positions-repo";
 import { fillSummary } from "@/lib/positions";
 import { PositionMatches } from "@/app/(app)/position-matches";
@@ -70,12 +70,14 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
     score: m.score,
   }));
 
-  // Pool gap analysis over active candidates (local, free).
-  const { data: activeCandidates } = await supabase
-    .from("candidates")
-    .select("current_role, additional_roles, skills, technical_skills, certifications, years_experience, availability")
-    .eq("status", "active");
-  const poolGaps = poolGapAnalysis(activeCandidates ?? [], tender);
+  // Coverage comes from the position matches that were actually scored, not from
+  // a second pass over the tender's legacy role/skill columns. Scoring those
+  // separately made the panel contradict the cards above it — a role could show
+  // a 100% candidate and still be reported as a gap.
+  const poolGaps = positionViews.map((p) => ({
+    role: p.role,
+    covered: p.matches.filter((m) => m.score >= TENDER_STRONG_MATCH_THRESHOLD).length,
+  }));
   const strength = poolStrength(matches.map((m) => m.score));
 
   const tags: { icon: React.ReactNode; label: string }[] = [];
