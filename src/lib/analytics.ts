@@ -1,5 +1,5 @@
 /**
- * Analytics computations — pure functions over plain row shapes so every metric
+ * Analytics computations, pure functions over plain row shapes so every metric
  * is unit-testable without a database. The page layer fetches rows and hands
  * them straight in.
  */
@@ -143,7 +143,7 @@ export interface SkillGap {
 }
 
 /**
- * Demanded skills ranked by how thinly the active pool covers them — the
+ * Demanded skills ranked by how thinly the active pool covers them, the
  * hiring shortlist. `demand` is the union of skills across open work.
  */
 export function skillGaps(
@@ -225,7 +225,7 @@ export function winRateByClient(tenders: TenderRow[]): ClientPerformance[] {
   const map = new Map<string, ClientPerformance>();
 
   for (const t of tenders) {
-    const client = t.client?.trim() || "—";
+    const client = t.client?.trim() || "-";
     const row =
       map.get(client) ?? { client, bids: 0, won: 0, lost: 0, winRate: null, value: 0 };
     row.bids += 1;
@@ -283,7 +283,7 @@ export function deadlinesAtRisk(
  * Skills wanted by work that is still open, drawn from its positions.
  *
  * Demand is per seat, so a role needed three times weighs the same as one needed
- * once — this measures whether the pool covers a skill at all, not how deep.
+ * once, this measures whether the pool covers a skill at all, not how deep.
  */
 export function demandedSkills(
   requirements: { id: string; status: string }[],

@@ -16,7 +16,7 @@ import { splitSections } from "@/lib/extraction/sections";
 const here = dirname(fileURLToPath(import.meta.url));
 const CV = readFileSync(join(here, "__fixtures__", "executive-cv.txt"), "utf8");
 
-describe("executive CV — sections", () => {
+describe("executive CV, sections", () => {
   const { sections, preamble } = splitSections(CV);
 
   it("keeps the name/contact block in the preamble", () => {
@@ -47,7 +47,7 @@ describe("executive CV — sections", () => {
   });
 });
 
-describe("executive CV — parsed fields", () => {
+describe("executive CV, parsed fields", () => {
   const f = parseTextToFields(CV, "jordan-sithole-cv.pdf");
 
   it("reads the ALL-CAPS name and contact details", () => {

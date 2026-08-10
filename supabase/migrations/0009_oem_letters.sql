@@ -1,4 +1,4 @@
--- OEM letters — manufacturer authorisation letters (Microsoft, SAP, Oracle, …)
+-- OEM letters, manufacturer authorisation letters (Microsoft, SAP, Oracle, …)
 -- attached to tender bids. Organised by OEM vendor and by practice-area category,
 -- with issue/expiry dates so lapsed authorisations can be surfaced before a bid.
 --

@@ -25,7 +25,7 @@ export async function loadPositions(
 /**
  * Replace a parent's positions with what the form submitted.
  *
- * Rows are matched by id so existing positions keep theirs — assignments and
+ * Rows are matched by id so existing positions keep theirs, assignments and
  * match rows reference position ids, and recreating them would orphan both.
  * Lines the user removed are deleted, which cascades their assignments.
  */
@@ -98,7 +98,7 @@ export async function replacePositions(
 /**
  * Everything a detail page needs to show each role with its own shortlist:
  * positions, their assignment counts, and their ranked matches with candidate
- * names — assembled in three queries rather than one per position.
+ * names, assembled in three queries rather than one per position.
  */
 export async function loadPositionViews(
   supabase: Client,
@@ -183,8 +183,8 @@ export async function loadPositionViews(
   }));
 
   // Parent-level shortlist: a candidate's best score across every seat. Matching
-  // is per position now, so without this roll-up the overall panel — which owns
-  // the Match button, export and alerts — would have nothing to show.
+  // is per position now, so without this roll-up the overall panel, which owns
+  // the Match button, export and alerts, would have nothing to show.
   const zero = { role: 0, skills: 0, certifications: 0, experience: 0, availability: 0 };
   type MatchRow = NonNullable<typeof matchRows>[number];
   const bestByCandidate = new Map<string, MatchRow>();

@@ -130,7 +130,7 @@ export function TenderMatchingResults({
                     {gaps.length > 0 ? (
                       <>
                         You have no strong match for{" "}
-                        <strong>{gaps.map((g) => g.role).join(", ")}</strong> — consider sourcing for
+                        <strong>{gaps.map((g) => g.role).join(", ")}</strong>. Consider sourcing for
                         {gaps.length === 1 ? " this role" : " these roles"}.
                       </>
                     ) : (
@@ -180,7 +180,7 @@ export function TenderMatchingResults({
                       <Link href={`/candidates/${m.candidateId}`} className="block truncate font-medium text-foreground hover:text-primary">
                         {m.name}
                       </Link>
-                      <div className="truncate text-body-sm text-muted-foreground">{m.role ?? "—"}</div>
+                      <div className="truncate text-body-sm text-muted-foreground">{m.role ?? "-"}</div>
                     </div>
                     <span className={cn("shrink-0 rounded-lg px-2 py-0.5 text-label-md font-semibold", scoreBadgeClass(m.score))}>
                       {m.score}%

@@ -16,14 +16,14 @@ import { RfqUploadZone } from "@/app/(app)/tenders/rfq-upload-zone";
 import { poolStrength } from "@/lib/matching";
 
 function formatValue(value: number | null): string {
-  if (value == null) return "—";
+  if (value == null) return "-";
   if (value >= 1_000_000) return `R${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `R${(value / 1_000).toFixed(0)}k`;
   return `R${value}`;
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
 }
@@ -89,7 +89,7 @@ export default async function TendersPage() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label="Live tenders" value={String(liveCount)} />
         <StatCard label="Deadlines (next 7 days)" value={String(deadlinesSoon)} accent={deadlinesSoon > 0} />
-        <StatCard label="Avg. match strength" value={strengths.length ? `${avgStrength}%` : "—"} />
+        <StatCard label="Avg. match strength" value={strengths.length ? `${avgStrength}%` : "-"} />
       </div>
 
       <div className="overflow-hidden rounded-lg border border-border bg-card shadow-card">
@@ -127,7 +127,7 @@ export default async function TendersPage() {
                             {t.title}
                           </Link>
                         </TableCell>
-                        <TableCell className="text-muted-foreground">{t.client ?? "—"}</TableCell>
+                        <TableCell className="text-muted-foreground">{t.client ?? "-"}</TableCell>
                         <TableCell className="text-foreground">{formatValue(t.value)}</TableCell>
                         <TableCell className="text-foreground">{formatDate(t.submission_deadline)}</TableCell>
                         <TableCell>
@@ -158,7 +158,7 @@ export default async function TendersPage() {
                         <div className="min-w-0">
                           <div className="truncate font-medium text-foreground">{t.title}</div>
                           <div className="truncate text-body-sm text-muted-foreground">
-                            {t.client ?? "—"} · {formatValue(t.value)} · Due {formatDate(t.submission_deadline)}
+                            {t.client ?? "-"} · {formatValue(t.value)} · Due {formatDate(t.submission_deadline)}
                           </div>
                         </div>
                         <TenderStatusBadge status={t.status} />

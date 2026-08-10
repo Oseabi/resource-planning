@@ -61,7 +61,7 @@ export default function ResetPasswordPage() {
     return (
       <AuthShell title="Reset password" description="Verifying your reset link...">
         <p className="text-body-sm text-muted-foreground">
-          If this takes more than a few seconds, your link may have expired — request a new one
+          If this takes more than a few seconds, your link may have expired, request a new one
           from the forgot password page.
         </p>
       </AuthShell>

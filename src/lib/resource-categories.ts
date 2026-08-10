@@ -1,5 +1,5 @@
 /**
- * Resource categories — a high-level, practice-area grouping for candidates
+ * Resource categories, a high-level, practice-area grouping for candidates
  * (e.g. "ERP", "Enterprise Architecture (EA)"), above job role and separate
  * from industry sector. A category is *defined by* a cluster of skills / role
  * keywords, so the candidate form can auto-suggest it from what's already been
@@ -20,7 +20,7 @@ export interface CategoryDef {
 }
 
 /**
- * Curated starter taxonomy. Extensible — users can still type their own
+ * Curated starter taxonomy. Extensible, users can still type their own
  * categories in the form; these just power autocomplete + auto-detect.
  */
 export const CATEGORY_DEFS: CategoryDef[] = [
@@ -150,7 +150,7 @@ export const CATEGORY_DEFS: CategoryDef[] = [
   },
 ];
 
-/** All category names, in taxonomy order — used for autocomplete + the filter dropdown. */
+/** All category names, in taxonomy order, used for autocomplete + the filter dropdown. */
 export const CATEGORY_NAMES: string[] = CATEGORY_DEFS.map((c) => c.name);
 
 export interface DeriveCategoriesInput {

@@ -1,9 +1,9 @@
 -- ============================================================================
--- Demo dataset — 20 candidates and 10 multi-role tenders.
+-- Demo dataset, 20 candidates and 10 multi-role tenders.
 -- Paste this whole file into the Supabase dashboard SQL Editor and click "Run".
 --
 -- Purpose: give the matching engine something to chew on. The data is
--- deliberate, not random — roles, skills and certifications are copied verbatim
+-- deliberate, not random, roles, skills and certifications are copied verbatim
 -- from src/lib/vocabulary.ts because scoring matches on exact normalised
 -- equality. Invented strings would silently score zero and make the app look
 -- broken.
@@ -251,7 +251,7 @@ insert into public.tenders (
  ARRAY['Finance','Technology']::text[], 5, 'live'),
 
 ('deadbee2-0000-4000-8000-000000000005',
- 'N3 corridor bridge rehabilitation — professional services', 'RFP-2026/INF-102',
+ 'N3 corridor bridge rehabilitation, professional services', 'RFP-2026/INF-102',
  'SANRAL', 'Durban', 42000000, '2026-10-01', '2026-11-20',
  ARRAY['Civil Engineer','Site Manager','Quantity Surveyor']::text[],
  ARRAY['AutoCAD Civil 3D','BIM']::text[],
@@ -259,7 +259,7 @@ insert into public.tenders (
  ARRAY['Civil Engineering','Infrastructure','Bridges']::text[], 8, 'live'),
 
 ('deadbee2-0000-4000-8000-000000000006',
- 'Commercial office fit-out — construction management', 'RFQ-2026/FIT-058',
+ 'Commercial office fit-out, construction management', 'RFQ-2026/FIT-058',
  'Growthpoint Properties', 'Cape Town', 7800000, '2026-09-12', '2026-10-01',
  ARRAY['Site Manager','Quantity Surveyor']::text[],
  ARRAY['AutoCAD']::text[],
@@ -275,7 +275,7 @@ insert into public.tenders (
  ARRAY['Audit','Finance','Public Sector']::text[], 5, 'live'),
 
 ('deadbee2-0000-4000-8000-000000000008',
- 'Hospital information system rollout — clinical workstream', 'RFP-2026/HLT-045',
+ 'Hospital information system rollout, clinical workstream', 'RFP-2026/HLT-045',
  'Netcare', 'Johannesburg', 11300000, '2026-10-20', '2026-12-05',
  ARRAY['Clinical Manager','Registered Nurse','Business Analyst']::text[],
  ARRAY['EMR Systems','Epic']::text[],
@@ -291,7 +291,7 @@ insert into public.tenders (
  ARRAY['Insurance','Finance']::text[], 6, 'draft'),
 
 ('deadbee2-0000-4000-8000-00000000000a',
- 'Programme management office — multi-year transformation', 'RFP-2026/PMO-088',
+ 'Programme management office, multi-year transformation', 'RFP-2026/PMO-088',
  'Eskom Holdings', 'Johannesburg', 31000000, '2026-10-08', '2026-12-01',
  ARRAY['Programme Manager','Project Manager','Change Manager','Business Analyst']::text[],
  ARRAY['Programme Management','Change Management']::text[],
@@ -302,11 +302,11 @@ on conflict (id) do nothing;
 
 
 -- ---------------------------------------------------------------------------
--- Positions — the point of the exercise
+-- Positions, the point of the exercise
 --
 -- Every line carries its OWN skills, certifications and experience floor, so a
 -- candidate scores differently against each seat. Note tender 1, which asks for
--- the same role at two different floors (5 years and 10 years) — the clearest
+-- the same role at two different floors (5 years and 10 years), the clearest
 -- demonstration of why per-position matching exists.
 --
 -- Empty required_skills/required_certifications would score 1 (full marks) and
@@ -317,7 +317,7 @@ insert into public.positions (
   required_skills, required_certifications, sort_order
 ) values
 
--- Tender 1 — national ERP platform (same role, two experience floors)
+-- Tender 1, national ERP platform (same role, two experience floors)
 ('deadbee3-0000-4000-8000-000000000101', 'tender', 'deadbee2-0000-4000-8000-000000000001',
  'ERP Consultant', 3, 5,
  ARRAY['Business Process Analysis','ERP System Migration','UAT','Microsoft Dynamics 365 F&O']::text[],
@@ -335,7 +335,7 @@ insert into public.positions (
  ARRAY['System Integration','TOGAF','Technical Documentation']::text[],
  ARRAY['Microsoft Certified: Azure Fundamentals']::text[], 3),
 
--- Tender 2 — SAP migration
+-- Tender 2, SAP migration
 ('deadbee3-0000-4000-8000-000000000201', 'tender', 'deadbee2-0000-4000-8000-000000000002',
  'ERP Consultant', 2, 5,
  ARRAY['SAP S/4HANA','SAP','ERP System Migration','Functional Specification Writing']::text[],
@@ -345,7 +345,7 @@ insert into public.positions (
  ARRAY['SQL','Python','Power BI','System Integration']::text[],
  ARRAY['Microsoft Certified: Azure Fundamentals']::text[], 1),
 
--- Tender 3 — enterprise architecture
+-- Tender 3, enterprise architecture
 ('deadbee3-0000-4000-8000-000000000301', 'tender', 'deadbee2-0000-4000-8000-000000000003',
  'Solutions Architect', 1, 12,
  ARRAY['TOGAF','ArchiMate','System Integration','Technical Documentation']::text[],
@@ -355,7 +355,7 @@ insert into public.positions (
  ARRAY['Requirements Gathering','Business Process Analysis','BPM Documentation']::text[],
  ARRAY['Certified ScrumMaster (CSM)']::text[], 1),
 
--- Tender 4 — cloud & DevOps
+-- Tender 4, cloud & DevOps
 ('deadbee3-0000-4000-8000-000000000401', 'tender', 'deadbee2-0000-4000-8000-000000000004',
  'DevOps Engineer', 3, 5,
  ARRAY['Kubernetes','Terraform','CI/CD','Docker']::text[],
@@ -369,7 +369,7 @@ insert into public.positions (
  ARRAY['Linux','Technical Documentation','System Integration']::text[],
  ARRAY['CompTIA Security+']::text[], 2),
 
--- Tender 5 — bridge rehabilitation
+-- Tender 5, bridge rehabilitation
 ('deadbee3-0000-4000-8000-000000000501', 'tender', 'deadbee2-0000-4000-8000-000000000005',
  'Civil Engineer', 2, 8,
  ARRAY['AutoCAD Civil 3D','STAAD.Pro','BIM','Technical Documentation']::text[],
@@ -383,7 +383,7 @@ insert into public.positions (
  ARRAY['Cost Management','Reporting','Vendor Management']::text[],
  ARRAY['CSCS']::text[], 2),
 
--- Tender 6 — office fit-out (won; team can be confirmed)
+-- Tender 6, office fit-out (won; team can be confirmed)
 ('deadbee3-0000-4000-8000-000000000601', 'tender', 'deadbee2-0000-4000-8000-000000000006',
  'Site Manager', 1, 6,
  ARRAY['Site Management','Health & Safety']::text[],
@@ -393,7 +393,7 @@ insert into public.positions (
  ARRAY['Cost Management','Reporting']::text[],
  ARRAY['CSCS']::text[], 1),
 
--- Tender 7 — audit co-sourcing
+-- Tender 7, audit co-sourcing
 ('deadbee3-0000-4000-8000-000000000701', 'tender', 'deadbee2-0000-4000-8000-000000000007',
  'Auditor', 2, 5,
  ARRAY['Auditing','Tax Compliance','Reconciliations']::text[],
@@ -407,7 +407,7 @@ insert into public.positions (
  ARRAY['Financial Modelling','Financial Reporting']::text[],
  ARRAY['CFA']::text[], 2),
 
--- Tender 8 — hospital information system
+-- Tender 8, hospital information system
 ('deadbee3-0000-4000-8000-000000000801', 'tender', 'deadbee2-0000-4000-8000-000000000008',
  'Clinical Manager', 1, 10,
  ARRAY['Clinical Governance','Stakeholder Management','Reporting']::text[],
@@ -421,7 +421,7 @@ insert into public.positions (
  ARRAY['Requirements Gathering','Business Process Analysis','UAT']::text[],
  ARRAY['Certified ScrumMaster (CSM)']::text[], 2),
 
--- Tender 9 — actuarial (deliberate gap: nobody in the pool is an Actuary)
+-- Tender 9, actuarial (deliberate gap: nobody in the pool is an Actuary)
 ('deadbee3-0000-4000-8000-000000000901', 'tender', 'deadbee2-0000-4000-8000-000000000009',
  'Actuary', 2, 6,
  ARRAY['Financial Modelling','R','Python']::text[],
@@ -431,7 +431,7 @@ insert into public.positions (
  ARRAY['Python','R','SQL']::text[],
  ARRAY['Microsoft Certified: Azure Fundamentals']::text[], 1),
 
--- Tender 10 — PMO transformation (Change Manager is a second deliberate gap)
+-- Tender 10, PMO transformation (Change Manager is a second deliberate gap)
 ('deadbee3-0000-4000-8000-000000000a01', 'tender', 'deadbee2-0000-4000-8000-00000000000a',
  'Programme Manager', 1, 12,
  ARRAY['Programme Management','Stakeholder Management','Risk Management','Budget Management']::text[],

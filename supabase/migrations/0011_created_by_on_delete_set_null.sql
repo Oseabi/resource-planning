@@ -5,7 +5,7 @@
 -- created a candidate, requirement, tender, OEM letter or placement would fail
 -- on a foreign-key violation.
 --
--- The records themselves must survive — they are the business history. Only the
+-- The records themselves must survive, they are the business history. Only the
 -- attribution is cleared, and the app already renders a null created_by as
 -- "Unattributed" (see the analytics recruiter leaderboard).
 --

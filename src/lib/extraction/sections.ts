@@ -1,6 +1,6 @@
 /**
  * Split raw CV text into labelled sections by detecting common headings.
- * Pure and dependency-free — safe to unit-test in isolation.
+ * Pure and dependency-free, safe to unit-test in isolation.
  */
 
 export type SectionName =

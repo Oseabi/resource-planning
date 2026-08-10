@@ -65,8 +65,8 @@ export function DeleteUserDialog({
             <DialogTitle>Delete this user?</DialogTitle>
             <DialogDescription>
               <span className="font-medium text-foreground">{fullName}</span> ({email}) will lose
-              access immediately and their account cannot be restored. Records they created —
-              candidates, requirements, tenders, OEM letters and placements — are kept, but will
+              access immediately and their account cannot be restored. Records they created, 
+              candidates, requirements, tenders, OEM letters and placements, are kept, but will
               no longer show them as the author.
             </DialogDescription>
           </DialogHeader>

@@ -162,7 +162,7 @@ export default async function CandidateProfilePage({
                     <div>
                       <div className="text-body-md font-medium text-foreground">{edu.qualification}</div>
                       <div className="text-body-sm text-muted-foreground">
-                        {[edu.institution, edu.year].filter(Boolean).join(" · ") || "—"}
+                        {[edu.institution, edu.year].filter(Boolean).join(" · ") || "-"}
                       </div>
                     </div>
                   </div>

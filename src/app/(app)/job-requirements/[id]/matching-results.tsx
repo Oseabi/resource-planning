@@ -99,7 +99,7 @@ export function MatchingResults({
     } else if (res.status === "not_configured") {
       setNotice("Email is not configured. Add RESEND_API_KEY to enable match alerts.");
     } else if (res.status === "no_manager") {
-      setNotice("No manager email set on this requirement — add one to send alerts.");
+      setNotice("No manager email set on this requirement. Add one to send alerts.");
     } else {
       setNotice(res.message ?? "Could not send the alert.");
     }
@@ -199,7 +199,7 @@ export function MatchingResults({
                     </span>
                   </div>
                   <p className="mt-2 rounded-md bg-muted px-3 py-2 text-body-sm text-muted-foreground">
-                    AI narrative disabled — enable AI to generate a qualitative match summary. The
+                    AI narrative disabled. Enable AI to generate a qualitative match summary. The
                     ranking and breakdown below are computed locally.
                   </p>
                   <div className="mt-3 space-y-2">
@@ -248,7 +248,7 @@ export function MatchingResults({
                       <Link href={`/candidates/${m.candidateId}`} className="block truncate font-medium text-foreground hover:text-primary">
                         {m.name}
                       </Link>
-                      <div className="truncate text-body-sm text-muted-foreground">{m.role ?? "—"}</div>
+                      <div className="truncate text-body-sm text-muted-foreground">{m.role ?? "-"}</div>
                     </div>
                     <span className={cn("shrink-0 rounded-lg px-2 py-0.5 text-label-md font-semibold", scoreBadgeClass(m.score))}>
                       {m.score}%

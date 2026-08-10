@@ -26,7 +26,7 @@ export async function updateSession(request: NextRequest) {
   );
 
   // A transient network failure reaching Supabase must not look like "logged
-  // out" — that would bounce users to /login mid-work and break in-flight
+  // out", that would bounce users to /login mid-work and break in-flight
   // server actions. On network errors, let the request through: every data
   // read/write is still independently protected by Supabase auth + RLS.
   let user = null;
@@ -52,7 +52,7 @@ export async function updateSession(request: NextRequest) {
 
   // The must-change-password gate used to be enforced here, which cost a
   // profiles query on every single request. It now lives in the (app) layout,
-  // which already loads the profile — see getCurrentProfile. /set-password sits
+  // which already loads the profile, see getCurrentProfile. /set-password sits
   // outside (app), so there is no redirect loop.
   if (path === "/login") {
     return redirectTo("/dashboard");

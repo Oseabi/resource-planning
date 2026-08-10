@@ -1,4 +1,4 @@
--- Resource categories — a high-level practice-area grouping for candidates
+-- Resource categories, a high-level practice-area grouping for candidates
 -- (e.g. "ERP", "Enterprise Architecture (EA)"). A candidate may hold several.
 --
 -- Self-contained and idempotent: safe to re-run.

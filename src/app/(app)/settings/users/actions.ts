@@ -101,7 +101,7 @@ export async function resetUserPassword(
  *
  * Deleting the auth user cascades to their profile, and every `created_by`
  * reference is set to null (migration 0011) so their candidates, requirements,
- * tenders, OEM letters and placements survive — only the attribution is lost.
+ * tenders, OEM letters and placements survive, only the attribution is lost.
  */
 export async function deleteUser(userId: string): Promise<{ error: string | null }> {
   const currentUser = await requireAdmin();

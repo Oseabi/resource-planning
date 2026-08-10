@@ -81,7 +81,7 @@ export function EditCandidateForm({
       setFlags(nextFlags);
       setReparseNote(
         result.no_text_found
-          ? "No text could be read from the new file — it will be attached, but review fields manually."
+          ? "No text could be read from the new file. It will be attached, but review the fields manually."
           : "Re-extracted from the new CV. Review the highlighted fields before saving.",
       );
     } catch {

@@ -62,7 +62,7 @@ export function NewCandidateForm() {
       setFlags(nextFlags);
       setParseNote(
         result.no_text_found
-          ? "No text could be read from the file — it will be attached, but enter the details manually."
+          ? "No text could be read from the file. It will be attached, but enter the details manually."
           : "Pre-filled from the CV. Review the highlighted fields, then save.",
       );
     } catch {
@@ -100,7 +100,7 @@ export function NewCandidateForm() {
               Have a CV? Upload it to pre-fill the form
             </div>
             <div className="mt-0.5 text-body-sm text-muted-foreground">
-              {file ? file.name : "Optional — you can also fill everything in manually below."}
+              {file ? file.name : "Optional. You can also fill everything in manually below."}
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={parsing}>

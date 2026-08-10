@@ -7,7 +7,7 @@ const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
 /**
  * Run the (free local) extraction engine over an uploaded CV and return the
- * pre-filled fields + raw text for the review form. Persists nothing — the
+ * pre-filled fields + raw text for the review form. Persists nothing, the
  * recruiter confirms/edits before the candidate is saved (plan Decision 2).
  */
 export async function POST(request: Request) {
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     const result = await extractFromDocument(buffer, file.type, file.name);
     return NextResponse.json(result);
   } catch {
-    // Unsupported type or unreadable document — let the form fall back to manual.
+    // Unsupported type or unreadable document, let the form fall back to manual.
     return NextResponse.json({
       fields: emptyExtractedFields(),
       raw_text: "",

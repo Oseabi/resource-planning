@@ -2,7 +2,7 @@ import "server-only";
 
 /**
  * Minimal Resend email sender via the REST API (no SDK dependency).
- * Gated on RESEND_API_KEY — returns { configured: false } when no key is set,
+ * Gated on RESEND_API_KEY, returns { configured: false } when no key is set,
  * so the app runs fully without email configured.
  */
 
@@ -62,12 +62,12 @@ export interface MatchAlertArgs {
 export async function sendMatchAlert(args: MatchAlertArgs): Promise<SendResult> {
   const { to, candidateName, candidateRole, requirementTitle, client, score, appUrl, candidateId } =
     args;
-  const subject = `Match alert: ${candidateName} — ${score}% for ${requirementTitle}`;
+  const subject = `Match alert: ${candidateName}, ${score}% for ${requirementTitle}`;
   const html = `
     <div style="font-family:Inter,Arial,sans-serif;color:#131b2e;line-height:1.5">
       <h2 style="margin:0 0 8px">Strong candidate match (${score}%)</h2>
       <p style="margin:0 0 12px;color:#434655">
-        <strong>${candidateName}</strong>${candidateRole ? ` — ${candidateRole}` : ""}
+        <strong>${candidateName}</strong>${candidateRole ? `, ${candidateRole}` : ""}
         scored <strong>${score}%</strong> against
         <strong>${requirementTitle}</strong>${client ? ` (${client})` : ""}.
       </p>

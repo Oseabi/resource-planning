@@ -2,7 +2,7 @@
  * Weighted candidate ↔ requirement/tender scoring.
  *
  * Pure, dependency-free, and shared between the Next.js app and (later) Supabase
- * Edge Functions. No AI — this is always-free local logic (plan Decision 10).
+ * Edge Functions. No AI, this is always-free local logic (plan Decision 10).
  *
  * Weights (from spec):
  *   role 35% · skills 25% · certifications 20% · experience 10% · availability 10%

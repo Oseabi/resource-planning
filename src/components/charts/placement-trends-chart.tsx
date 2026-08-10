@@ -21,7 +21,7 @@ export function PlacementTrendsChart({ data }: { data: MonthlyPlacements[] }) {
   if (data.every((d) => d.requirement === 0 && d.tender === 0)) {
     return (
       <p className="py-10 text-center text-body-sm text-muted-foreground">
-        No placements yet — trends will appear here as candidates are placed.
+        No placements yet, trends will appear here as candidates are placed.
       </p>
     );
   }

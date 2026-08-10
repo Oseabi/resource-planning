@@ -87,8 +87,8 @@ export default async function JobRequirementsPage() {
                           {r.title}
                         </Link>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{r.client ?? "—"}</TableCell>
-                      <TableCell className="text-foreground">{r.required_role ?? "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">{r.client ?? "-"}</TableCell>
+                      <TableCell className="text-foreground">{r.required_role ?? "-"}</TableCell>
                       <TableCell>
                         <RequirementStatusBadge status={r.status} />
                       </TableCell>
@@ -110,7 +110,7 @@ export default async function JobRequirementsPage() {
                       <div className="min-w-0">
                         <div className="truncate font-medium text-foreground">{r.title}</div>
                         <div className="truncate text-body-sm text-muted-foreground">
-                          {r.required_role ?? "—"}
+                          {r.required_role ?? "-"}
                           {r.client ? ` · ${r.client}` : ""}
                         </div>
                       </div>

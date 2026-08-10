@@ -17,7 +17,7 @@ import { DeleteUserDialog } from "@/app/(app)/settings/users/delete-user-dialog"
 
 export default async function UsersSettingsPage() {
   const supabase = await createClient();
-  // Request-cached — already resolved by the layout, so this is free.
+  // Request-cached, already resolved by the layout, so this is free.
   const current = await getCurrentProfile();
 
   if (!current) {

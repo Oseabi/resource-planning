@@ -3,7 +3,7 @@
  *
  * Two uses:
  *  1. Autocomplete + quick-add chips on candidate / job / tender forms
- *     (freeform — users can type anything; these are just suggestions).
+ *     (freeform, users can type anything; these are just suggestions).
  *  2. Dictionary matching + skill classification for the free local extraction
  *     engine (technical vs professional skills, role/sector detection).
  *

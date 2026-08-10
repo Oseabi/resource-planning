@@ -10,7 +10,7 @@ const DOCX_MIME =
  * Read plain text from a supported document buffer.
  *  - PDF (text-based) via unpdf
  *  - Word .docx via mammoth
- * Scanned/image PDFs return empty text (no free OCR in scope) — the caller then
+ * Scanned/image PDFs return empty text (no free OCR in scope), the caller then
  * falls back to manual entry.
  */
 export async function extractDocumentText(

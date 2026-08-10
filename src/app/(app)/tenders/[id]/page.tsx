@@ -19,7 +19,7 @@ import { findBidConflicts } from "@/app/(app)/assignment-actions";
 import { ConfirmTeamBanner } from "@/app/(app)/tenders/[id]/confirm-team-banner";
 
 function formatValue(value: number | null): string {
-  if (value == null) return "—";
+  if (value == null) return "-";
   if (value >= 1_000_000) return `R${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `R${(value / 1_000).toFixed(0)}k`;
   return `R${value}`;
@@ -30,7 +30,7 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
   const supabase = await createClient();
 
   // The tender and its match rows are independent, so they go out together
-  // rather than one after the other. isCurrentUserAdmin is request-cached — the
+  // rather than one after the other. isCurrentUserAdmin is request-cached, the
   // layout has already resolved it, so it adds no round-trip.
   const [{ data: tender }, isAdmin, positionData] = await Promise.all([
     supabase.from("tenders").select("*").eq("id", id).single(),
@@ -72,7 +72,7 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
 
   // Coverage comes from the position matches that were actually scored, not from
   // a second pass over the tender's legacy role/skill columns. Scoring those
-  // separately made the panel contradict the cards above it — a role could show
+  // separately made the panel contradict the cards above it, a role could show
   // a 100% candidate and still be reported as a gap.
   const poolGaps = positionViews.map((p) => ({
     role: p.role,

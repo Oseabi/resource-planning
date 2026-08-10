@@ -92,7 +92,7 @@ export async function deleteRequirement(id: string): Promise<{ error: string | n
   const supabase = await createClient();
 
   // Placements reference a requirement by a plain source_id, so the database
-  // cannot cascade them — they are removed here along with the requirement.
+  // cannot cascade them, they are removed here along with the requirement.
   const { data: placements } = await supabase
     .from("placements")
     .select("id, candidate_id")

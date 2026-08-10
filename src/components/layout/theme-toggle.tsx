@@ -6,7 +6,7 @@ import { useTheme } from "next-themes";
 /**
  * Sun/moon button that flips between light and dark. Lives in the topbar, so
  * it's reachable on desktop and mobile. The icon is chosen with `dark:` CSS
- * variants rather than JS state — next-themes sets `.dark` on <html> before
+ * variants rather than JS state, next-themes sets `.dark` on <html> before
  * paint, so there's no hydration mismatch and no flash.
  */
 export function ThemeToggle() {

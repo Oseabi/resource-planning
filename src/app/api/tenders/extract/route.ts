@@ -7,7 +7,7 @@ const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
 /**
  * Run the free local RFQ/RFI parser over an uploaded document and return
- * pre-filled tender fields + raw text for the review form. Persists nothing —
+ * pre-filled tender fields + raw text for the review form. Persists nothing -
  * the user confirms/edits before the tender is saved (plan Decision 2).
  */
 export async function POST(request: Request) {

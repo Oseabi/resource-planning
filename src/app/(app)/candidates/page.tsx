@@ -124,14 +124,14 @@ export default async function CandidatesPage({
                         <Link href={`/candidates/${c.id}`} className="block">
                           <div className="font-medium text-foreground">{c.full_name}</div>
                           <div className="text-body-sm text-muted-foreground">
-                            {c.location ?? "—"}
+                            {c.location ?? "-"}
                           </div>
                         </Link>
                       </TableCell>
                       <TableCell>
                         <Link href={`/candidates/${c.id}`} className="block">
                           <div className="flex items-center gap-1.5 text-foreground">
-                            {c.current_role ?? "—"}
+                            {c.current_role ?? "-"}
                             {c.additional_roles.length > 0 && (
                               <span className="text-label-md text-muted-foreground">
                                 +{c.additional_roles.length}
@@ -139,7 +139,7 @@ export default async function CandidatesPage({
                             )}
                           </div>
                           <div className="text-body-sm text-muted-foreground">
-                            {c.years_experience != null ? `${c.years_experience} yrs exp` : "—"}
+                            {c.years_experience != null ? `${c.years_experience} yrs exp` : "-"}
                           </div>
                           {c.resource_categories.length > 0 && (
                             <div className="mt-1 flex flex-wrap gap-1">
@@ -203,7 +203,7 @@ export default async function CandidatesPage({
                         <div className="min-w-0">
                           <div className="truncate font-medium text-foreground">{c.full_name}</div>
                           <div className="truncate text-body-sm text-muted-foreground">
-                            {c.current_role ?? "—"}
+                            {c.current_role ?? "-"}
                             {c.years_experience != null ? ` · ${c.years_experience} yrs` : ""}
                             {c.location ? ` · ${c.location}` : ""}
                           </div>

@@ -15,7 +15,7 @@ function parentPath(parentType: string, parentId: string): string {
  * Put a candidate in a seat.
  *
  * A job requirement is a real vacancy, so assigning places the candidate
- * immediately and writes a placement — that is what feeds revenue and
+ * immediately and writes a placement, that is what feeds revenue and
  * time-to-fill, and what flips them to `placed` via the existing trigger.
  *
  * A tender seat is only a proposal: the bid may not be won, so no placement is
@@ -135,7 +135,7 @@ export async function unassignCandidate(
       .eq("candidate_id", candidateId);
 
     // Nothing reverses the placed flag on delete, so free anyone left with no
-    // placement at all — otherwise they stay hidden from matching for good.
+    // placement at all, otherwise they stay hidden from matching for good.
     const { count } = await supabase
       .from("placements")
       .select("id", { count: "exact", head: true })

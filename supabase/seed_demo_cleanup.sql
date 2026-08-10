@@ -8,7 +8,7 @@
 --
 -- Order matters. matches.match_target_id and placements.source_id have no
 -- foreign keys (both are polymorphic), so those rows must be deleted explicitly
--- before their targets — nothing cascades them.
+-- before their targets, nothing cascades them.
 --
 -- Self-contained and idempotent: safe to re-run, and safe to run before ever
 -- seeding.
@@ -35,7 +35,7 @@ where source_id::text like 'deadbee2-%'
    or position_id::text like 'deadbee3-%';
 
 -- Assignments cascade from positions, but demo candidates may also hold seats on
--- your real tenders — remove those too.
+-- your real tenders, remove those too.
 delete from public.assignments
 where candidate_id::text like 'deadbee1-%'
    or position_id::text like 'deadbee3-%';

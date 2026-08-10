@@ -83,7 +83,7 @@ export function CreateUserDialog() {
             <DialogHeader>
               <DialogTitle>Invite new user</DialogTitle>
               <DialogDescription>
-                Set their initial password yourself — they&apos;ll be required to change it on
+                Set their initial password yourself, they&apos;ll be required to change it on
                 first login.
               </DialogDescription>
             </DialogHeader>

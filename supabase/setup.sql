@@ -1,9 +1,9 @@
 -- ============================================================================
--- Resource Planning — full database setup
+-- Resource Planning, full database setup
 -- Paste this whole file into the Supabase dashboard SQL Editor and click "Run".
 -- It creates all tables, indexes, triggers, and Row Level Security policies.
 -- Safe to re-run: the reset block below drops any previous objects first.
--- (This only drops THIS app's tables — it does not touch Supabase auth data.)
+-- (This only drops THIS app's tables, it does not touch Supabase auth data.)
 -- ============================================================================
 
 -- --- Clean slate (safe to re-run) --------------------------------------------

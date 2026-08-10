@@ -2,7 +2,7 @@ import type { WorkExperience, Education } from "@/lib/supabase/database.types";
 
 /**
  * Fields the extraction engine attempts to pull from a CV or RFQ/RFI document.
- * Every field is a best-effort guess and fully editable on the review form —
+ * Every field is a best-effort guess and fully editable on the review form -
  * nothing is saved without human confirmation (plan Decision 2).
  */
 export interface ExtractedCandidateFields {
@@ -17,7 +17,7 @@ export interface ExtractedCandidateFields {
   professional_summary: string | null;
   /** Professional / soft / domain skills. */
   skills: string[];
-  /** Technical skills — languages, frameworks, tools, stacks. */
+  /** Technical skills, languages, frameworks, tools, stacks. */
   technical_skills: string[];
   certifications: string[];
   qualifications: string[];
@@ -46,7 +46,7 @@ export type SupportedMimeType =
   | "application/pdf"
   | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-/** An empty result — every array present, every scalar null. */
+/** An empty result, every array present, every scalar null. */
 export function emptyExtractedFields(): ExtractedCandidateFields {
   return {
     full_name: null,

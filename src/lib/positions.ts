@@ -1,5 +1,5 @@
 /**
- * Positions — the roles a job requirement or tender needs staffed.
+ * Positions, the roles a job requirement or tender needs staffed.
  *
  * A requirement/tender holds N positions; each carries its own role, seat count,
  * experience floor, skills and certifications. Pure helpers only (no I/O), so
@@ -40,7 +40,7 @@ function normalizeAvailability(value: string | null | undefined): RequirementInp
 
 /**
  * A position is exactly one requirement's worth of scoring criteria, so the
- * scoring engine needs no change — only this adapter. Mirrors
+ * scoring engine needs no change, only this adapter. Mirrors
  * `requirementToScoringInput` in `@/lib/matching`.
  */
 export function positionToScoringInput(position: PositionInput): RequirementInput {
@@ -62,7 +62,7 @@ export function seatCount(position: { quantity?: number | null }): number {
 export interface PositionFill {
   positionId: string;
   quantity: number;
-  /** Assignments held, capped at nothing — may exceed quantity if over-filled. */
+  /** Assignments held, capped at nothing, may exceed quantity if over-filled. */
   filled: number;
   remaining: number;
   isFull: boolean;
@@ -78,7 +78,7 @@ export interface FillSummary {
 
 /**
  * How much of a team is staffed. `filled` counts assignments regardless of
- * status, because a proposed tender seat is still spoken for — the bid is
+ * status, because a proposed tender seat is still spoken for, the bid is
  * complete even though nobody has started.
  */
 export function fillSummary(

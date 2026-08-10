@@ -63,7 +63,7 @@ interface PendingAssign {
  * One card per role a requirement or tender needs staffed, each with its own
  * ranked shortlist, its seats, and who is sitting in them.
  *
- * A tender seat is a *proposal* — the bid may not be won — so assigning does not
+ * A tender seat is a *proposal*, the bid may not be won, so assigning does not
  * take the candidate out of the pool. A job requirement is a real vacancy, so it
  * asks for the fee and start date and places them immediately.
  */
@@ -217,7 +217,7 @@ export function PositionMatches({
                         {a.name}
                       </Link>
                       <div className="truncate text-body-sm text-muted-foreground">
-                        {a.role ?? "—"}
+                        {a.role ?? "-"}
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -270,7 +270,7 @@ export function PositionMatches({
                             {m.name}
                           </Link>
                           <div className="truncate text-body-sm text-muted-foreground">
-                            {m.role ?? "—"}
+                            {m.role ?? "-"}
                           </div>
                           {clash.length > 0 && (
                             <div className="mt-0.5 flex items-center gap-1 text-label-md text-strong-match">

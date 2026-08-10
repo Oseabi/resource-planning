@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
  */
 export function ErrorState({
   title = "Something went wrong",
-  description = "We couldn't load this page. This is usually temporary — try again in a moment.",
+  description = "We couldn't load this page. This is usually temporary, try again in a moment.",
   onRetry,
 }: {
   title?: string;

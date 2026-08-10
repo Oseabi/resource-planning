@@ -122,7 +122,7 @@ export function RfqUploadZone() {
           {busy ? "Reading document..." : "Upload RFQ / RFI"}
         </h3>
         <p className="mx-auto mt-1 max-w-md text-body-sm text-muted-foreground">
-          Drag and drop tender documents here — we&apos;ll parse the PDF or Word file to extract
+          Drag and drop tender documents here, we&apos;ll parse the PDF or Word file to extract
           roles, skills, dates, and value, ready for review.
         </p>
         <div className="mt-4">
@@ -214,7 +214,7 @@ function RfqReviewDialog({
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               {extraction.no_text_found ? (
                 <p className="text-body-sm text-muted-foreground">
-                  No readable text was found in this document. Enter the details manually — the file
+                  No readable text was found in this document. Enter the details manually, the file
                   is still attached to the tender.
                 </p>
               ) : (
