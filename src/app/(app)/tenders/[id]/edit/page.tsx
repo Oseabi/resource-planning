@@ -4,15 +4,20 @@ import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { TenderForm } from "@/app/(app)/tenders/tender-form";
 import type { TenderFormFields } from "@/app/(app)/tenders/actions";
+import { loadPositions, toPositionInputs } from "@/lib/positions-repo";
 
 export default async function EditTenderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: tender } = await supabase.from("tenders").select("*").eq("id", id).single();
+  const [{ data: tender }, positionRows] = await Promise.all([
+    supabase.from("tenders").select("*").eq("id", id).single(),
+    loadPositions(supabase, "tender", id),
+  ]);
   if (!tender) notFound();
 
   const initial: TenderFormFields = {
     title: tender.title,
+    positions: toPositionInputs(positionRows),
     reference_number: tender.reference_number,
     client: tender.client,
     location: tender.location,

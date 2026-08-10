@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { RequirementForm } from "@/app/(app)/job-requirements/requirement-form";
 import type { RequirementFormFields } from "@/app/(app)/job-requirements/actions";
+import { loadPositions, toPositionInputs } from "@/lib/positions-repo";
 
 export default async function EditRequirementPage({
   params,
@@ -12,11 +13,15 @@ export default async function EditRequirementPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: req } = await supabase.from("job_requirements").select("*").eq("id", id).single();
+  const [{ data: req }, positionRows] = await Promise.all([
+    supabase.from("job_requirements").select("*").eq("id", id).single(),
+    loadPositions(supabase, "job_requirement", id),
+  ]);
   if (!req) notFound();
 
   const initial: RequirementFormFields = {
     title: req.title,
+    positions: toPositionInputs(positionRows),
     client: req.client,
     required_role: req.required_role,
     required_skills: req.required_skills,

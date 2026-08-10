@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { TagInput } from "@/components/ui/tag-input";
 import { ComboboxInput } from "@/components/ui/combobox-input";
+import { PositionsEditor } from "@/app/(app)/positions-editor";
 import {
   Select,
   SelectContent,
@@ -36,6 +37,7 @@ const AVAILABILITY_LABELS: Record<string, string> = {
 
 export const EMPTY_REQUIREMENT: RequirementFormFields = {
   title: "",
+  positions: [],
   client: null,
   required_role: null,
   required_skills: [],
@@ -140,13 +142,22 @@ export function RequirementForm({
       </div>
 
       <div className="rounded-lg border border-border bg-card shadow-card p-5 space-y-4">
-        <h3 className="text-label-sm uppercase tracking-wide text-muted-foreground">Requirements</h3>
-        <Field label="Required skills">
-          <TagInput value={fields.required_skills} onChange={(v) => set("required_skills", v)} field="technical_skills" context={ctx} placeholder="Skills the candidate must have..." />
-        </Field>
-        <Field label="Required certifications">
-          <TagInput value={fields.required_certifications} onChange={(v) => set("required_certifications", v)} field="certifications" context={ctx} placeholder="Add a certification..." />
-        </Field>
+        <h3 className="text-label-sm uppercase tracking-wide text-muted-foreground">Roles required</h3>
+        <p className="text-body-sm text-muted-foreground">
+          One line per role. Set how many of each and the bar they must clear — each seat is
+          matched on its own skills and experience.
+        </p>
+        <PositionsEditor
+          value={fields.positions}
+          onChange={(v) => set("positions", v)}
+          sectors={fields.sectors}
+        />
+      </div>
+
+      <div className="rounded-lg border border-border bg-card shadow-card p-5 space-y-4">
+        <h3 className="text-label-sm uppercase tracking-wide text-muted-foreground">
+          Classification
+        </h3>
         <Field label="Required qualifications">
           <TagInput value={fields.required_qualifications} onChange={(v) => set("required_qualifications", v)} field="qualifications" context={ctx} placeholder="Add a qualification..." />
         </Field>

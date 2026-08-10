@@ -279,16 +279,28 @@ export function deadlinesAtRisk(
 }
 
 /** Union of skills demanded by open requirements and in-flight tenders. */
+/**
+ * Skills wanted by work that is still open, drawn from its positions.
+ *
+ * Demand is per seat, so a role needed three times weighs the same as one needed
+ * once — this measures whether the pool covers a skill at all, not how deep.
+ */
 export function demandedSkills(
-  requirements: { status: string; required_skills: string[] }[],
-  tenders: { status: string; required_skills: string[] }[],
+  requirements: { id: string; status: string }[],
+  tenders: { id: string; status: string }[],
+  positions: { parent_type: string; parent_id: string; required_skills: string[] }[],
 ): string[] {
+  const openParents = new Set<string>([
+    ...requirements.filter((r) => r.status === "open").map((r) => `job_requirement:${r.id}`),
+    ...tenders
+      .filter((t) => t.status === "live" || t.status === "draft")
+      .map((t) => `tender:${t.id}`),
+  ]);
+
   const out = new Set<string>();
-  for (const r of requirements.filter((r) => r.status === "open")) {
-    for (const s of r.required_skills) out.add(s);
-  }
-  for (const t of tenders.filter((t) => t.status === "live" || t.status === "draft")) {
-    for (const s of t.required_skills) out.add(s);
+  for (const position of positions) {
+    if (!openParents.has(`${position.parent_type}:${position.parent_id}`)) continue;
+    for (const skill of position.required_skills) out.add(skill);
   }
   return [...out];
 }

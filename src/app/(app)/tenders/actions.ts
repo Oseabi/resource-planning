@@ -4,12 +4,16 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { TenderStatus, Json } from "@/lib/supabase/database.types";
-import { scoreCandidateForTender, toScoreBreakdownJson } from "@/lib/matching";
+import { scoreCandidateForPosition, toScoreBreakdownJson } from "@/lib/matching";
+import { replacePositions, loadPositions, toPositionInputs } from "@/lib/positions-repo";
+import type { PositionInput } from "@/lib/positions";
 
 const DOC_BUCKET = "cvs"; // shared private bucket; tender docs live under tenders/
 
 export interface TenderFormFields {
   title: string;
+  /** Roles this bid must staff; persisted to the positions table, not here. */
+  positions: PositionInput[];
   reference_number: string | null;
   client: string | null;
   location: string | null;
@@ -68,10 +72,13 @@ export async function createTender(formData: FormData): Promise<SaveTenderResult
     }
   }
 
+  // Positions live in their own table, so they must not reach the tenders insert.
+  const { positions, ...tenderColumns } = fields;
+
   const { data, error } = await supabase
     .from("tenders")
     .insert({
-      ...fields,
+      ...tenderColumns,
       title: fields.title.trim(),
       source_document_path: docPath,
       created_by: user.id,
@@ -80,6 +87,10 @@ export async function createTender(formData: FormData): Promise<SaveTenderResult
     .single();
 
   if (error || !data) return { error: error?.message ?? "Could not create tender." };
+
+  const positionsResult = await replacePositions(supabase, "tender", data.id, positions ?? []);
+  if (positionsResult.error) return { error: positionsResult.error };
+
   revalidatePath("/tenders");
   return { id: data.id };
 }
@@ -88,12 +99,18 @@ export async function updateTender(id: string, fields: TenderFormFields): Promis
   const supabase = await createClient();
   if (!fields.title?.trim()) return { error: "Title is required." };
 
+  const { positions, ...tenderColumns } = fields;
+
   const { error } = await supabase
     .from("tenders")
-    .update({ ...fields, title: fields.title.trim() })
+    .update({ ...tenderColumns, title: fields.title.trim() })
     .eq("id", id);
 
   if (error) return { error: error.message };
+
+  const positionsResult = await replacePositions(supabase, "tender", id, positions ?? []);
+  if (positionsResult.error) return { error: positionsResult.error };
+
   revalidatePath("/tenders");
   revalidatePath(`/tenders/${id}`);
   return { id };
@@ -139,10 +156,15 @@ export async function runTenderMatch(
 
   const { data: tender, error: tenderErr } = await supabase
     .from("tenders")
-    .select("*")
+    .select("id")
     .eq("id", tenderId)
     .single();
   if (tenderErr || !tender) return { error: "Tender not found." };
+
+  const positions = toPositionInputs(await loadPositions(supabase, "tender", tenderId));
+  if (positions.length === 0) {
+    return { error: "Add at least one role to this tender before matching." };
+  }
 
   let candidatesQuery = supabase
     .from("candidates")
@@ -155,16 +177,20 @@ export async function runTenderMatch(
   if (candErr) return { error: candErr.message };
   if (!candidates || candidates.length === 0) return { matched: 0 };
 
-  const rows = candidates.map((c) => {
-    const result = scoreCandidateForTender(c, tender);
-    return {
-      candidate_id: c.id,
-      match_target_type: "tender" as const,
-      match_target_id: tenderId,
-      score: result.total,
-      score_breakdown: toScoreBreakdownJson(result) as unknown as Json,
-    };
-  });
+  // One row per (candidate, position): each seat has its own skills, certs and
+  // experience floor, so a candidate scores differently against each.
+  const rows = positions.flatMap((position) =>
+    candidates.map((c) => {
+      const result = scoreCandidateForPosition(c, position);
+      return {
+        candidate_id: c.id,
+        match_target_type: "position" as const,
+        match_target_id: position.id!,
+        score: result.total,
+        score_breakdown: toScoreBreakdownJson(result) as unknown as Json,
+      };
+    }),
+  );
 
   const { error: upsertErr } = await supabase
     .from("matches")

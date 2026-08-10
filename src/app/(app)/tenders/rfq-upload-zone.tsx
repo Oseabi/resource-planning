@@ -25,6 +25,16 @@ interface RfqExtraction {
 function toForm(f: ExtractedTenderFields): TenderFormFields {
   return {
     title: f.title ?? "",
+    // Each extracted role becomes a one-seat line, seeded with the tender-wide
+    // skills/certs the parser found. The reviewer adjusts quantities and trims
+    // per-role requirements before saving.
+    positions: f.required_roles.map((role) => ({
+      role,
+      quantity: 1,
+      min_experience_years: f.min_experience_years,
+      required_skills: f.required_skills,
+      required_certifications: f.required_certifications,
+    })),
     reference_number: f.reference_number,
     client: f.client,
     location: f.location,
@@ -43,6 +53,7 @@ function toForm(f: ExtractedTenderFields): TenderFormFields {
 function toFlags(f: ExtractedTenderFields): TenderExtractedFlags {
   return {
     title: !!f.title,
+    positions: f.required_roles.length > 0,
     reference_number: !!f.reference_number,
     client: !!f.client,
     location: !!f.location,
