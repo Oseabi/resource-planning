@@ -3,9 +3,20 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Users, Clock, Award, AlertTriangle, UserPlus, X, TriangleAlert } from "lucide-react";
+import {
+  Users,
+  Clock,
+  Award,
+  AlertTriangle,
+  UserPlus,
+  X,
+  TriangleAlert,
+  Columns2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TENDER_STRONG_MATCH_THRESHOLD } from "@/lib/scoring";
+import type { CandidateProfile } from "@/lib/positions";
+import { CompareCandidates } from "@/app/(app)/compare-candidates";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,6 +64,9 @@ function scoreBadgeClass(score: number): string {
 /** How many candidates to show under each role before it gets noisy. */
 const TOP_N = 5;
 
+/** Comparison columns stop being readable past three, especially on a laptop. */
+const MAX_COMPARE = 3;
+
 interface PendingAssign {
   position: PositionView;
   candidateId: string;
@@ -71,11 +85,14 @@ export function PositionMatches({
   positions,
   parentType,
   conflicts = {},
+  candidatePool = {},
 }: {
   positions: PositionView[];
   parentType: "job_requirement" | "tender";
   /** candidateId → other open bids they are already promised to. */
   conflicts?: Record<string, string[]>;
+  /** candidateId → scoring inputs, so comparison can re-score without a fetch. */
+  candidatePool?: Record<string, CandidateProfile>;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState<PendingAssign | null>(null);
@@ -83,7 +100,23 @@ export function PositionMatches({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  // Selection is per position: the same person can be shortlisted under several
+  // seats, and ticking them for one should not tick them everywhere.
+  const [selected, setSelected] = useState<Record<string, string[]>>({});
+  const [comparing, setComparing] = useState<PositionView | null>(null);
+
   const isVacancy = parentType === "job_requirement";
+
+  function toggleSelected(positionId: string, candidateId: string) {
+    setSelected((prev) => {
+      const current = prev[positionId] ?? [];
+      if (current.includes(candidateId)) {
+        return { ...prev, [positionId]: current.filter((id) => id !== candidateId) };
+      }
+      if (current.length >= MAX_COMPARE) return prev;
+      return { ...prev, [positionId]: [...current, candidateId] };
+    });
+  }
 
   function beginAssign(position: PositionView, candidateId: string, name: string) {
     setError(null);
@@ -137,6 +170,7 @@ export function PositionMatches({
         ).length;
         const isGap = remaining > 0 && strong === 0;
         const seated = new Set(position.assigned.map((a) => a.candidateId));
+        const picked = selected[position.id] ?? [];
 
         return (
           <div
@@ -169,6 +203,12 @@ export function PositionMatches({
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
+                {picked.length >= 2 && (
+                  <Button variant="outline" size="sm" onClick={() => setComparing(position)}>
+                    <Columns2 className="size-4" />
+                    Compare {picked.length}
+                  </Button>
+                )}
                 {isGap && (
                   <span className="inline-flex items-center gap-1 rounded-lg bg-destructive/10 px-2 py-0.5 text-label-md font-medium text-destructive">
                     <AlertTriangle className="size-3.5" />
@@ -262,7 +302,17 @@ export function PositionMatches({
                         key={m.candidateId}
                         className="flex items-center justify-between gap-3 px-4 py-2"
                       >
-                        <div className="min-w-0">
+                        <input
+                          type="checkbox"
+                          className="size-4 shrink-0 accent-primary"
+                          checked={picked.includes(m.candidateId)}
+                          // Cap reached and this one is not in it, so ticking
+                          // would silently do nothing. Say so instead.
+                          disabled={picked.length >= MAX_COMPARE && !picked.includes(m.candidateId)}
+                          onChange={() => toggleSelected(position.id, m.candidateId)}
+                          aria-label={`Select ${m.name} to compare`}
+                        />
+                        <div className="min-w-0 flex-1">
                           <Link
                             href={`/candidates/${m.candidateId}`}
                             className="block truncate font-medium text-foreground hover:text-primary"
@@ -317,6 +367,18 @@ export function PositionMatches({
           router.refresh();
         }}
         onError={setError}
+      />
+
+      <CompareCandidates
+        position={comparing}
+        candidates={
+          comparing
+            ? (selected[comparing.id] ?? [])
+                .map((id) => candidatePool[id])
+                .filter((c): c is CandidateProfile => !!c)
+            : []
+        }
+        onClose={() => setComparing(null)}
       />
     </div>
   );

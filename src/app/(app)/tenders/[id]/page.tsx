@@ -147,6 +147,7 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
           positions={positionViews}
           parentType="tender"
           conflicts={conflictsByCandidate}
+          candidatePool={positionData.candidatePool}
         />
       </div>
 
