@@ -251,7 +251,7 @@ insert into public.tenders (
  ARRAY['Finance','Technology']::text[], 5, 'live'),
 
 ('deadbee2-0000-4000-8000-000000000005',
- 'N3 corridor bridge rehabilitation, professional services', 'RFP-2026/INF-102',
+ 'N3 corridor bridge rehabilitation: professional services', 'RFP-2026/INF-102',
  'SANRAL', 'Durban', 42000000, '2026-10-01', '2026-11-20',
  ARRAY['Civil Engineer','Site Manager','Quantity Surveyor']::text[],
  ARRAY['AutoCAD Civil 3D','BIM']::text[],
@@ -259,7 +259,7 @@ insert into public.tenders (
  ARRAY['Civil Engineering','Infrastructure','Bridges']::text[], 8, 'live'),
 
 ('deadbee2-0000-4000-8000-000000000006',
- 'Commercial office fit-out, construction management', 'RFQ-2026/FIT-058',
+ 'Commercial office fit-out: construction management', 'RFQ-2026/FIT-058',
  'Growthpoint Properties', 'Cape Town', 7800000, '2026-09-12', '2026-10-01',
  ARRAY['Site Manager','Quantity Surveyor']::text[],
  ARRAY['AutoCAD']::text[],
@@ -275,7 +275,7 @@ insert into public.tenders (
  ARRAY['Audit','Finance','Public Sector']::text[], 5, 'live'),
 
 ('deadbee2-0000-4000-8000-000000000008',
- 'Hospital information system rollout, clinical workstream', 'RFP-2026/HLT-045',
+ 'Hospital information system rollout: clinical workstream', 'RFP-2026/HLT-045',
  'Netcare', 'Johannesburg', 11300000, '2026-10-20', '2026-12-05',
  ARRAY['Clinical Manager','Registered Nurse','Business Analyst']::text[],
  ARRAY['EMR Systems','Epic']::text[],
@@ -291,7 +291,7 @@ insert into public.tenders (
  ARRAY['Insurance','Finance']::text[], 6, 'draft'),
 
 ('deadbee2-0000-4000-8000-00000000000a',
- 'Programme management office, multi-year transformation', 'RFP-2026/PMO-088',
+ 'Programme management office: multi-year transformation', 'RFP-2026/PMO-088',
  'Eskom Holdings', 'Johannesburg', 31000000, '2026-10-08', '2026-12-01',
  ARRAY['Programme Manager','Project Manager','Change Manager','Business Analyst']::text[],
  ARRAY['Programme Management','Change Management']::text[],
