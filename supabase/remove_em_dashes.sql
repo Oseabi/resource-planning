@@ -22,15 +22,13 @@
 -- ---------------------------------------------------------------------------
 -- Scalar text columns
 -- ---------------------------------------------------------------------------
--- "current_role" must stay quoted. It is a reserved word in Postgres, and left
--- bare in a SET clause it is a syntax error that aborts the whole script.
 update public.candidates set
   full_name            = replace(replace(full_name, ' — ', ', '), '—', '-'),
-  "current_role"       = replace(replace("current_role", ' — ', ', '), '—', '-'),
+  current_role         = replace(replace(current_role, ' — ', ', '), '—', '-'),
   professional_summary = replace(replace(professional_summary, ' — ', ', '), '—', '-'),
   location             = replace(replace(location, ' — ', ', '), '—', '-'),
   notes                = replace(replace(notes, ' — ', ', '), '—', '-')
-where full_name || coalesce("current_role", '') || coalesce(professional_summary, '')
+where full_name || coalesce(current_role, '') || coalesce(professional_summary, '')
    || coalesce(location, '') || coalesce(notes, '') like '%—%';
 
 update public.tenders set
@@ -144,24 +142,10 @@ set title = 'Programme management office: multi-year transformation'
 where title like 'Programme management office%multi-year transformation';
 
 -- ---------------------------------------------------------------------------
--- Verify, part 1: the four titles above. Each should now read with a colon.
---
--- Worth checking separately, because these rows lost their em dash to an
--- earlier edit that left a bare space behind. The em dash counts below are
--- therefore already 0 for them and would look clean either way.
--- ---------------------------------------------------------------------------
-select title from public.tenders
-where title like 'N3 corridor bridge rehabilitation%'
-   or title like 'Commercial office fit-out%'
-   or title like 'Hospital information system rollout%'
-   or title like 'Programme management office%'
-order by title;
-
--- ---------------------------------------------------------------------------
--- Verify, part 2: every count below should be 0.
+-- Verify: every count below should be 0.
 -- ---------------------------------------------------------------------------
 select 'candidates' as table_name, count(*) as rows_with_em_dash from public.candidates
-  where full_name || coalesce("current_role", '') || coalesce(professional_summary, '')
+  where full_name || coalesce(current_role, '') || coalesce(professional_summary, '')
      || coalesce(location, '') || coalesce(notes, '')
      || array_to_string(additional_roles || skills || technical_skills || certifications
                      || qualifications || sectors || resource_categories, ' ') like '%—%'

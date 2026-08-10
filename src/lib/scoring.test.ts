@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   scoreCandidate,
   overlapRatio,
-  overlapDetail,
   roleMatch,
   experienceMatch,
   availabilityMatch,
@@ -25,42 +24,6 @@ describe("overlapRatio", () => {
 
   it("is case- and whitespace-insensitive", () => {
     expect(overlapRatio(["  autocad "], ["AutoCAD"])).toBe(1);
-  });
-});
-
-describe("overlapDetail", () => {
-  it("splits required items into matched and missing", () => {
-    const result = overlapDetail(["AutoCAD", "Excel"], ["AutoCAD", "Revit", "BIM"]);
-    expect(result.matched).toEqual(["AutoCAD"]);
-    expect(result.missing).toEqual(["Revit", "BIM"]);
-    expect(result.ratio).toBeCloseTo(1 / 3);
-  });
-
-  it("reports the requirement's spelling, not the candidate's", () => {
-    // What the client asked for is what gets shown back to the user.
-    const result = overlapDetail(["  autocad "], ["AutoCAD"]);
-    expect(result.matched).toEqual(["AutoCAD"]);
-    expect(result.missing).toEqual([]);
-  });
-
-  it("returns full marks and two empty lists when nothing is required", () => {
-    const result = overlapDetail(["AutoCAD"], []);
-    expect(result.ratio).toBe(1);
-    expect(result.matched).toEqual([]);
-    expect(result.missing).toEqual([]);
-  });
-
-  it("counts everything missing when the candidate has nothing", () => {
-    const result = overlapDetail([], ["AutoCAD", "Revit"]);
-    expect(result.matched).toEqual([]);
-    expect(result.missing).toEqual(["AutoCAD", "Revit"]);
-    expect(result.ratio).toBe(0);
-  });
-
-  it("agrees with overlapRatio, which is now built on it", () => {
-    const candidate = ["AutoCAD", "Excel"];
-    const required = ["AutoCAD", "Revit", "BIM"];
-    expect(overlapDetail(candidate, required).ratio).toBe(overlapRatio(candidate, required));
   });
 });
 

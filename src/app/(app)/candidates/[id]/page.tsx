@@ -1,14 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil, Link2, Globe, Mail, Phone, MapPin, Briefcase, GraduationCap, CalendarClock } from "lucide-react";
+import { ArrowLeft, Pencil, Link2, Globe, Mail, Phone, MapPin, Briefcase, GraduationCap } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { StatusBadge, AvailabilityBadge, Chip } from "@/app/(app)/candidates/candidate-badges";
-import { availableFrom, availabilityLabel, INDEFINITE } from "@/lib/availability";
-import { loadActivity } from "@/app/(app)/activity-actions";
-import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import { CvDownloadButton } from "@/app/(app)/candidates/[id]/cv-download-button";
 import { DeleteCandidateButton } from "@/app/(app)/candidates/[id]/delete-candidate-button";
 
@@ -22,18 +19,12 @@ export default async function CandidateProfilePage({
 
   // isCurrentUserAdmin is request-cached: the layout has already resolved it, so
   // this adds no round-trip.
-  const [{ data: candidate }, isAdmin, { data: placements }, activity] = await Promise.all([
+  const [{ data: candidate }, isAdmin] = await Promise.all([
     supabase.from("candidates").select("*").eq("id", id).single(),
     isCurrentUserAdmin(),
-    supabase.from("placements").select("candidate_id, start_date, end_date").eq("candidate_id", id),
-    loadActivity("candidate", id),
   ]);
 
   if (!candidate) notFound();
-
-  // The availability badge says what they are today; this says when they are
-  // next free, which is the question anyone planning a bid team is asking.
-  const freeFrom = availableFrom(candidate, placements ?? []);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -75,16 +66,6 @@ export default async function CandidateProfilePage({
               <span className="text-body-sm text-muted-foreground">{candidate.years_experience} yrs experience</span>
             )}
           </div>
-          {freeFrom !== null && (
-            <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-muted px-2 py-1 text-body-sm">
-              <CalendarClock className="size-4 text-muted-foreground" />
-              <span
-                className={freeFrom === INDEFINITE ? "text-muted-foreground" : "text-foreground"}
-              >
-                {availabilityLabel(freeFrom)}
-              </span>
-            </div>
-          )}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {candidate.cv_file_path && (
@@ -215,8 +196,6 @@ export default async function CandidateProfilePage({
           )}
         </TabsContent>
       </Tabs>
-
-      <ActivityTimeline entityType="candidate" entityId={id} entries={activity} />
     </div>
   );
 }
