@@ -16,7 +16,7 @@ export interface CurrentProfile {
  * The signed-in user, fetched at most once per request.
  *
  * `auth.getUser()` is a network call to Supabase, and the layout, the page, and
- * any helper on the same render each used to make their own — a detail page cost
+ * any helper on the same render each used to make their own, a detail page cost
  * six sequential round-trips before rendering. React's `cache()` dedupes them
  * across a single server render pass, so the layout and the page share one.
  */

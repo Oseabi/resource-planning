@@ -7,7 +7,7 @@
  * exposes each text run with a transform matrix, so we can group runs that share
  * a baseline into real lines and recover the document's visual structure.
  *
- * Pure apart from the pdf.js proxy it is handed — unit-tested via `groupItemsIntoLines`.
+ * Pure apart from the pdf.js proxy it is handed, unit-tested via `groupItemsIntoLines`.
  */
 
 /** The subset of a pdf.js `TextItem` we rely on. */

@@ -1,6 +1,6 @@
 /**
  * Pure heuristics for pulling structured fields out of already-extracted
- * document text. No AI, no I/O — safe to unit-test in isolation. Depends only on
+ * document text. No AI, no I/O, safe to unit-test in isolation. Depends only on
  * the static vocabulary data.
  */
 import { isKnownTechnicalSkill, SEED_LANGUAGES } from "@/lib/vocabulary";
@@ -71,7 +71,7 @@ const NAME_LINE_RE = /^[A-Za-z][A-Za-z'’.-]*(?:\s+[A-Za-z][A-Za-z'’.-]*){1,3
 /**
  * Best-effort candidate name. Scans the first several non-empty lines for one that
  * looks like a 2–4 word name (letters only, no digits/@). Falls back to deriving
- * a name from the filename. Rough by design — always confirmed on the form.
+ * a name from the filename. Rough by design, always confirmed on the form.
  */
 export function guessName(text: string, filename?: string): string | null {
   const lines = text
@@ -272,7 +272,7 @@ const TRAILING_YEAR_RE = /\s*[–—-]?\s*(?:19|20)\d{2}\s*$/;
 /**
  * Certifications are one-per-line and often carry an awarding body and year
  * ("PRINCE2 – APMG International 2016"), so they need looser limits than tag-like
- * list items — splitting them on commas would shred the name.
+ * list items, splitting them on commas would shred the name.
  */
 export function parseCertificationItems(text: string): string[] {
   if (!text) return [];
@@ -308,7 +308,7 @@ export function classifySkills(items: string[]): { technical: string[]; professi
   return { technical, professional };
 }
 
-// Month names only — a generic [A-Za-z]{3,9} prefix would swallow real words,
+// Month names only, a generic [A-Za-z]{3,9} prefix would swallow real words,
 // e.g. "Financial Officer 2007 – 2009" would lose "Officer" from the title.
 const MONTH = String.raw`(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?`;
 const DATE_TOKEN = String.raw`(?:${MONTH}[\s/-]*)?\d{4}|\d{1,2}\/\d{4}`;
@@ -332,7 +332,7 @@ function splitTitleCompany(line: string): { title: string; company: string | nul
 
 /**
  * Best-effort work-history parse. Handles the common layout where a title/company
- * line is followed by a date-range line (with any number of blank lines between —
+ * line is followed by a date-range line (with any number of blank lines between, 
  * .docx exports insert blanks between every paragraph). A non-date line that is
  * immediately followed by a date line is treated as that entry's header; other
  * non-date lines become the current entry's description.
@@ -424,7 +424,7 @@ const IN_PROGRESS_RE = /\((?:in progress|ongoing|current|incomplete|expected[^)]
 
 /**
  * Best-effort education parse: one entry per qualification-looking line. Requires
- * a degree/qualification word or a named institution — a bare year is too weak a
+ * a degree/qualification word or a named institution, a bare year is too weak a
  * signal, since combined "Education & Certifications" blocks list dated courses.
  */
 export function parseEducation(text: string): Education[] {

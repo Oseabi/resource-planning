@@ -154,18 +154,18 @@ export default async function AnalyticsPage() {
         <Kpi
           icon={<Timer className="size-4" />}
           label="Avg time-to-fill"
-          value={timeToFill != null ? `${timeToFill} days` : "—"}
+          value={timeToFill != null ? `${timeToFill} days` : "-"}
         />
         <Kpi
           icon={<Trophy className="size-4" />}
           label="Tender win rate"
-          value={perf.winRate != null ? `${perf.winRate}%` : "—"}
+          value={perf.winRate != null ? `${perf.winRate}%` : "-"}
           sub={perf.won + perf.lost > 0 ? `${perf.won} won · ${perf.lost} lost` : "No decided bids yet"}
         />
         <Kpi
           icon={<ShieldCheck className="size-4" />}
           label="OEM bid-ready"
-          value={compliance.total > 0 ? `${compliance.readyPct}%` : "—"}
+          value={compliance.total > 0 ? `${compliance.readyPct}%` : "-"}
           sub={
             compliance.total > 0
               ? `${compliance.total} letters · ${compliance.expired} expired`
@@ -281,7 +281,7 @@ export default async function AnalyticsPage() {
             <Kpi
               icon={<Banknote className="size-4" />}
               label="Avg deal size"
-              value={perf.avgDealSize != null ? money(perf.avgDealSize) : "—"}
+              value={perf.avgDealSize != null ? money(perf.avgDealSize) : "-"}
             />
           </div>
 
@@ -300,7 +300,7 @@ export default async function AnalyticsPage() {
                     </Link>
                     <div className="flex shrink-0 items-center gap-3">
                       <span className="text-body-sm text-muted-foreground">
-                        {t.value != null ? money(t.value) : "—"}
+                        {t.value != null ? money(t.value) : "-"}
                       </span>
                       <span
                         className={cn(
@@ -345,7 +345,7 @@ export default async function AnalyticsPage() {
                         <TableCell className="text-right text-success">{c.won}</TableCell>
                         <TableCell className="text-right text-muted-foreground">{c.lost}</TableCell>
                         <TableCell className="text-right">
-                          {c.winRate != null ? `${c.winRate}%` : "—"}
+                          {c.winRate != null ? `${c.winRate}%` : "-"}
                         </TableCell>
                         <TableCell className="text-right">{money(c.value)}</TableCell>
                       </TableRow>
@@ -385,7 +385,7 @@ export default async function AnalyticsPage() {
             {readiness.length === 0 ? (
               <Empty>
                 Tag candidates and OEM letters with practice areas to see where you have people but no
-                authorisation — or authorisation but nobody to deliver.
+                authorisation, or authorisation but nobody to deliver.
               </Empty>
             ) : (
               <div className="overflow-x-auto">

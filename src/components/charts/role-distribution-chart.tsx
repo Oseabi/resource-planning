@@ -19,7 +19,7 @@ export function RoleDistributionChart({ data }: { data: RoleCount[] }) {
   if (data.length === 0) {
     return (
       <p className="py-10 text-center text-body-sm text-muted-foreground">
-        No candidates yet — the role distribution will appear here.
+        No candidates yet, the role distribution will appear here.
       </p>
     );
   }

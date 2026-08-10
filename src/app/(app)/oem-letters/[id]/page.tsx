@@ -110,7 +110,7 @@ function Row({ label, value }: { label: string; value: string | null }) {
   return (
     <div>
       <dt className="text-label-sm uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="text-body-md text-foreground">{value || "—"}</dd>
+      <dd className="text-body-md text-foreground">{value || "-"}</dd>
     </div>
   );
 }

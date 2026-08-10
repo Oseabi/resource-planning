@@ -4,7 +4,7 @@
 -- Run this AFTER you have:
 --   1. Run supabase/setup.sql (creates the tables), and
 --   2. Created a user in the dashboard: Authentication → Users → Add user
---      (set an email + password you'll remember — this is your admin login).
+--      (set an email + password you'll remember, this is your admin login).
 --
 -- Then replace the email below with that same email and run this snippet.
 -- It creates the matching profile row and marks it as an admin. We set

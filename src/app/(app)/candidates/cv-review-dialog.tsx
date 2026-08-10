@@ -128,7 +128,7 @@ export function CvReviewDialog({
             </span>
           </div>
           <DialogDescription>
-            Fields were pre-filled from the document. Review and correct anything before saving —
+            Fields were pre-filled from the document. Review and correct anything before saving -
             nothing is saved until you confirm.
           </DialogDescription>
         </DialogHeader>
@@ -144,7 +144,7 @@ export function CvReviewDialog({
               {extraction.no_text_found ? (
                 <p className="text-body-sm text-muted-foreground">
                   No readable text was found in this document (it may be a scan or image). Enter the
-                  details manually — the file is still attached to the candidate.
+                  details manually, the file is still attached to the candidate.
                 </p>
               ) : (
                 <pre className="whitespace-pre-wrap break-words font-sans text-body-sm text-muted-foreground">

@@ -56,7 +56,7 @@ export function ConfirmTeamBanner({
           <Trophy className="mt-0.5 size-4 shrink-0 text-success" />
           <div>
             <p className="text-body-md font-medium text-foreground">
-              This bid is won — confirm the team.
+              This bid is won. Confirm the team.
             </p>
             <p className="text-body-sm text-muted-foreground">
               {proposedCount} proposed member{proposedCount === 1 ? " is" : "s are"} still marked

@@ -1,5 +1,5 @@
 /**
- * Free local RFQ/RFI parser — pulls tender fields out of already-extracted
+ * Free local RFQ/RFI parser, pulls tender fields out of already-extracted
  * document text using labelled-field heuristics + dictionary matching.
  * Pure and dependency-free apart from vocabulary data; safe to unit-test.
  * Every value is editable on the review form before saving (plan Decision 2).
@@ -50,18 +50,18 @@ const QUALIFIER = String.raw`(?:minimum(?:\s+of)?|at least|min\.?|no less than|n
 /**
  * Best-effort minimum-experience extraction. Handles the numeric forms
  * ("minimum 5 years", "5+ years experience") and the legal-document style ZA
- * tenders use — "a minimum of three (3) years' experience" — where the figure is
+ * tenders use, "a minimum of three (3) years' experience", where the figure is
  * spelled out with the numeral in brackets.
  *
  * Returns the smallest figure found: the floor a candidate must clear.
  */
 export function parseMinExperience(text: string): number | null {
   const patterns: RegExp[] = [
-    // "minimum of three (3) years" — bracketed numeral wins, word is decoration.
+    // "minimum of three (3) years", bracketed numeral wins, word is decoration.
     new RegExp(String.raw`${QUALIFIER}\s+(?:[a-z]+\s+)?\((\d{1,2})\)\s*(?:years?|yrs?)`, "gi"),
     // "minimum of 3 years"
     new RegExp(String.raw`${QUALIFIER}\s+(\d{1,2})\s*\+?\s*(?:years?|yrs?)`, "gi"),
-    // "(5) years for project manager experience" — tenders list several roles'
+    // "(5) years for project manager experience", tenders list several roles'
     // floors in one sentence, so the qualifier only precedes the first. The
     // "experience" anchor keeps contract durations ("period of (3) years") out.
     /\((\d{1,2})\)\s*(?:years?|yrs?)['’]?\s*(?:[\w&/-]+\s+){0,5}?experience/gi,
@@ -78,7 +78,7 @@ export function parseMinExperience(text: string): number | null {
     for (const m of text.matchAll(re)) consider(Number(m[1]));
   }
 
-  // "minimum of three years" — spelled out with no bracketed numeral.
+  // "minimum of three years", spelled out with no bracketed numeral.
   const wordRe = new RegExp(
     String.raw`${QUALIFIER}\s+(${Object.keys(WORD_NUMBERS).join("|")})\s+(?:years?|yrs?)`,
     "gi",
@@ -120,7 +120,7 @@ function cleanRole(raw: string): string | null {
   if (/^[A-Z]{2,6}$/.test(role)) return null;
   // Real titles are nouns, not the start of a sentence about the bidder.
   if (/^(?:resources?|services?|solutions?|systems?|support|access)\b/i.test(role)) return null;
-  // Require at least one capitalised word — role titles are proper nouns here.
+  // Require at least one capitalised word, role titles are proper nouns here.
   if (!/\b[A-Z][a-z]/.test(role) && role !== role.toUpperCase()) return null;
   return role;
 }
@@ -210,7 +210,7 @@ export function parseDateToIso(raw: string): string | null {
  */
 export function parseMoney(raw: string): number | null {
   // The currency symbol must not be the tail of a word and the magnitude suffix
-  // must not be the head of one — otherwise "FURTHER 24 MONTHS" parses as
+  // must not be the head of one, otherwise "FURTHER 24 MONTHS" parses as
   // R24 million (the "R" of FURTHER plus the "M" of MONTHS).
   const m = raw.match(
     /(?<![A-Za-z])(?:R|ZAR|£|\$|€|USD|GBP|EUR)\s*([\d][\d\s,.']*)(\s*(?:million|mil|bn|billion|[mk])\b)?/i,
@@ -265,7 +265,7 @@ const DEADLINE_LABELS = [
 const DEADLINE_NOISE_RE =
   /(clarification|enquir|question|briefing|gate access|validity|registration)/i;
 const START_LABELS = [/contract start/i, /commencement date/i, /start date/i, /anticipated start/i, /contract commencement/i];
-// NOTE: "on behalf of" was removed — it matched the SBD boilerplate line
+// NOTE: "on behalf of" was removed, it matched the SBD boilerplate line
 // "AUTHORITY TO SIGN ON BEHALF OF THE COMPANY" and yielded "THE COMPANY".
 const CLIENT_LABELS = [
   /^client\b/i,
@@ -275,7 +275,7 @@ const CLIENT_LABELS = [
   /contracting authority/i,
   /^name of (?:the )?(?:institution|department|entity|organ of state)\b/i,
   /^(?:bid|tender|rfp|rfq) issued by\b/i,
-  // NOTE: a bare "requirements of the" pattern was removed — it matched ordinary
+  // NOTE: a bare "requirements of the" pattern was removed, it matched ordinary
   // prose mid-document and produced sentence fragments as the client name.
 ];
 const LOCATION_LABELS = [/^location\b/i, /project location/i, /site location/i, /place of (?:work|performance)/i];
@@ -290,7 +290,7 @@ const VALUE_LABELS = [/estimated (?:contract )?value/i, /contract value/i, /tend
 /**
  * Whether a captured value reads as an organisation name rather than the tail of
  * a sentence. Client labels ("Client", "Issued by") also occur in ordinary prose
- * — "Client sign-off on the system…" — so every candidate is screened.
+ *, "Client sign-off on the system…", so every candidate is screened.
  */
 function looksLikeOrganisation(value: string): boolean {
   const name = value.trim();
@@ -367,7 +367,7 @@ const NON_CLIENT_ACRONYMS = new Set([
 ]);
 
 /**
- * Issuing organisation written as "Full Name (ACRONYM)" — the near-universal
+ * Issuing organisation written as "Full Name (ACRONYM)", the near-universal
  * convention on South African public-sector tender covers. The first few pages
  * are searched as one string because cover layouts wrap the name across lines.
  */
@@ -432,7 +432,7 @@ export function parseReferenceNumber(lines: string[]): string | null {
     );
     if (!m) continue;
     const ref = m[1].replace(/[.,;:]+$/, "").trim();
-    // Must contain a digit and be substantial — otherwise it caught a following
+    // Must contain a digit and be substantial, otherwise it caught a following
     // word such as "CLOSING" or a stray label fragment.
     if (ref.length >= 5 && /\d/.test(ref)) return ref;
   }
@@ -502,10 +502,10 @@ export function parseRfqText(text: string, filename?: string): ExtractedTenderFi
   fields.contract_start_date = startRaw ? parseDateToIso(startRaw) : null;
 
   // Value: a labelled line is authoritative. Otherwise take the largest figure
-  // from the requirements section only, skipping statutory thresholds — the
+  // from the requirements section only, skipping statutory thresholds, the
   // preference-points table quotes R50m on every ZA tender regardless of size.
   // Only a labelled value is trusted. Scanning the document for the largest
-  // amount reliably picks up something else — a statutory threshold, a contract
+  // amount reliably picks up something else, a statutory threshold, a contract
   // duration, or background prose ("the fund's assets were over R2.69 trillion").
   // Most tenders never state a value at all; null is more useful than a guess.
   const valueRaw = labelledValue(all, VALUE_LABELS, THRESHOLD_NOISE_RE);

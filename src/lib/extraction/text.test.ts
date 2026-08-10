@@ -14,7 +14,7 @@ async function readFixture(name: string): Promise<ArrayBuffer> {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
 }
 
-describe("extractDocumentText — real files", () => {
+describe("extractDocumentText, real files", () => {
   it("reads text from a .docx via mammoth and parses fields", async () => {
     const buffer = await readFixture("sample-cv.docx");
     const text = await extractDocumentText(buffer, DOCX_MIME, "sample-cv.docx");

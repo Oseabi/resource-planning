@@ -38,7 +38,7 @@ describe("seatCount", () => {
     expect(seatCount({ quantity: 0 })).toBe(1);
     expect(seatCount({ quantity: -3 })).toBe(1);
   });
-  it("floors fractional quantities — seats are whole people", () => {
+  it("floors fractional quantities, seats are whole people", () => {
     expect(seatCount({ quantity: 2.7 })).toBe(2);
   });
 });

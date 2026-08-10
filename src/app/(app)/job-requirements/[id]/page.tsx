@@ -22,7 +22,7 @@ export default async function RequirementDetailPage({
 
   // Everything except the candidate lookup is independent, so it all goes out at
   // once rather than in four sequential waves. isCurrentUserAdmin is
-  // request-cached — the layout has already resolved it, so it costs nothing.
+  // request-cached, the layout has already resolved it, so it costs nothing.
   const [{ data: req }, isAdmin, { count: placementCount }, positionData] = await Promise.all([
     supabase.from("job_requirements").select("*").eq("id", id).single(),
     isCurrentUserAdmin(),
@@ -46,7 +46,7 @@ export default async function RequirementDetailPage({
   );
 
   // Each candidate's best score across the requirement's seats, so the overall
-  // panel — which owns the Match button, export and alerts — has a shortlist.
+  // panel, which owns the Match button, export and alerts, has a shortlist.
   const matches: MatchView[] = positionData.aggregated;
 
   const tags: { icon: React.ReactNode; label: string }[] = [];

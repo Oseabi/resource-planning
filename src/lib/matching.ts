@@ -1,6 +1,6 @@
 /**
  * Pure matching helpers shared by the server match runner and the UI.
- * No I/O, no server-only — safe to unit-test.
+ * No I/O, no server-only, safe to unit-test.
  */
 import {
   scoreCandidate,
@@ -177,8 +177,8 @@ export function poolGapAnalysis(
 // Position matching
 //
 // A position carries its own role, skills, certifications and experience floor,
-// so unlike `scoreCandidateForTender` — which scores every role against one
-// shared criteria set — each seat is scored on its own terms.
+// so unlike `scoreCandidateForTender`, which scores every role against one
+// shared criteria set, each seat is scored on its own terms.
 // ---------------------------------------------------------------------------
 
 /** Score a candidate against a single position. */
@@ -204,7 +204,7 @@ export interface PositionCoverage {
 /**
  * Per-position coverage: how many seats each role needs, how many are taken,
  * and how many candidates could credibly fill the rest. A position is a gap when
- * seats remain and no candidate clears the threshold — the "you need more X"
+ * seats remain and no candidate clears the threshold, the "you need more X"
  * signal, now seat-aware rather than role-aware.
  */
 export function positionCoverage(

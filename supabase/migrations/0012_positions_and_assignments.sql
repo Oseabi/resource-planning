@@ -41,7 +41,7 @@ create trigger positions_set_updated_at
   for each row execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
--- assignments — seat allocation
+-- assignments, seat allocation
 --
 -- Deliberately separate from placements: a tender team is PROPOSED while the
 -- bid is open, and must not inflate revenue or mark anyone unavailable. Only a
@@ -84,7 +84,7 @@ alter table public.placements
 create index if not exists placements_position_idx on public.placements (position_id);
 
 -- ---------------------------------------------------------------------------
--- Backfill — every existing requirement and tender must keep working
+-- Backfill, every existing requirement and tender must keep working
 -- ---------------------------------------------------------------------------
 
 -- One position per job requirement, from its single role.
@@ -170,7 +170,7 @@ where pl.position_id is not null
 on conflict (position_id, candidate_id) do nothing;
 
 -- ---------------------------------------------------------------------------
--- RLS — shared CRUD for authenticated users, delete restricted to admins
+-- RLS, shared CRUD for authenticated users, delete restricted to admins
 -- ---------------------------------------------------------------------------
 alter table public.positions enable row level security;
 alter table public.assignments enable row level security;

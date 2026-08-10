@@ -4,7 +4,7 @@
  * Contract, declarations, B-BBEE and tax forms) wrapped around a handful of
  * pages that actually describe the work.
  *
- * Dictionary-matching the whole file therefore produces mostly noise — "Tax
+ * Dictionary-matching the whole file therefore produces mostly noise, "Tax
  * Compliance" and "Audit" from SBD forms, threshold amounts from the preference
  * points table. These helpers isolate the substantive part first.
  *
@@ -30,7 +30,7 @@ const CORE_START_PATTERNS = [
   /^functional requirements?\b/i,
 ];
 
-/** Boilerplate section headings — everything from here is standard-form text. */
+/** Boilerplate section headings, everything from here is standard-form text. */
 const BOILERPLATE_PATTERNS = [
   /^sbd\s*\d/i,
   /^general conditions of contract\b/i,
@@ -52,7 +52,7 @@ const BOILERPLATE_PATTERNS = [
 
 /**
  * A contents-page entry rather than the section itself. These carry dot leaders
- * or a trailing page reference, and appear long before the real heading — so
+ * or a trailing page reference, and appear long before the real heading, so
  * matching one would anchor the body in the wrong place.
  */
 function isContentsEntry(line: string): boolean {
@@ -81,7 +81,7 @@ function isPageFurniture(line: string): boolean {
 }
 
 /**
- * Remove running headers/footers — lines repeated on many pages. Keeps the first
+ * Remove running headers/footers, lines repeated on many pages. Keeps the first
  * occurrence so a repeated document title can still seed the tender title.
  */
 export function stripRepeatedLines(lines: string[]): string[] {
@@ -125,7 +125,7 @@ export function tenderBody(text: string): TenderBody {
   const all = stripRepeatedLines(raw);
 
   // Every candidate heading is scored by how much body it yields. A contents
-  // page lists "Annexure C — Specifications" hundreds of lines before the real
+  // page lists "Annexure C, Specifications" hundreds of lines before the real
   // section, so picking the first match would select an empty stub; the longest
   // resulting body is reliably the actual requirements.
   const starts: number[] = [];
@@ -162,7 +162,7 @@ export function tenderBody(text: string): TenderBody {
     if (candidate.length > best.length) best = candidate;
   }
 
-  // Too small to be the real thing — fall back to the whole document.
+  // Too small to be the real thing, fall back to the whole document.
   if (best.length < 20) return { core: all, foundCore: false, all };
 
   return { core: best, foundCore: true, all };

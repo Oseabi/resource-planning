@@ -144,7 +144,7 @@ export function RequirementForm({
       <div className="rounded-lg border border-border bg-card shadow-card p-5 space-y-4">
         <h3 className="text-label-sm uppercase tracking-wide text-muted-foreground">Roles required</h3>
         <p className="text-body-sm text-muted-foreground">
-          One line per role. Set how many of each and the bar they must clear — each seat is
+          One line per role. Set how many of each and the bar they must clear, each seat is
           matched on its own skills and experience.
         </p>
         <PositionsEditor

@@ -1,9 +1,9 @@
 /**
- * OEM letters — manufacturer authorisation letters used in tender submissions.
+ * OEM letters, manufacturer authorisation letters used in tender submissions.
  * Pure domain helpers (vendor vocabulary + expiry status); no I/O, unit-tested.
  */
 
-/** Common OEM/vendor names, offered as suggestions — free text is still allowed. */
+/** Common OEM/vendor names, offered as suggestions, free text is still allowed. */
 export const OEM_VENDORS: string[] = [
   "Microsoft",
   "SAP",

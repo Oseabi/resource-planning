@@ -43,7 +43,7 @@ export function PositionsEditor({
     <div className="space-y-3">
       {value.length === 0 ? (
         <p className="text-body-sm text-muted-foreground">
-          No roles added yet. Add one line per role you need — set how many of each.
+          No roles added yet. Add one line per role you need, set how many of each.
         </p>
       ) : (
         <p className="flex items-center gap-1.5 text-body-sm text-muted-foreground">

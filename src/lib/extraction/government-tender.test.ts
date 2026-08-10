@@ -56,7 +56,7 @@ describe("tenderBody", () => {
   });
 });
 
-describe("parseMoney — word-boundary guards", () => {
+describe("parseMoney, word-boundary guards", () => {
   it("does not read 'FURTHER 24 MONTHS' as R24 million", () => {
     expect(parseMoney("RENEW FOR A FURTHER 24 MONTHS BASED ON PERFORMANCE")).toBeNull();
   });
@@ -67,7 +67,7 @@ describe("parseMoney — word-boundary guards", () => {
   });
 });
 
-describe("parseMinExperience — legal phrasing", () => {
+describe("parseMinExperience, legal phrasing", () => {
   it("reads 'a minimum of three (3) years' experience'", () => {
     expect(parseMinExperience("must have a minimum of three (3) years' experience")).toBe(3);
   });

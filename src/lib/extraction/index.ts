@@ -12,7 +12,7 @@ export function isAiExtractionEnabled(): boolean {
  * Extract candidate/RFQ fields from an uploaded document.
  *
  * Default engine is the free local parser (unpdf/mammoth + heuristics). When
- * AI_EXTRACTION_ENABLED=true, the AI engine takes over — not yet implemented, so
+ * AI_EXTRACTION_ENABLED=true, the AI engine takes over, not yet implemented, so
  * we currently always use local. The interface is stable so the AI path can slot
  * in without touching callers.
  */

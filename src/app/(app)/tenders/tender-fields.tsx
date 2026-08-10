@@ -101,7 +101,7 @@ export function TenderFields({
 
       <Section title="Team required">
         <p className="text-body-sm text-muted-foreground">
-          One line per role. Set how many of each and the bar they must clear — a bid needing
+          One line per role. Set how many of each and the bar they must clear, a bid needing
           three analysts at 3 years and a lead at 5 is captured exactly, and each seat is
           matched on its own terms.
         </p>
