@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { Button } from "@/components/ui/button";
 import { ExpiryBadge } from "@/app/(app)/oem-letters/expiry-badge";
+import { loadActivity } from "@/app/(app)/activity-actions";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import {
   LetterDownloadButton,
   DeleteLetterButton,
@@ -20,9 +22,10 @@ export default async function OemLetterDetailPage({
 
   // isCurrentUserAdmin is request-cached: the layout has already resolved it, so
   // this adds no round-trip.
-  const [{ data: letter }, isAdmin] = await Promise.all([
+  const [{ data: letter }, isAdmin, activity] = await Promise.all([
     supabase.from("oem_letters").select("*").eq("id", id).single(),
     isCurrentUserAdmin(),
+    loadActivity("oem_letter", id),
   ]);
 
   if (!letter) notFound();
@@ -102,6 +105,10 @@ export default async function OemLetterDetailPage({
           <p className="whitespace-pre-wrap text-body-md text-foreground">{letter.notes}</p>
         </div>
       )}
+
+      {/* The field above is the letter's own description, set on the form. This
+          is the running log: renewal chased, distributor contacted, and so on. */}
+      <ActivityTimeline entityType="oem_letter" entityId={id} entries={activity} />
     </div>
   );
 }

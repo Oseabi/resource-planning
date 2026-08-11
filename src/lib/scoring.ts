@@ -65,15 +65,46 @@ function normalize(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+export interface OverlapDetail {
+  /** Required items the candidate has, in the order the requirement listed them. */
+  matched: string[];
+  /** Required items the candidate lacks, in the same order. */
+  missing: string[];
+  /** Fraction of required items held; 1 when nothing was required. */
+  ratio: number;
+}
+
+/**
+ * Which required items the candidate holds and which they lack.
+ *
+ * Same comparison as `overlapRatio` (case and whitespace insensitive) but it
+ * keeps the names, so the UI can say "missing SAP FICO and PMP" rather than
+ * only "12 out of 25". Strings are returned as the requirement spelled them,
+ * not as normalized, because these are shown to a person.
+ */
+export function overlapDetail(candidate: string[], required: string[]): OverlapDetail {
+  const have = new Set(candidate.map(normalize));
+  const matched: string[] = [];
+  const missing: string[] = [];
+
+  for (const item of required) {
+    (have.has(normalize(item)) ? matched : missing).push(item);
+  }
+
+  return {
+    matched,
+    missing,
+    // Empty requirement list => full marks (nothing to fail).
+    ratio: required.length === 0 ? 1 : matched.length / required.length,
+  };
+}
+
 /**
  * Overlap ratio: fraction of required items the candidate has.
  * Case/whitespace-insensitive. Empty requirement list => full marks (nothing to fail).
  */
 export function overlapRatio(candidate: string[], required: string[]): number {
-  if (required.length === 0) return 1;
-  const have = new Set(candidate.map(normalize));
-  const matched = required.reduce((n, item) => (have.has(normalize(item)) ? n + 1 : n), 0);
-  return matched / required.length;
+  return overlapDetail(candidate, required).ratio;
 }
 
 /**

@@ -38,6 +38,8 @@ function toFields(r: ExtractionResult): CandidateFormFields {
     years_experience: f.years_experience,
     professional_summary: f.professional_summary,
     availability: "available",
+    // A CV never states this; it is set by hand when someone knows a date.
+    available_from: null,
     status: "active",
     location: null,
     notes: null,

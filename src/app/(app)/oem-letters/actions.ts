@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { purgeActivity } from "@/app/(app)/activity-actions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -157,6 +158,8 @@ export async function deleteOemLetter(id: string): Promise<{ error: string | nul
   // RLS restricts DELETE to admins; a non-admin call is rejected here.
   const { error } = await supabase.from("oem_letters").delete().eq("id", id);
   if (error) return { error: error.message };
+
+  await purgeActivity("oem_letter", id);
 
   if (letter?.file_path) {
     await createAdminClient().storage.from(LETTER_BUCKET).remove([letter.file_path]);

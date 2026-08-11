@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { purgeActivity } from "@/app/(app)/activity-actions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   CandidateAvailability,
@@ -24,6 +25,8 @@ export interface CandidateFormFields {
   years_experience: number | null;
   professional_summary: string | null;
   availability: CandidateAvailability;
+  /** Manual override for when they next come free; null means now. */
+  available_from: string | null;
   status: CandidateStatus;
   location: string | null;
   notes: string | null;
@@ -113,6 +116,7 @@ function toCandidateColumns(fields: CandidateFormFields): CandidateUpdate & { fu
     years_experience: fields.years_experience,
     professional_summary: fields.professional_summary,
     availability: fields.availability,
+    available_from: fields.available_from,
     status: fields.status,
     location: fields.location,
     notes: fields.notes,
@@ -249,6 +253,8 @@ export async function deleteCandidate(
   // RLS restricts DELETE to admins; a non-admin call is rejected here.
   const { error } = await supabase.from("candidates").delete().eq("id", candidateId);
   if (error) return { error: error.message };
+
+  await purgeActivity("candidate", candidateId);
 
   if (candidate?.cv_file_path) {
     await createAdminClient().storage.from(CV_BUCKET).remove([candidate.cv_file_path]);

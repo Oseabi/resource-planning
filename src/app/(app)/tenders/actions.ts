@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { purgeActivity } from "@/app/(app)/activity-actions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { TenderStatus, Json } from "@/lib/supabase/database.types";
 import { scoreCandidateForPosition, toScoreBreakdownJson } from "@/lib/matching";
@@ -130,6 +131,7 @@ export async function deleteTender(id: string): Promise<{ error: string | null }
 
   // Clean up dependents: computed match scores for this tender and its RFQ file.
   await supabase.from("matches").delete().eq("match_target_type", "tender").eq("match_target_id", id);
+  await purgeActivity("tender", id);
   if (tender?.source_document_path) {
     await createAdminClient().storage.from(DOC_BUCKET).remove([tender.source_document_path]);
   }

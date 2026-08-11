@@ -24,7 +24,14 @@ function sanitizeTerm(term: string): string {
 export default async function CandidatesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; role?: string; category?: string; status?: string; page?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    role?: string;
+    category?: string;
+    status?: string;
+    freeBy?: string;
+    page?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page ?? "1") || 1);
@@ -46,6 +53,27 @@ export default async function CandidatesPage({
     // search_text is a generated column concatenating name/role/location + all
     // tag arrays, so a partial term (e.g. "Tekla") matches "Tekla Structures".
     query = query.ilike("search_text", `%${term}%`);
+  }
+
+  // "Free by" is a computed property, not a column: it depends on the latest
+  // placement end date as well as the manual override. Rather than filter after
+  // fetching, which would break the count and the paging, work out who is *not*
+  // free by then and exclude those ids in SQL.
+  const freeBy = /^\d{4}-\d{2}-\d{2}$/.test(sp.freeBy ?? "") ? sp.freeBy! : null;
+  if (freeBy) {
+    const { data: windows } = await supabase.from("placements").select("candidate_id, end_date");
+    const stillCommitted = [
+      ...new Set(
+        (windows ?? [])
+          // Open ended blocks outright; a date only blocks if it falls after.
+          .filter((p) => p.end_date === null || p.end_date > freeBy)
+          .map((p) => p.candidate_id),
+      ),
+    ];
+    query = query.or(`available_from.is.null,available_from.lte.${freeBy}`);
+    if (stillCommitted.length > 0) {
+      query = query.not("id", "in", `(${stillCommitted.join(",")})`);
+    }
   }
 
   const { data: candidates, count } = await query.range(from, from + PAGE_SIZE - 1);
@@ -70,6 +98,7 @@ export default async function CandidatesPage({
     if (sp.role) next.set("role", sp.role);
     if (sp.category) next.set("category", sp.category);
     if (sp.status) next.set("status", sp.status);
+    if (sp.freeBy) next.set("freeBy", sp.freeBy);
     next.set("page", String(p));
     return `/candidates?${next.toString()}`;
   };
