@@ -133,6 +133,10 @@ export async function unassignCandidate(
   candidateId: string,
 ): Promise<AssignResult> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated." };
 
   const { data: position } = await supabase
     .from("positions")
@@ -148,12 +152,24 @@ export async function unassignCandidate(
     .eq("id", candidateId)
     .single();
 
-  const { error } = await supabase
+  // .select() so the deleted rows come back and the count can be checked.
+  //
+  // A DELETE that matches nothing is not an error in Postgres, and RLS filters
+  // rows rather than raising, so without this a no-op reports success. That is
+  // worse than a plain failure here: the caller sees "removed", the candidate is
+  // freed back to active, and an "unassigned" line is written to the timeline
+  // for something that never happened. An audit trail that records fictional
+  // events is worse than no audit trail.
+  const { data: removed, error } = await supabase
     .from("assignments")
     .delete()
     .eq("position_id", positionId)
-    .eq("candidate_id", candidateId);
+    .eq("candidate_id", candidateId)
+    .select("id");
   if (error) return { error: error.message };
+  if (!removed || removed.length === 0) {
+    return { error: "That seat was already free. Reload the page to see the current team." };
+  }
 
   if (position.parent_type === "job_requirement") {
     await supabase
