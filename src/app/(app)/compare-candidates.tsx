@@ -10,54 +10,9 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import {
-  SCORING_WEIGHTS,
-  scoreCandidate,
-  overlapDetail,
-  type ScoreBreakdown,
-} from "@/lib/scoring";
-import { positionToScoringInput, type CandidateProfile, type PositionInput } from "@/lib/positions";
-
-/** The five scoring criteria in weight order, heaviest first. */
-export const CRITERIA: { key: keyof ScoreBreakdown; label: string }[] = [
-  { key: "role", label: "Role" },
-  { key: "skills", label: "Skills" },
-  { key: "certifications", label: "Certifications" },
-  { key: "experience", label: "Experience" },
-  { key: "availability", label: "Availability" },
-];
-
-/** A single criterion's earned points against its weight, as a labelled bar. */
-export function CriterionBar({
-  label,
-  earned,
-  weight,
-}: {
-  label: string;
-  earned: number;
-  weight: number;
-}) {
-  const pct = weight > 0 ? (earned / weight) * 100 : 0;
-  return (
-    <div>
-      <div className="flex items-center justify-between text-body-sm">
-        <span className="text-foreground">{label}</span>
-        <span className="text-muted-foreground">
-          {Math.round(earned)}/{weight}
-        </span>
-      </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
-        <div
-          className={cn(
-            "h-full rounded-full",
-            pct >= 99 ? "bg-success" : pct >= 50 ? "bg-primary" : "bg-strong-match",
-          )}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  );
-}
+import { SCORING_WEIGHTS } from "@/lib/scoring";
+import type { CandidateProfile } from "@/lib/positions";
+import { CRITERIA, CriterionBar, scoreDetail } from "@/app/(app)/score-breakdown";
 
 /**
  * Two or three candidates against the same seat, broken down the way the score
@@ -115,27 +70,12 @@ function CompareBody({
   };
   candidates: CandidateProfile[];
 }) {
-  // The seat expressed as a requirement, exactly as the matcher does it, so the
-  // totals here agree with the scores on the cards behind this dialog.
-  const asPosition: PositionInput = {
-    role: position.role,
-    quantity: 1,
-    min_experience_years: position.minExperienceYears,
-    required_skills: position.requiredSkills,
-    required_certifications: position.requiredCertifications,
-  };
-  const requirement = positionToScoringInput(asPosition);
-
-  const scored = candidates.map((candidate) => {
-    const result = scoreCandidate(candidate, requirement);
-    const allSkills = [...candidate.skills, ...(candidate.technical_skills ?? [])];
-    return {
-      candidate,
-      result,
-      skills: overlapDetail(allSkills, position.requiredSkills),
-      certifications: overlapDetail(candidate.certifications, position.requiredCertifications),
-    };
-  });
+  // Same helper the inline breakdown uses, so a candidate's numbers here always
+  // agree with the ones on the row behind this dialog.
+  const scored = candidates.map((candidate) => ({
+    candidate,
+    ...scoreDetail(position, candidate),
+  }));
 
   const best = Math.max(...scored.map((s) => s.result.total));
 
