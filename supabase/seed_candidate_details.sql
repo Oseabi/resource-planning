@@ -27,6 +27,21 @@
 -- Employers and universities are real South African ones so the pool reads as
 -- plausible in front of a client.
 --
+-- Four candidates also get an available_from date (migration 0013). Without at
+-- least one, the bench forecast on the dashboard is a flat line and the "free
+-- by" filter has nothing to exclude, so the whole forward-planning feature
+-- looks broken in a walkthrough for the same reason the compliance one did.
+-- The dates are spread across four different months on purpose:
+--
+--   Pieter Venter    30 Sep 2026   serving notice
+--   Bongani Zulu     15 Oct 2026   serving notice
+--   Sipho Ndlovu      1 Nov 2026   serving notice
+--   Dr Ayanda Cele   31 Jan 2027   committed elsewhere, marked unavailable
+--
+-- Each is someone whose seeded availability already says they are not free, so
+-- the date agrees with the badge rather than contradicting it. Clear any of them
+-- from the candidate edit form if you would rather demo a full bench.
+--
 -- Self-contained and idempotent: safe to re-run.
 --
 -- NOTE: updating a candidate fires the candidates_set_search_text trigger, so
@@ -52,6 +67,9 @@ where id = 'deadbee1-0000-4000-8000-000000000001';
 
 update public.candidates set
   phone = '+27 71 908 2214',
+  -- Serving notice, so he is not free until it runs out. See the note at the
+  -- foot of this file on why a few of these dates are set.
+  available_from = '2026-11-01',
   linkedin_url = 'https://www.linkedin.com/in/sipho-ndlovu-sap',
   languages = ARRAY['English','isiZulu']::text[],
   qualifications = ARRAY['BSc Computer Science']::text[],
@@ -146,6 +164,7 @@ where id = 'deadbee1-0000-4000-8000-000000000007';
 
 update public.candidates set
   phone = '+27 82 309 1187',
+  available_from = '2026-09-30',
   linkedin_url = 'https://www.linkedin.com/in/pieter-venter-programme',
   languages = ARRAY['Afrikaans','English']::text[],
   qualifications = ARRAY['BEng Civil Engineering']::text[],
@@ -209,6 +228,7 @@ where id = 'deadbee1-0000-4000-8000-00000000000b';
 
 update public.candidates set
   phone = '+27 71 663 2208',
+  available_from = '2026-10-15',
   linkedin_url = 'https://www.linkedin.com/in/bongani-zulu-civil',
   languages = ARRAY['English','isiXhosa','isiZulu']::text[],
   qualifications = ARRAY['BEng Civil Engineering']::text[],
@@ -290,6 +310,7 @@ where id = 'deadbee1-0000-4000-8000-000000000010';
 
 update public.candidates set
   phone = '+27 83 447 2205',
+  available_from = '2027-01-31',
   linkedin_url = 'https://www.linkedin.com/in/dr-ayanda-cele',
   languages = ARRAY['English','isiZulu']::text[],
   qualifications = ARRAY['MBChB','MBA Healthcare Management']::text[],
@@ -364,6 +385,8 @@ select
   count(*) filter (where jsonb_array_length(work_experience) > 0)   as with_experience,
   count(*) filter (where jsonb_array_length(education) > 0)         as with_education,
   count(*) filter (where cardinality(languages) > 0)                as with_languages,
-  count(*) filter (where cardinality(qualifications) > 0)           as with_qualifications
+  count(*) filter (where cardinality(qualifications) > 0)           as with_qualifications,
+  -- Expect exactly 4, the forward-availability spread described at the top.
+  count(*) filter (where available_from is not null)                as with_available_from
 from public.candidates
 where id::text like 'deadbee1-%';

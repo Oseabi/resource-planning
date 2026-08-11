@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { purgeActivity } from "@/app/(app)/activity-actions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   CandidateAvailability,
@@ -252,6 +253,8 @@ export async function deleteCandidate(
   // RLS restricts DELETE to admins; a non-admin call is rejected here.
   const { error } = await supabase.from("candidates").delete().eq("id", candidateId);
   if (error) return { error: error.message };
+
+  await purgeActivity("candidate", candidateId);
 
   if (candidate?.cv_file_path) {
     await createAdminClient().storage.from(CV_BUCKET).remove([candidate.cv_file_path]);

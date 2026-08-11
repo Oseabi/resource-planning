@@ -91,6 +91,33 @@ export async function addNote(
   return { error: null };
 }
 
+/**
+ * Drop a record's whole timeline, for when the record itself is deleted.
+ *
+ * `entity_id` is polymorphic so no foreign key backs it and nothing cascades.
+ * Without this, deleting a candidate leaves their notes and events behind,
+ * pointing at an id that no longer resolves. Hand-rolled the same way the
+ * cascades for parent_id and match_target_id already are.
+ *
+ * Best-effort, like recordEvent: the delete it accompanies has already
+ * succeeded, so failing here must not turn a completed delete into an error.
+ */
+export async function purgeActivity(
+  entityType: ActivityEntityType,
+  entityId: string,
+): Promise<void> {
+  try {
+    const supabase = await createClient();
+    await supabase
+      .from("activity")
+      .delete()
+      .eq("entity_type", entityType)
+      .eq("entity_id", entityId);
+  } catch {
+    // See above.
+  }
+}
+
 export async function deleteNote(
   entityType: ActivityEntityType,
   entityId: string,

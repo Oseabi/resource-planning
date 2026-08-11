@@ -60,6 +60,15 @@ where id::text like 'deadbee1-%';
 delete from public.oem_letters
 where id::text like 'deadbee4-%';
 
+-- Timeline entries pointing at any demo record. activity.entity_id is
+-- polymorphic with no foreign key, so nothing cascades these; without this,
+-- notes and events would outlive the records they describe.
+delete from public.activity
+where entity_id::text like 'deadbee1-%'
+   or entity_id::text like 'deadbee2-%'
+   or entity_id::text like 'deadbee3-%'
+   or entity_id::text like 'deadbee4-%';
+
 -- Nothing reverses the placed flag when a placement is deleted (the trigger has
 -- no counterpart), so free any real candidate left marked placed with no
 -- placement behind it.

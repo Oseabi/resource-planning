@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { purgeActivity } from "@/app/(app)/activity-actions";
 import type { JobRequirementStatus, Json } from "@/lib/supabase/database.types";
 import {
   scoreCandidateForPosition,
@@ -113,6 +114,8 @@ export async function deleteRequirement(id: string): Promise<{ error: string | n
   // RLS restricts DELETE to admins; a non-admin call is rejected here.
   const { error } = await supabase.from("job_requirements").delete().eq("id", id);
   if (error) return { error: error.message };
+
+  await purgeActivity("job_requirement", id);
 
   // A placement marks its candidate "placed" via trigger, and nothing reverses
   // that on delete. Free anyone left with no remaining placement, otherwise they

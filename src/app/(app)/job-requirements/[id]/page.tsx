@@ -9,6 +9,8 @@ import { MatchingResults, type MatchView } from "@/app/(app)/job-requirements/[i
 import { DeleteRequirementButton } from "@/app/(app)/job-requirements/[id]/delete-requirement-button";
 import { isEmailConfigured } from "@/lib/email/resend";
 import { loadPositionViews } from "@/lib/positions-repo";
+import { loadActivity } from "@/app/(app)/activity-actions";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import { fillSummary } from "@/lib/positions";
 import { PositionMatches } from "@/app/(app)/position-matches";
 
@@ -23,16 +25,18 @@ export default async function RequirementDetailPage({
   // Everything except the candidate lookup is independent, so it all goes out at
   // once rather than in four sequential waves. isCurrentUserAdmin is
   // request-cached, the layout has already resolved it, so it costs nothing.
-  const [{ data: req }, isAdmin, { count: placementCount }, positionData] = await Promise.all([
-    supabase.from("job_requirements").select("*").eq("id", id).single(),
-    isCurrentUserAdmin(),
-    supabase
-      .from("placements")
-      .select("id", { count: "exact", head: true })
-      .eq("source_type", "job_requirement")
-      .eq("source_id", id),
-    loadPositionViews(supabase, "job_requirement", id),
-  ]);
+  const [{ data: req }, isAdmin, { count: placementCount }, positionData, activity] =
+    await Promise.all([
+      supabase.from("job_requirements").select("*").eq("id", id).single(),
+      isCurrentUserAdmin(),
+      supabase
+        .from("placements")
+        .select("id", { count: "exact", head: true })
+        .eq("source_type", "job_requirement")
+        .eq("source_id", id),
+      loadPositionViews(supabase, "job_requirement", id),
+      loadActivity("job_requirement", id),
+    ]);
 
   if (!req) notFound();
 
@@ -120,6 +124,8 @@ export default async function RequirementDetailPage({
         hasManagerEmail={!!req.manager_email}
         emailConfigured={isEmailConfigured()}
       />
+
+      <ActivityTimeline entityType="job_requirement" entityId={id} entries={activity} />
     </div>
   );
 }
