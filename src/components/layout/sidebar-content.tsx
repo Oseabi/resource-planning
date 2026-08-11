@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   LayoutGrid,
@@ -43,10 +44,17 @@ export function SidebarContent({
 
   return (
     <>
-      <div className="flex items-center gap-2 px-4 py-5">
-        <div className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground text-label-md font-semibold">
-          RP
-        </div>
+      <div className="flex items-center gap-2.5 px-4 py-5">
+        {/* The mark on its own. The full lockup carries the "TiPP FOCUS"
+            wordmark, which would compete with the product name beside it. */}
+        <Image
+          src="/tipp-focus-mark.png"
+          alt="TiPP FOCUS"
+          width={32}
+          height={32}
+          className="size-8 shrink-0 object-contain"
+          priority
+        />
         <div className="leading-tight">
           <div className="text-headline-sm font-semibold text-sidebar-foreground">
             Resource Planning
