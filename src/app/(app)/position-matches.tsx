@@ -12,11 +12,13 @@ import {
   X,
   TriangleAlert,
   Columns2,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TENDER_STRONG_MATCH_THRESHOLD } from "@/lib/scoring";
 import type { CandidateProfile } from "@/lib/positions";
 import { CompareCandidates } from "@/app/(app)/compare-candidates";
+import { ScoreCard, scoreDetail } from "@/app/(app)/score-breakdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -105,7 +107,17 @@ export function PositionMatches({
   const [selected, setSelected] = useState<Record<string, string[]>>({});
   const [comparing, setComparing] = useState<PositionView | null>(null);
 
+  // One open at a time, keyed "positionId:candidateId". A candidate can be
+  // shortlisted under several seats and scores differently against each, so the
+  // seat has to be part of the key or opening one would open all of them.
+  const [openBreakdown, setOpenBreakdown] = useState<string | null>(null);
+
   const isVacancy = parentType === "job_requirement";
+
+  function toggleBreakdown(positionId: string, candidateId: string) {
+    const key = `${positionId}:${candidateId}`;
+    setOpenBreakdown((prev) => (prev === key ? null : key));
+  }
 
   function toggleSelected(positionId: string, candidateId: string) {
     setSelected((prev) => {
@@ -297,11 +309,11 @@ export function PositionMatches({
                   .slice(0, TOP_N)
                   .map((m) => {
                     const clash = conflicts[m.candidateId] ?? [];
+                    const profile = candidatePool[m.candidateId];
+                    const isOpen = openBreakdown === `${position.id}:${m.candidateId}`;
                     return (
-                      <li
-                        key={m.candidateId}
-                        className="flex items-center justify-between gap-3 px-4 py-2"
-                      >
+                      <li key={m.candidateId}>
+                      <div className="flex items-center justify-between gap-3 px-4 py-2">
                         <input
                           type="checkbox"
                           className="size-4 shrink-0 accent-primary"
@@ -332,6 +344,21 @@ export function PositionMatches({
                           )}
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
+                          {profile && (
+                            <button
+                              type="button"
+                              onClick={() => toggleBreakdown(position.id, m.candidateId)}
+                              aria-expanded={isOpen}
+                              className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-label-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                            >
+                              <ChevronDown
+                                className={cn("size-3.5 transition-transform", isOpen && "rotate-180")}
+                              />
+                              <span className="hidden sm:inline">
+                                {isOpen ? "Hide" : "Breakdown"}
+                              </span>
+                            </button>
+                          )}
                           <span
                             className={cn(
                               "rounded-lg px-2 py-0.5 text-label-md font-semibold",
@@ -350,6 +377,14 @@ export function PositionMatches({
                             {remaining === 0 ? "Full" : "Assign"}
                           </Button>
                         </div>
+                      </div>
+                      {isOpen && profile && (
+                        <ScoreCard
+                          position={position}
+                          candidate={profile}
+                          detail={scoreDetail(position, profile)}
+                        />
+                      )}
                       </li>
                     );
                   })}
