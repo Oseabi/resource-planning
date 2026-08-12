@@ -84,8 +84,12 @@ where full_name like 'Test Candidate%';
 
 -- ---------------------------------------------------------------------------
 -- Verify.
+--
+-- The label column is "item", not "check". CHECK is a reserved word in Postgres
+-- and a bare `as check` is a syntax error, which in the SQL Editor aborts the
+-- whole file and silently rolls back everything above it.
 -- ---------------------------------------------------------------------------
-select 'seats now filled' as check, count(*)::text as value
+select 'seats now filled' as item, count(*)::text as value
 from public.assignments a
 join public.positions p on p.id = a.position_id
 where p.parent_type = 'tender'

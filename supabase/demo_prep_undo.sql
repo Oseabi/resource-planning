@@ -40,7 +40,9 @@ set full_name = 'Test Candidate (positions QA)'
 where full_name = 'Nadia Josephs';
 
 -- Verify: expect 0 proposed seats on those four bids, and the name back.
-select 'proposed seats on the four demo bids' as check, count(*)::text as value
+-- Labelled "item", not "check": CHECK is reserved in Postgres and a bare
+-- `as check` aborts the whole file.
+select 'proposed seats on the four demo bids' as item, count(*)::text as value
 from public.assignments a
 join public.positions p on p.id = a.position_id
 where a.status = 'proposed'
