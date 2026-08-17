@@ -1,5 +1,5 @@
 -- ============================================================================
--- Undo supabase/seed_placements.sql.
+-- Undo supabase/seed_won_bids.sql.
 -- Paste into the Supabase SQL Editor and Run.
 --
 -- Removes the four demo placements and their seats, puts both bids back to

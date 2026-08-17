@@ -30,7 +30,7 @@
 -- placement would leave the seat looking empty on the bid.
 --
 -- Self-contained and idempotent: safe to re-run.
--- Reversible: supabase/seed_placements_undo.sql removes exactly these rows.
+-- Reversible: supabase/seed_won_bids_undo.sql removes exactly these rows.
 -- ============================================================================
 
 -- Placements have no natural key to conflict on, so re-running is made safe by
@@ -94,8 +94,13 @@ where id = 'deadbee1-0000-4000-8000-000000000009';
 
 
 -- ---------------------------------------------------------------------------
--- Verify. Expect four rows: one finished, two current, one upcoming, each with
--- a named role and project.
+-- Verify. Expect exactly four rows: one finished, two current, one upcoming.
+--
+-- The project column is the tell. It must read "Programme management office"
+-- and "Internal audit and financial control co-sourcing". If it says
+-- "Senior ERP Consultant - D365 Rollout" then an older version of this file
+-- ran, which attached the placements to a job requirement and left the role
+-- blank on the profile.
 -- ---------------------------------------------------------------------------
 select
   c.full_name,
