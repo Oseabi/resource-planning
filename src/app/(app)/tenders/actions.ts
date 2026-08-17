@@ -209,6 +209,8 @@ export async function placeCandidateForTender(
   candidateId: string,
   feeValue: number,
   startDate: string,
+  /** Optional. Without it the placement is open ended and has no duration. */
+  endDate?: string,
 ): Promise<{ error: string | null }> {
   const supabase = await createClient();
   const {
@@ -229,12 +231,40 @@ export async function placeCandidateForTender(
     return { error: "This candidate has already been placed on this tender." };
   }
 
+  // This button places against the bid as a whole, so it has no seat in hand.
+  // If the candidate already holds one on this bid, link to it, otherwise the
+  // profile can name the project but not the role they are doing on it.
+  // Two queries rather than an embedded join: the Database types are written by
+  // hand and declare no relationships, so PostgREST embedding has nothing to
+  // resolve against.
+  const { data: seats } = await supabase
+    .from("positions")
+    .select("id")
+    .eq("parent_type", "tender")
+    .eq("parent_id", tenderId);
+
+  let positionId: string | null = null;
+  if (seats && seats.length > 0) {
+    const { data: held } = await supabase
+      .from("assignments")
+      .select("position_id")
+      .eq("candidate_id", candidateId)
+      .in(
+        "position_id",
+        seats.map((s) => s.id),
+      )
+      .limit(1);
+    positionId = held?.[0]?.position_id ?? null;
+  }
+
   const { error } = await supabase.from("placements").insert({
     candidate_id: candidateId,
     source_type: "tender",
     source_id: tenderId,
+    position_id: positionId,
     fee_value: feeValue,
     start_date: startDate,
+    end_date: endDate || null,
     created_by: user.id,
   });
   if (error) return { error: error.message };

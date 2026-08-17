@@ -76,9 +76,12 @@ export function DeploymentsPanel({ deployments }: { deployments: Deployment[] })
                 <div className="truncate text-body-sm text-muted-foreground">
                   <span className="inline-flex items-center gap-1">
                     <Briefcase className="size-3.5 shrink-0" />
-                    {/* Null when the placement has no seat behind it, e.g. the
-                        role was deleted after the person was placed on it. */}
-                    {d.role ?? "Role no longer on record"}
+                    {/* Null when the placement carries no seat: either it was
+                        made through the bid-level Place button, which records
+                        no role, or the seat was deleted afterwards. The two are
+                        indistinguishable in the data, so the wording claims
+                        neither. */}
+                    {d.role ?? "No role recorded"}
                   </span>
                   {d.client && <span> · {d.client}</span>}
                 </div>

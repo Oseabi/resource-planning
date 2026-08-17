@@ -338,6 +338,8 @@ export async function placeCandidate(
   candidateId: string,
   feeValue: number,
   startDate: string,
+  /** Optional. Without it the placement is open ended and has no duration. */
+  endDate?: string,
 ): Promise<{ error: string | null }> {
   const supabase = await createClient();
   const {
@@ -364,6 +366,7 @@ export async function placeCandidate(
     source_id: requirementId,
     fee_value: feeValue,
     start_date: startDate,
+    end_date: endDate || null,
     created_by: user.id,
   });
   if (error) return { error: error.message };

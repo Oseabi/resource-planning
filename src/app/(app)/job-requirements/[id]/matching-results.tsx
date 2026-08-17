@@ -337,6 +337,7 @@ function PlaceDialog({
 }) {
   const [fee, setFee] = useState("");
   const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -344,11 +345,18 @@ function PlaceDialog({
     setError(null);
     if (!match) return;
     startTransition(async () => {
-      const res = await placeCandidate(requirementId, match.candidateId, Number(fee || 0), startDate);
+      const res = await placeCandidate(
+        requirementId,
+        match.candidateId,
+        Number(fee || 0),
+        startDate,
+        endDate,
+      );
       if (res.error) setError(res.error);
       else {
         setFee("");
         setStartDate("");
+        setEndDate("");
         onPlaced();
       }
     });
@@ -368,10 +376,26 @@ function PlaceDialog({
             <Label htmlFor="place-fee">Placement fee</Label>
             <Input id="place-fee" type="number" min={0} step="0.01" value={fee} onChange={(e) => setFee(e.target.value)} placeholder="e.g. 15000" />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="place-start">Start date</Label>
-            <Input id="place-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="place-start">Start date</Label>
+              <Input id="place-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="place-end">End date</Label>
+              <Input
+                id="place-end"
+                type="date"
+                min={startDate || undefined}
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
           </div>
+          <p className="text-body-sm text-muted-foreground">
+            Without an end date the placement is open ended, so the profile cannot say how long
+            they are committed for.
+          </p>
           {error && <p className="text-body-sm text-destructive">{error}</p>}
         </div>
         <DialogFooter>
