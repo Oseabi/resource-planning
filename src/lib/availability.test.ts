@@ -5,6 +5,8 @@ import {
   benchForecast,
   availabilityLabel,
   formatDate,
+  durationLabel,
+  stintPhase,
   INDEFINITE,
   type PlacementWindow,
 } from "@/lib/availability";
@@ -155,6 +157,60 @@ describe("benchForecast", () => {
     ];
     const forecast = benchForecast(candidates, placements, 2, FROM);
     expect(forecast[1].freeing.map((f) => f.id)).toEqual(["b", "a"]);
+  });
+});
+
+describe("durationLabel", () => {
+  it("says open ended when there is no end date", () => {
+    expect(durationLabel("2026-09-01", null)).toBe("Open ended");
+  });
+
+  it("counts both ends, so a single day reads as one day", () => {
+    expect(durationLabel("2026-09-01", "2026-09-01")).toBe("1 day");
+  });
+
+  it("keeps short stints exact", () => {
+    expect(durationLabel("2026-09-01", "2026-09-10")).toBe("10 days");
+    expect(durationLabel("2026-09-01", "2026-09-21")).toBe("3 weeks");
+  });
+
+  it("switches to months once weeks stop being useful", () => {
+    expect(durationLabel("2026-09-01", "2026-11-30")).toBe("3 months");
+    expect(durationLabel("2026-01-01", "2026-12-31")).toBe("12 months");
+  });
+
+  it("switches to years past eighteen months", () => {
+    expect(durationLabel("2026-01-01", "2027-12-31")).toBe("2 years");
+    expect(durationLabel("2026-01-01", "2028-06-30")).toBe("2 yr 6 mo");
+  });
+
+  it("handles a leap day without drifting", () => {
+    // Feb 2028 has 29 days; counting both ends gives 29.
+    expect(durationLabel("2028-02-01", "2028-02-29")).toBe("4 weeks");
+  });
+});
+
+describe("stintPhase", () => {
+  const FROM = "2026-08-12";
+
+  it("is current when it has started and not ended", () => {
+    expect(stintPhase("2026-08-01", "2026-12-31", FROM)).toBe("current");
+  });
+
+  it("treats an open-ended running stint as current", () => {
+    expect(stintPhase("2026-08-01", null, FROM)).toBe("current");
+  });
+
+  it("is upcoming before the start date", () => {
+    expect(stintPhase("2026-09-01", "2026-12-31", FROM)).toBe("upcoming");
+  });
+
+  it("is finished once the end date has passed", () => {
+    expect(stintPhase("2026-01-01", "2026-06-30", FROM)).toBe("finished");
+  });
+
+  it("counts the start and end days themselves as current", () => {
+    expect(stintPhase(FROM, FROM, FROM)).toBe("current");
   });
 });
 

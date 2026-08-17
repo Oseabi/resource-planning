@@ -9,6 +9,8 @@ import { StatusBadge, AvailabilityBadge, Chip } from "@/app/(app)/candidates/can
 import { availableFrom, availabilityLabel, INDEFINITE } from "@/lib/availability";
 import { loadActivity } from "@/app/(app)/activity-actions";
 import { ActivityTimeline } from "@/components/activity/activity-timeline";
+import { loadDeployments } from "@/lib/deployments-repo";
+import { DeploymentsPanel } from "@/app/(app)/candidates/[id]/deployments-panel";
 import { CvDownloadButton } from "@/app/(app)/candidates/[id]/cv-download-button";
 import { DeleteCandidateButton } from "@/app/(app)/candidates/[id]/delete-candidate-button";
 
@@ -22,12 +24,17 @@ export default async function CandidateProfilePage({
 
   // isCurrentUserAdmin is request-cached: the layout has already resolved it, so
   // this adds no round-trip.
-  const [{ data: candidate }, isAdmin, { data: placements }, activity] = await Promise.all([
-    supabase.from("candidates").select("*").eq("id", id).single(),
-    isCurrentUserAdmin(),
-    supabase.from("placements").select("candidate_id, start_date, end_date").eq("candidate_id", id),
-    loadActivity("candidate", id),
-  ]);
+  const [{ data: candidate }, isAdmin, { data: placements }, activity, deployments] =
+    await Promise.all([
+      supabase.from("candidates").select("*").eq("id", id).single(),
+      isCurrentUserAdmin(),
+      supabase
+        .from("placements")
+        .select("candidate_id, start_date, end_date")
+        .eq("candidate_id", id),
+      loadActivity("candidate", id),
+      loadDeployments(supabase, id),
+    ]);
 
   if (!candidate) notFound();
 
@@ -97,6 +104,10 @@ export default async function CandidateProfilePage({
           {isAdmin && <DeleteCandidateButton candidateId={candidate.id} candidateName={candidate.full_name} />}
         </div>
       </div>
+
+      {/* Above the tabs on purpose: "where is this person right now" is the
+          first question anyone opening a profile is asking. */}
+      <DeploymentsPanel deployments={deployments} />
 
       <Tabs defaultValue="overview">
         <TabsList>

@@ -12,6 +12,8 @@
  * can land on 31 October depending on where the server is.
  */
 
+const MS_PER_DAY = 86_400_000;
+
 /** Committed with no end date in sight. */
 export const INDEFINITE = "indefinite";
 
@@ -146,6 +148,61 @@ export function benchForecast(
 export function formatDate(date: string): string {
   const [y, m, d] = date.split("-");
   return `${Number(d)} ${MONTH_LABELS[Number(m) - 1]} ${y}`;
+}
+
+/**
+ * Whole days between two ISO dates, inclusive of both ends.
+ *
+ * Built on Date.UTC rather than string maths because month lengths and leap
+ * years make this the one place a real calendar is needed. UTC specifically, so
+ * a server in a different timezone cannot shift the answer by a day.
+ */
+export function daysBetween(start: string, end: string): number {
+  const a = Date.UTC(+start.slice(0, 4), +start.slice(5, 7) - 1, +start.slice(8, 10));
+  const b = Date.UTC(+end.slice(0, 4), +end.slice(5, 7) - 1, +end.slice(8, 10));
+  return Math.round((b - a) / MS_PER_DAY) + 1;
+}
+
+/**
+ * How long a stint runs, in the unit a person would actually say out loud.
+ *
+ * Rounds to whole months above about ten weeks, because "9 months" is what gets
+ * reported and "284 days" is not. Below that, weeks and days stay exact, since
+ * a short assignment is where the precision matters.
+ */
+export function durationLabel(start: string, end: string | null): string {
+  if (!end) return "Open ended";
+
+  const days = daysBetween(start, end);
+  if (days < 1) return "Less than a day";
+  if (days === 1) return "1 day";
+  if (days < 14) return `${days} days`;
+
+  if (days < 70) {
+    const weeks = Math.round(days / 7);
+    return `${weeks} week${weeks === 1 ? "" : "s"}`;
+  }
+
+  const months = Math.round(days / 30.44);
+  if (months < 18) return `${months} month${months === 1 ? "" : "s"}`;
+
+  const years = Math.floor(months / 12);
+  const rest = months % 12;
+  if (rest === 0) return `${years} year${years === 1 ? "" : "s"}`;
+  return `${years} yr ${rest} mo`;
+}
+
+/** Where a stint sits relative to today, which drives its badge and its order. */
+export type StintPhase = "current" | "upcoming" | "finished";
+
+export function stintPhase(
+  start: string,
+  end: string | null,
+  from: string = today(),
+): StintPhase {
+  if (start > from) return "upcoming";
+  if (end && end < from) return "finished";
+  return "current";
 }
 
 /** How a candidate's forward availability should read on screen. */
