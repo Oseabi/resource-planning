@@ -50,7 +50,7 @@ export function DeploymentsPanel({ deployments }: { deployments: Deployment[] })
       ) : (
         <ul className="divide-y divide-border">
           {deployments.map((d) => (
-            <li key={d.positionId} className="flex flex-wrap items-start gap-x-3 gap-y-2 px-4 py-3">
+            <li key={d.key} className="flex flex-wrap items-start gap-x-3 gap-y-2 px-4 py-3">
               <div
                 className={cn(
                   "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md",
@@ -76,7 +76,9 @@ export function DeploymentsPanel({ deployments }: { deployments: Deployment[] })
                 <div className="truncate text-body-sm text-muted-foreground">
                   <span className="inline-flex items-center gap-1">
                     <Briefcase className="size-3.5 shrink-0" />
-                    {d.role}
+                    {/* Null when the placement has no seat behind it, e.g. the
+                        role was deleted after the person was placed on it. */}
+                    {d.role ?? "Role no longer on record"}
                   </span>
                   {d.client && <span> · {d.client}</span>}
                 </div>

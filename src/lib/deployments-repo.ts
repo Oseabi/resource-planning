@@ -5,15 +5,17 @@ import { stintPhase, type StintPhase } from "@/lib/availability";
 
 type Client = SupabaseClient<Database>;
 
-/** One seat a candidate holds, on a bid or a vacancy, with its dates. */
+/** One commitment a candidate holds, on a bid or a vacancy, with its dates. */
 export interface Deployment {
-  positionId: string;
-  role: string;
-  /** 'proposed' on a bid not yet won; 'placed' once it is real. */
-  status: string;
+  /** Stable key. Seat id where there is one, otherwise the placement's own id. */
+  key: string;
+  positionId: string | null;
+  /** Null for a placement with no seat behind it, e.g. one predating positions. */
+  role: string | null;
+  /** 'proposed' on a bid not yet won, 'placed' once it is real. */
+  status: "proposed" | "placed";
   parentType: PositionParentType;
   parentId: string;
-  /** The bid or requirement title. */
   project: string;
   client: string | null;
   href: string;
@@ -25,61 +27,79 @@ export interface Deployment {
 
 const PHASE_ORDER: Record<StintPhase, number> = { current: 0, upcoming: 1, finished: 2 };
 
+function hrefFor(parentType: PositionParentType, parentId: string): string {
+  return parentType === "tender" ? `/tenders/${parentId}` : `/job-requirements/${parentId}`;
+}
+
 /**
  * Everywhere a candidate is committed: which project, which seat, and for how
  * long.
  *
- * Assignments are the source of truth for *where* someone sits, and placements
- * carry the commercial dates. They are separate on purpose, because a tender
- * seat is a proposal with no dates until the bid is won, so an assignment can
- * legitimately exist with no placement behind it.
+ * Reads from both assignments and placements, because neither alone is
+ * complete:
  *
- * Four queries rather than a join, because parent_id is polymorphic across two
- * tables and placements link back by (position_id, candidate_id) with no
- * foreign key, so PostgREST has no relationship to follow.
+ *   - An assignment with no placement is a *proposal*. A tender seat is held
+ *     but carries no dates until the bid is won, which is the normal case for
+ *     any live bid.
+ *   - A placement with no assignment is real committed work that the seat model
+ *     cannot see. placements.position_id is nullable for rows predating
+ *     positions, and is ON DELETE SET NULL, so deleting a seat leaves the
+ *     placement behind. Reading assignments alone would hide genuine placements
+ *     from the profile, which is worse than showing a row with a missing role.
+ *
+ * Queried rather than joined because parent_id is polymorphic across two tables
+ * and placements link back with no foreign key, so PostgREST has no
+ * relationship to follow.
  */
 export async function loadDeployments(
   supabase: Client,
   candidateId: string,
 ): Promise<Deployment[]> {
-  const { data: assignments } = await supabase
-    .from("assignments")
-    .select("position_id, candidate_id, status")
-    .eq("candidate_id", candidateId);
-
-  if (!assignments || assignments.length === 0) return [];
-
-  const positionIds = assignments.map((a) => a.position_id);
-
-  const [{ data: positions }, { data: placements }] = await Promise.all([
+  const [{ data: assignments }, { data: placements }] = await Promise.all([
     supabase
-      .from("positions")
-      .select("id, role, parent_type, parent_id")
-      .in("id", positionIds),
+      .from("assignments")
+      .select("position_id, status")
+      .eq("candidate_id", candidateId),
     supabase
       .from("placements")
-      .select("position_id, start_date, end_date, fee_value")
+      .select("id, position_id, source_type, source_id, start_date, end_date, fee_value")
       .eq("candidate_id", candidateId),
   ]);
 
+  const assignmentRows = assignments ?? [];
+  const placementRows = placements ?? [];
+  if (assignmentRows.length === 0 && placementRows.length === 0) return [];
+
+  const positionIds = [
+    ...new Set([
+      ...assignmentRows.map((a) => a.position_id),
+      ...placementRows.map((p) => p.position_id).filter((id): id is string => !!id),
+    ]),
+  ];
+
+  const { data: positions } = positionIds.length
+    ? await supabase
+        .from("positions")
+        .select("id, role, parent_type, parent_id")
+        .in("id", positionIds)
+    : { data: [] };
+
   const positionById = new Map((positions ?? []).map((p) => [p.id, p]));
   const placementByPosition = new Map(
-    (placements ?? []).filter((p) => p.position_id).map((p) => [p.position_id!, p]),
+    placementRows.filter((p) => p.position_id).map((p) => [p.position_id!, p]),
   );
 
-  // Titles for both parent kinds, fetched per kind since they are separate tables.
-  const tenderIds = [
-    ...new Set(
-      (positions ?? []).filter((p) => p.parent_type === "tender").map((p) => p.parent_id),
-    ),
-  ];
-  const requirementIds = [
-    ...new Set(
-      (positions ?? [])
-        .filter((p) => p.parent_type === "job_requirement")
-        .map((p) => p.parent_id),
-    ),
-  ];
+  // Every parent that either source points at, so titles resolve in one pass.
+  const parentRefs = new Map<string, PositionParentType>();
+  for (const p of positions ?? []) parentRefs.set(p.parent_id, p.parent_type);
+  for (const p of placementRows) {
+    if (!p.position_id) parentRefs.set(p.source_id, p.source_type);
+  }
+
+  const tenderIds = [...parentRefs].filter(([, t]) => t === "tender").map(([id]) => id);
+  const requirementIds = [...parentRefs]
+    .filter(([, t]) => t === "job_requirement")
+    .map(([id]) => id);
 
   const [{ data: tenders }, { data: requirements }] = await Promise.all([
     tenderIds.length
@@ -96,32 +116,58 @@ export async function loadDeployments(
 
   const rows: Deployment[] = [];
 
-  for (const a of assignments) {
+  // Seats the candidate holds, with their placement dates where one exists.
+  for (const a of assignmentRows) {
     const position = positionById.get(a.position_id);
     if (!position) continue;
 
     const placement = placementByPosition.get(a.position_id);
     const parent = parentById.get(position.parent_id);
     const start = placement?.start_date ?? null;
-    const end = placement?.end_date ?? null;
 
     rows.push({
+      key: position.id,
       positionId: position.id,
       role: position.role,
-      status: a.status,
+      status: a.status === "placed" ? "placed" : "proposed",
       parentType: position.parent_type,
       parentId: position.parent_id,
       project: parent?.title ?? "Removed record",
       client: parent?.client ?? null,
-      href:
-        position.parent_type === "tender"
-          ? `/tenders/${position.parent_id}`
-          : `/job-requirements/${position.parent_id}`,
+      href: hrefFor(position.parent_type, position.parent_id),
       startDate: start,
-      endDate: end,
+      endDate: placement?.end_date ?? null,
       feeValue: placement?.fee_value ?? null,
-      // A proposal has no dates yet, so it cannot be anything but upcoming.
-      phase: start ? stintPhase(start, end) : "upcoming",
+      // No dates yet means it has not started, whatever the calendar says.
+      phase: start ? stintPhase(start, placement?.end_date ?? null) : "upcoming",
+    });
+  }
+
+  // Placements with no seat behind them. Real committed work either way, so it
+  // belongs on the profile even though the role is unknown.
+  const seatedPositions = new Set(assignmentRows.map((a) => a.position_id));
+  for (const p of placementRows) {
+    if (p.position_id && seatedPositions.has(p.position_id)) continue;
+
+    const viaPosition = p.position_id ? positionById.get(p.position_id) : undefined;
+    const parentType = viaPosition?.parent_type ?? p.source_type;
+    const parentId = viaPosition?.parent_id ?? p.source_id;
+    const parent = parentById.get(parentId);
+
+    rows.push({
+      key: `placement:${p.id}`,
+      positionId: p.position_id,
+      role: viaPosition?.role ?? null,
+      status: "placed",
+      parentType,
+      parentId,
+      project: parent?.title ?? "Removed record",
+      client: parent?.client ?? null,
+      href: hrefFor(parentType, parentId),
+      startDate: p.start_date,
+      endDate: p.end_date,
+      feeValue: p.fee_value,
+      phase: stintPhase(p.start_date, p.end_date),
     });
   }
 
