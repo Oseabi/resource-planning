@@ -556,6 +556,7 @@ export function parseTippTemplate(
     qualifications: educationRows.map((r) => r.qualification),
     sectors: [],
     languages: splitList(firstValue(sectionLines(sections, "LANGUAGES"))),
+    designated_group: firstValue(sectionLines(sections, "DESIGNATED GROUP")),
     linkedin_url: text.match(LINKEDIN_RE)?.[0] ?? null,
     portfolio_url: null,
     work_experience,

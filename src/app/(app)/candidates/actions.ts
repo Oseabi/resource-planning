@@ -25,6 +25,8 @@ export interface CandidateFormFields {
   years_experience: number | null;
   professional_summary: string | null;
   availability: CandidateAvailability;
+  /** Employment equity group, needed by the TiPP Focus CV template. */
+  designated_group: string | null;
   /** Manual override for when they next come free; null means now. */
   available_from: string | null;
   status: CandidateStatus;
@@ -116,6 +118,7 @@ function toCandidateColumns(fields: CandidateFormFields): CandidateUpdate & { fu
     years_experience: fields.years_experience,
     professional_summary: fields.professional_summary,
     availability: fields.availability,
+    designated_group: fields.designated_group,
     available_from: fields.available_from,
     status: fields.status,
     location: fields.location,

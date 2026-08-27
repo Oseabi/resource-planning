@@ -27,6 +27,8 @@ export interface ExtractedCandidateFields {
   qualifications: string[];
   sectors: string[];
   languages: string[];
+  /** Stated outright on the TiPP Focus template; absent from most other CVs. */
+  designated_group: string | null;
   linkedin_url: string | null;
   portfolio_url: string | null;
   work_experience: WorkExperience[];
@@ -72,6 +74,7 @@ export function emptyExtractedFields(): ExtractedCandidateFields {
     qualifications: [],
     sectors: [],
     languages: [],
+    designated_group: null,
     linkedin_url: null,
     portfolio_url: null,
     work_experience: [],

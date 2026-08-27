@@ -11,6 +11,8 @@ import { loadActivity } from "@/app/(app)/activity-actions";
 import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import { loadDeployments } from "@/lib/deployments-repo";
 import { DeploymentsPanel } from "@/app/(app)/candidates/[id]/deployments-panel";
+import { TippCvButton } from "@/app/(app)/candidates/[id]/tipp-cv-button";
+import { missingTemplateFields, type CvSource } from "@/lib/cv-export/build-tipp-cv";
 import { CvDownloadButton } from "@/app/(app)/candidates/[id]/cv-download-button";
 import { DeleteCandidateButton } from "@/app/(app)/candidates/[id]/delete-candidate-button";
 
@@ -41,6 +43,10 @@ export default async function CandidateProfilePage({
   // The availability badge says what they are today; this says when they are
   // next free, which is the question anyone planning a bid team is asking.
   const freeFrom = availableFrom(candidate, placements ?? []);
+
+  // Worked out on the server so the warning is ready before the button is
+  // pressed, rather than after the document has already been built.
+  const missingForTemplate = missingTemplateFields(candidate as unknown as CvSource);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -97,6 +103,11 @@ export default async function CandidateProfilePage({
           {candidate.cv_file_path && (
             <CvDownloadButton path={candidate.cv_file_path} filename={candidate.cv_original_filename} />
           )}
+          <TippCvButton
+            candidateId={candidate.id}
+            candidateName={candidate.full_name}
+            missingFields={missingForTemplate}
+          />
           <Button variant="outline" size="sm" render={<Link href={`/candidates/${id}/edit`} />} nativeButton={false}>
             <Pencil className="size-4" />
             Edit
