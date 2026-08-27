@@ -21,6 +21,7 @@ import {
 } from "@/lib/extraction/heuristics";
 import { splitSections } from "@/lib/extraction/sections";
 import { emptyExtractedFields, type ExtractedCandidateFields } from "@/lib/extraction/types";
+import { parseTippTemplate } from "@/lib/extraction/tipp-template";
 
 function dedupe(values: string[]): string[] {
   const seen = new Set<string>();
@@ -101,6 +102,13 @@ function headlineRoles(preamble: string): string[] {
  * value is editable on the review form before saving.
  */
 export function parseTextToFields(text: string, filename?: string): ExtractedCandidateFields {
+  // Every CV the business receives comes off one Word template, and its tables
+  // flatten in a way the generic heuristics below read badly, reporting the
+  // table header as the candidate role. When the template is recognised its own
+  // parser is authoritative.
+  const templated = parseTippTemplate(text);
+  if (templated) return templated;
+
   const fields = emptyExtractedFields();
   const { preamble, sections } = splitSections(text);
 
