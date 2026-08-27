@@ -371,25 +371,127 @@ const NON_CLIENT_ACRONYMS = new Set([
  * convention on South African public-sector tender covers. The first few pages
  * are searched as one string because cover layouts wrap the name across lines.
  */
+/**
+ * Words that belong to a form field, never to an organisation's name.
+ *
+ * Cover pages are laid out as tables, so an extracted line runs a label
+ * straight into whatever preceded it. One tender yielded a client of
+ * "Microsoft SESSION DATE (MS)", which the initials check waved through because
+ * "Microsoft SESSION" does abbreviate to MS.
+ */
+const FORM_LABEL_WORD_RE =
+  /\b(?:session|date|time|venue|closing|briefing|compulsory|number|no|ref|reference|enquiries|contact|address|email|tel|fax|validity|submission|deadline|description|item|page)\b/i;
+
+/**
+ * Issuing organisation written as "Full Name (ACRONYM)", the near-universal
+ * convention on South African public-sector tender covers.
+ *
+ * Searched over the whole document rather than the cover alone: one tender
+ * repeats "(GPAA)" throughout but only expands it deep in the body, so a
+ * cover-only search returned nothing at all.
+ */
+/**
+ * Trim the wrapping that comes with a client name lifted out of a cover page.
+ *
+ * Whichever path finds the client, the extracted line usually carries something
+ * either side of the organisation: a lead-in clause because the cover reads
+ * "SOLUTION IMPLEMENTED BY THE CITY OF EKURHULENI", a department after a colon,
+ * or the next form field run together with it, as in "SANAS Non-Mandatory".
+ * The entity itself was right in each of those cases, so this is trimming
+ * rather than identifying.
+ */
+export function tidyClient(value: string): string {
+  let name = value.trim();
+
+  // "... IMPLEMENTED BY THE CITY OF X" keeps only what follows the preposition.
+  name = name.replace(/^.*?\bby\s+(?:the\s+)?/i, "");
+  // A department or division after a colon is not the contracting authority.
+  name = name.split(":")[0];
+  // Form-field words that ran into the name from the next cell.
+  name = name.replace(
+    /\s+(?:non[-\s]?mandatory|mandatory|compulsory|briefing|session|closing|date|time|venue)\b.*$/i,
+    "",
+  );
+
+  return name.replace(/[\s,;:|-]+$/, "").trim();
+}
+
+/**
+ * Whether a captured client is actually the subject of the tender.
+ *
+ * A tender about enterprise architecture says "Enterprise Architecture" on
+ * every page, so any rule that leans on frequency or on a nearby label will
+ * eventually pick the discipline over the authority that issued the document.
+ */
+export function isDisciplineNotOrganisation(value: string): boolean {
+  const bracketed = value.match(/\(([A-Za-z]{2,6})\)\s*$/);
+  if (bracketed && NON_CLIENT_ACRONYMS.has(bracketed[1].toUpperCase())) return true;
+
+  const bare = value.replace(/\s*\([A-Za-z]{2,6}\)\s*$/, "").trim();
+  return DISCIPLINE_PHRASE_RE.test(bare);
+}
+
+/** Subjects a tender procures, never the name of the body procuring them. */
+const DISCIPLINE_PHRASE_RE =
+  /^(?:enterprise architecture|business continuity|disaster recovery|risk management|identity management|change management|project management|service management|data management|information security|cyber ?security|business intelligence|supply chain|human (?:capital|resources))$/i;
+
+/** Whether `acronym` abbreviates some run of words ending at the bracket. */
+function abbreviates(name: string, acronym: string): boolean {
+  const words = name.split(/\s+/);
+  const target = acronym.toUpperCase();
+
+  return words.some((_, i) => {
+    const initials = (filterSmall: boolean) =>
+      words
+        .slice(i)
+        .filter((w) => !filterSmall || !/^(?:of|for|and|the)$/i.test(w))
+        .map((w) => w[0].toUpperCase())
+        .join("");
+    // Small words are routinely dropped from an acronym, so allow both forms.
+    return initials(false) === target || initials(true) === target;
+  });
+}
+
+/**
+ * Issuing organisation written as "Full Name (ACRONYM)", the near-universal
+ * convention on South African public-sector tender covers.
+ *
+ * Candidates come from the cover, but the first one is not taken. A cover names
+ * several organisations, and on real tenders the first match was a standards
+ * body the document cites, a technical term in brackets, or a partner fund.
+ *
+ * The winner is chosen by how often its acronym recurs in the whole document,
+ * because an authority refers to itself constantly and the others are mentioned
+ * once. That is a property of how tenders are written rather than a rule tuned
+ * to any particular one.
+ */
 function clientFromAcronymPattern(lines: string[]): string | null {
   const head = lines.slice(0, 60).join(" ").replace(/\s+/g, " ");
+  const whole = lines.join(" ");
   const re = /\b([A-Z][A-Za-z]+(?:\s+(?:of|for|and|the)\s+|\s+)(?:[A-Z][A-Za-z]+\s*){1,6})\(([A-Za-z]{2,6})\)/g;
+
+  let best: { label: string; mentions: number } | null = null;
 
   for (const m of head.matchAll(re)) {
     const acronym = m[2];
     if (NON_CLIENT_ACRONYMS.has(acronym.toUpperCase())) continue;
+
     // Cover pages stamp a classification immediately before the organisation.
     const name = m[1]
       .replace(/\s+/g, " ")
       .replace(/^(?:confidential|restricted|private|draft|final|official)\s+/i, "")
       .trim();
     if (name.split(/\s+/).length < 2) continue;
-    // The acronym should plausibly abbreviate the name.
-    const initials = name.split(/\s+/).map((w) => w[0].toUpperCase()).join("");
-    if (!initials.includes(acronym[0].toUpperCase())) continue;
-    return `${name} (${acronym})`;
+    if (FORM_LABEL_WORD_RE.test(name)) continue;
+    if (!abbreviates(name, acronym)) continue;
+
+    const mentions = whole.split(new RegExp(`\\b${acronym}\\b`, "g")).length - 1;
+    if (!best || mentions > best.mentions) {
+      best = { label: `${name} (${acronym})`, mentions };
+    }
   }
-  return null;
+
+  return best?.label ?? null;
 }
 
 /**
@@ -494,6 +596,20 @@ export function parseRfqText(text: string, filename?: string): ExtractedTenderFi
   }
   if (!fields.client) {
     fields.client = clientFromAcronymPattern(all)?.slice(0, 100) ?? null;
+  }
+  // Applied to whichever path won, because all three lift the name off a cover
+  // page and carry its wrapping with it.
+  if (fields.client) {
+    const tidied = tidyClient(fields.client);
+    // Only accept the trim if something recognisable survives it.
+    if (tidied.length >= 4) fields.client = tidied;
+  }
+  // A discipline is not an organisation, whichever path produced it. On an
+  // enterprise architecture tender the phrase "Enterprise Architecture (EA)"
+  // outnumbers the authority's own name, so every frequency- or label-based
+  // path lands on it.
+  if (fields.client && isDisciplineNotOrganisation(fields.client)) {
+    fields.client = null;
   }
 
   const deadlineRaw = labelledValue(all, DEADLINE_LABELS, DEADLINE_NOISE_RE);
