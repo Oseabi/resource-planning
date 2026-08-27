@@ -15,3 +15,12 @@ alter table public.candidates
 
 comment on column public.candidates.designated_group is
   'Employment equity designated group, as it should read on a submitted CV.';
+
+-- ---------------------------------------------------------------------------
+-- Verify. Expect one row reading: designated_group | text
+-- ---------------------------------------------------------------------------
+select column_name as item, data_type as type
+from information_schema.columns
+where table_schema = 'public'
+  and table_name = 'candidates'
+  and column_name = 'designated_group';
