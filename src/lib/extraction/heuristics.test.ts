@@ -7,6 +7,7 @@ import {
   guessRole,
   guessExperienceYears,
   parseExperience,
+  parseEducation,
 } from "@/lib/extraction/heuristics";
 import { parseTextToFields } from "@/lib/extraction/local-parser";
 import { ALL_ROLES } from "@/lib/vocabulary";
@@ -187,5 +188,101 @@ describe("parseExperience: entries with no dates", () => {
     const entries = parseExperience(section);
     expect(entries).toHaveLength(1);
     expect(entries[0].start_date).toBe("January 2020");
+  });
+});
+
+describe("parseEducation", () => {
+  it("does not list a school as something the candidate studied", () => {
+    // A two-column CV exports the institution onto its own line. Read as a
+    // qualification it put "University of Johannesburg" in a candidate's list
+    // of degrees, beside the degree they actually hold.
+    const rows = parseEducation(`BCom Business Management
+University of Johannesburg
+2019 - 2022`);
+    expect(rows.map((r) => r.qualification)).toEqual(["BCom Business Management"]);
+    expect(rows[0].institution).toBe("University of Johannesburg");
+  });
+
+  it("attaches an institution written above the qualification", () => {
+    const rows = parseEducation(`University of Pretoria
+BEng Computer Engineering`);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].institution).toBe("University of Pretoria");
+  });
+
+  it("splits a degree from its institution on a pipe", () => {
+    const rows = parseEducation("BCom Information Systems | University of North-West");
+    expect(rows[0].qualification).toBe("BCom Information Systems");
+    expect(rows[0].institution).toBe("University of North-West");
+  });
+
+  it("leaves the degree classification out of the award name", () => {
+    // Stripping the parens glued the class on, and the result no longer matched
+    // the award a tender asks for.
+    const rows = parseEducation(
+      "BEng Civil Engineering (First Class Honours) - University of Manchester (2015)",
+    );
+    expect(rows[0].qualification).toBe("BEng Civil Engineering");
+    expect(rows[0].year).toBe("2015");
+  });
+
+  it("keeps Honours, which is part of the award rather than a grade", () => {
+    const rows = parseEducation("BCom Honours in Information Systems");
+    expect(rows[0].qualification).toBe("BCom Honours in Information Systems");
+  });
+
+  it("reads (present) as still studying rather than as part of the award", () => {
+    // A real CV wrote "BCom business management extended (present)". Losing the
+    // marker had the system state the candidate holds a degree they are still
+    // reading for, which on a bid is a misrepresentation.
+    const rows = parseEducation("BCom business management extended (present)");
+    expect(rows[0].qualification).toBe("BCom business management extended (in progress)");
+    expect(rows[0].year).toBeNull();
+  });
+
+  it("recognises a high school as the institution, not a qualification", () => {
+    const rows = parseEducation(`Matriculation
+Maragon Mooikloof High School`);
+    expect(rows.map((r) => r.qualification)).toEqual(["Matriculation"]);
+    expect(rows[0].institution).toBe("Maragon Mooikloof High School");
+  });
+});
+
+describe("qualification duplication", () => {
+  it("does not report the abbreviation and the full award as two qualifications", () => {
+    // The dictionary pass yields the bare "BCom" and the education parse yields
+    // the full award. Merged with only exact-duplicate removal both survived,
+    // so the candidate appeared to hold two degrees.
+    const fields = parseTextToFields(
+      `Jane Dube
+jane@example.com
+
+Education
+BCom Information Systems | University of North-West
+2019
+`,
+      "jane_dube_cv.pdf",
+    );
+    expect(fields.qualifications).toEqual(["BCom Information Systems"]);
+  });
+
+  it("does not credit a Business Analyst with a Bachelor of Arts", () => {
+    // "BA" is a qualification in the vocabulary and a job title everywhere else.
+    // Matched across the whole CV it invented a degree the candidate never
+    // claimed, which on a bid is a misrepresentation.
+    const fields = parseTextToFields(
+      `Thabo Nkosi
+Senior BA
+
+Work Experience
+BA on the payments programme, 2021 - present
+
+Education
+National Diploma in IT
+`,
+      "thabo_nkosi_cv.pdf",
+    );
+    expect(fields.qualifications).not.toContain("BA");
+    expect(fields.qualifications).toContain("National Diploma in IT");
   });
 });

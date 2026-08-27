@@ -189,10 +189,22 @@ export function parseTextToFields(
   // --- Education & Qualifications ---
   fields.education = parseEducation(sections.education ?? "");
   const degreeText = fields.education.map((e) => e.qualification);
-  fields.qualifications = dedupe([
-    ...matchDictionary(text, [...VOCABULARY.qualifications]),
-    ...degreeText,
-  ]);
+  // The dictionary pass runs over the education section rather than the whole
+  // CV. Degree abbreviations are short and collide with everything else: "BA"
+  // means Business Analyst far more often than Bachelor of Arts, and one CV
+  // using it that way was credited with a degree it never mentioned. Falls back
+  // to the whole text when a CV has no education section to look in.
+  //
+  // dropSubsumed, because the dictionary yields the bare abbreviation while the
+  // education parse yields the full award, and the list carried both: a
+  // candidate appeared to hold a "BCom" and a "BCom Information Systems".
+  const qualificationSource = sections.education || text;
+  fields.qualifications = dropSubsumed(
+    dedupe([
+      ...matchDictionary(qualificationSource, [...VOCABULARY.qualifications]),
+      ...degreeText,
+    ]),
+  );
   // A combined "Education & Certifications" heading feeds both sections, so drop
   // anything already captured as a degree from the certification list.
   fields.certifications = certItems.filter(

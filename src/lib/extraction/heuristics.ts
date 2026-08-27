@@ -480,13 +480,22 @@ function isCompanyLine(line: string): boolean {
 }
 
 const QUALIFICATION_HINT_RE =
-  /\b(b\.?sc|b\.?eng|b\.?com|b\.?a\b|bba|m\.?sc|m\.?eng|mba|ph\.?d|bachelor|master|magister|doctorate|doctoral|honours|postgraduate|undergraduate|diploma|degree|certificate|matric|national senior certificate|hnd|hnc|nvq)\b/i;
+  /\b(b\.?sc|b\.?eng|b\.?com|b\.?a\b|bba|m\.?sc|m\.?eng|mba|ph\.?d|bachelor|master|magister|doctorate|doctoral|honours|postgraduate|undergraduate|diploma|degree|certificate|matric(?:ulation)?|national senior certificate|hnd|hnc|nvq)\b/i;
 const YEAR_RE = /\b(19|20)\d{2}\b/;
 
-const INSTITUTION_RE = /\b(university|universiteit|college|institute|academy|polytechnic|school of)\b/i;
+const INSTITUTION_RE =
+  /\b(university|universiteit|college|institute|academy|polytechnic|school of|(?:high|secondary|primary|hoer|hoerskool) school|hoerskool)\b/i;
 /** Lines that are clearly a certification/short course rather than a qualification. */
 const CERTIFICATE_LINE_RE = /^(?:certified\b|certification\b|certificate in\b)|\b(?:foundation|practitioner|training|course|programme|program)\b/i;
-const IN_PROGRESS_RE = /\((?:in progress|ongoing|current|incomplete|expected[^)]*|due[^)]*)\)/i;
+const IN_PROGRESS_RE = /\((?:in progress|ongoing|current|present|incomplete|expected[^)]*|due[^)]*)\)/i;
+/**
+ * A degree classification written after the award, "(First Class Honours)".
+ * The parens are stripped further down, which glued the class onto the name and
+ * left "BEng Civil Engineering First Class Honours" as the qualification. That
+ * no longer matches the award a tender asks for, so the class is dropped.
+ */
+const GRADE_PAREN_RE =
+  /\(\s*(?:first|second|third|upper|lower|distinction|merit|pass|cum laude|magna cum laude|summa cum laude)[^)]*\)/i;
 
 /**
  * Best-effort education parse: one entry per qualification-looking line. Requires
@@ -497,19 +506,44 @@ export function parseEducation(text: string): Education[] {
   if (!text) return [];
   const lines = unwrapLines(text).map((l) => l.replace(BULLET_START_RE, "").trim()).filter(Boolean);
   const out: Education[] = [];
+  // An institution written on its own line, waiting for the qualification it
+  // belongs to. CVs put it either side, so it is attached backwards when the
+  // previous entry still needs one and forwards otherwise.
+  let pendingInstitution: string | null = null;
+
   for (const original of lines) {
     if (original.length > 140) continue;
     // Combined "Education & Certifications" blocks feed both parsers; keep
     // certificate-style lines out of the education timeline.
     if (CERTIFICATE_LINE_RE.test(original)) continue;
     if (!QUALIFICATION_HINT_RE.test(original) && !INSTITUTION_RE.test(original)) continue;
+
+    // A line naming only a school is that school, not something studied there.
+    // Listing it as a qualification put "University of Johannesburg" in a
+    // candidate's list of degrees.
+    if (INSTITUTION_RE.test(original) && !QUALIFICATION_HINT_RE.test(original)) {
+      const name = original.replace(YEAR_RE, "").replace(/[\s.,-]+$/, "").trim();
+      const previous = out[out.length - 1];
+      if (previous && !previous.institution) previous.institution = name;
+      else pendingInstitution = name;
+      continue;
+    }
+
     const inProgress = IN_PROGRESS_RE.test(original);
     const line = original.replace(IN_PROGRESS_RE, "").trim();
     const yearMatch = line.match(YEAR_RE);
     const year = yearMatch ? yearMatch[0] : null;
-    let rest = line.replace(YEAR_RE, "").replace(/[()]/g, "").trim();
+    let rest = line
+      .replace(YEAR_RE, "")
+      .replace(GRADE_PAREN_RE, "")
+      .replace(/[()]/g, "")
+      .trim();
     let institution: string | null = null;
-    const sepMatch = rest.split(/\s+(?:at|from|-|–|,)\s+/i);
+    // The pipe matters: CVs written in two columns export as
+    // "BCom Information Systems | University of North-West", and without it the
+    // school stayed glued to the degree, so the same qualification appeared
+    // twice, once bare and once with the institution attached.
+    const sepMatch = rest.split(/\s+(?:at|from|-|–|\||,)\s+/i);
     let qualification = rest;
     if (sepMatch.length > 1) {
       qualification = sepMatch[0].trim();
@@ -517,12 +551,14 @@ export function parseEducation(text: string): Education[] {
     }
     rest = qualification.replace(/[\s.,-]+$/, "").trim();
     if (!rest) continue;
+
     out.push({
       qualification: inProgress ? `${rest} (in progress)` : rest,
       field: null,
-      institution,
+      institution: institution ?? pendingInstitution,
       year: inProgress ? null : year,
     });
+    pendingInstitution = null;
   }
   return out.slice(0, 10);
 }
