@@ -21,6 +21,9 @@ import {
 } from "@/lib/extraction/heuristics";
 import { splitSections } from "@/lib/extraction/sections";
 import { emptyExtractedFields, type ExtractedCandidateFields } from "@/lib/extraction/types";
+import { parseTippTemplate } from "@/lib/extraction/tipp-template";
+import { parseTippTables } from "@/lib/extraction/tipp-tables";
+import type { DocumentTables } from "@/lib/extraction/docx-tables";
 
 function dedupe(values: string[]): string[] {
   const seen = new Set<string>();
@@ -41,7 +44,11 @@ function without(values: string[], exclude: string[]): string[] {
   return values.filter((v) => !ex.has(v.toLowerCase()));
 }
 
-/** Drop items wholly contained in a longer sibling ("SuccessFactors" vs "SAP SuccessFactors"). */
+/**
+ * Drop items wholly contained in a longer sibling ("SuccessFactors" vs "SAP
+ * SuccessFactors"). Used where the shorter form is a fragment of the longer
+ * one, as a degree abbreviation is the head of the award it names.
+ */
 function dropSubsumed(values: string[]): string[] {
   return values.filter((value) => {
     const lower = value.toLowerCase();
@@ -49,6 +56,39 @@ function dropSubsumed(values: string[]): string[] {
       if (other === value) return false;
       const otherLower = other.toLowerCase();
       return otherLower.length > lower.length && otherLower.includes(lower);
+    });
+  });
+}
+
+/** A trailing qualifier: the "(ES6+)" of "JavaScript (ES6+)". */
+const PARENTHETICAL_RE = /\s*\([^)]*\)\s*$/;
+
+/**
+ * Drop a skill only when a sibling is the same skill written out more fully:
+ * "JavaScript" beside "JavaScript (ES6+)", or "SuccessFactors" beside "SAP
+ * SuccessFactors".
+ *
+ * Deliberately narrower than dropSubsumed, which is wrong for skills because
+ * plain containment does not mean the same technology. It was removing
+ * PostgreSQL because the candidate also listed "Supabase (PostgreSQL + RLS)",
+ * SQL because of "PostgreSQL", and Git because of "GitHub". Those are separate
+ * skills, and a tender asking for SQL stopped matching a developer who has it.
+ *
+ * The trade is a little redundancy, "JWT" surviving beside "JWT
+ * Authentication". A duplicate-looking entry costs a reader a glance; a missing
+ * one costs the candidate the match.
+ */
+function dropQualifiedNames(values: string[]): string[] {
+  return values.filter((value) => {
+    const lower = value.toLowerCase();
+    return !values.some((other) => {
+      if (other === value) return false;
+      const otherLower = other.toLowerCase();
+      if (otherLower.length <= lower.length) return false;
+      // "JavaScript (ES6+)" is JavaScript with a version note.
+      if (otherLower.replace(PARENTHETICAL_RE, "") === lower) return true;
+      // "SAP SuccessFactors" is SuccessFactors under its vendor's name.
+      return otherLower.endsWith(` ${lower}`);
     });
   });
 }
@@ -100,7 +140,38 @@ function headlineRoles(preamble: string): string[] {
  * section-aware heuristics + the seeded vocabulary. No AI, no network. Every
  * value is editable on the review form before saving.
  */
-export function parseTextToFields(text: string, filename?: string): ExtractedCandidateFields {
+export function parseTextToFields(
+  text: string,
+  filename?: string,
+  tables: DocumentTables = [],
+): ExtractedCandidateFields {
+  // Real tables beat reconstructed ones, so they are tried first. Falls through
+  // for PDFs, which carry no table structure, and for anything the table reader
+  // does not recognise as the template.
+  const fromTables = tables.length > 0 ? parseTippTables(tables) : null;
+  if (fromTables) {
+    // Some of the template's content is not in a table at all: contact details
+    // sit in the page header, and one CV writes its summary as a loose
+    // paragraph between two tables. Those fields are read from the text and
+    // filled in behind the table result, which stays authoritative for
+    // everything it did find.
+    const fromText = parseTippTemplate(text);
+    return {
+      ...fromTables,
+      email: fromTables.email ?? extractEmail(text),
+      phone: fromTables.phone ?? extractPhone(text),
+      linkedin_url: fromTables.linkedin_url ?? extractLinks(text).linkedin_url,
+      professional_summary: fromTables.professional_summary ?? fromText?.professional_summary ?? null,
+    };
+  }
+
+  // Every CV the business receives comes off one Word template, and its tables
+  // flatten in a way the generic heuristics below read badly, reporting the
+  // table header as the candidate role. When the template is recognised its own
+  // parser is authoritative.
+  const templated = parseTippTemplate(text);
+  if (templated) return templated;
+
   const fields = emptyExtractedFields();
   const { preamble, sections } = splitSections(text);
 
@@ -126,7 +197,7 @@ export function parseTextToFields(text: string, filename?: string): ExtractedCan
   // Anything under an explicit "technical skills" heading is technical.
   const explicitTech = parseListItems(sections.technical_skills ?? "");
 
-  const technical = dropSubsumed(
+  const technical = dropQualifiedNames(
     dedupe([
       ...matchDictionary(text, [...ALL_TECHNICAL_SKILLS]),
       ...explicitTech,
@@ -155,10 +226,22 @@ export function parseTextToFields(text: string, filename?: string): ExtractedCan
   // --- Education & Qualifications ---
   fields.education = parseEducation(sections.education ?? "");
   const degreeText = fields.education.map((e) => e.qualification);
-  fields.qualifications = dedupe([
-    ...matchDictionary(text, [...VOCABULARY.qualifications]),
-    ...degreeText,
-  ]);
+  // The dictionary pass runs over the education section rather than the whole
+  // CV. Degree abbreviations are short and collide with everything else: "BA"
+  // means Business Analyst far more often than Bachelor of Arts, and one CV
+  // using it that way was credited with a degree it never mentioned. Falls back
+  // to the whole text when a CV has no education section to look in.
+  //
+  // dropSubsumed, because the dictionary yields the bare abbreviation while the
+  // education parse yields the full award, and the list carried both: a
+  // candidate appeared to hold a "BCom" and a "BCom Information Systems".
+  const qualificationSource = sections.education || text;
+  fields.qualifications = dropSubsumed(
+    dedupe([
+      ...matchDictionary(qualificationSource, [...VOCABULARY.qualifications]),
+      ...degreeText,
+    ]),
+  );
   // A combined "Education & Certifications" heading feeds both sections, so drop
   // anything already captured as a degree from the certification list.
   fields.certifications = certItems.filter(

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { FileText, AlertTriangle, Sparkles } from "lucide-react";
+import { FileText, AlertTriangle, Sparkles, FileDown } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,7 @@ import { CandidateFields, type ExtractedFlags } from "@/app/(app)/candidates/can
 import { saveCandidate, type CandidateFormFields, type DuplicateMatch } from "@/app/(app)/candidates/actions";
 import type { ExtractionResult } from "@/lib/extraction/types";
 import { deriveCategories } from "@/lib/resource-categories";
+import { missingTemplateFields } from "@/lib/cv-export/missing-fields";
 
 function derivedCategories(r: ExtractionResult): string[] {
   const f = r.fields;
@@ -38,6 +39,8 @@ function toFields(r: ExtractionResult): CandidateFormFields {
     years_experience: f.years_experience,
     professional_summary: f.professional_summary,
     availability: "available",
+    // A CV in another format rarely states this; the TiPP template does.
+    designated_group: f.designated_group,
     // A CV never states this; it is set by hand when someone knows a date.
     available_from: null,
     status: "active",
@@ -98,6 +101,47 @@ export function CvReviewDialog({
   const [error, setError] = useState<string | null>(null);
   const [duplicate, setDuplicate] = useState<DuplicateMatch | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [building, setBuilding] = useState(false);
+
+  // Recomputed as the form is corrected, so the warning tracks what is actually
+  // on screen rather than what the parser first guessed.
+  const missingForTemplate = missingTemplateFields({
+    ...fields,
+    availability: fields.availability,
+  });
+
+  /**
+   * Build the TiPP CV from what is on screen, without saving.
+   *
+   * Deliberately does not create a candidate: converting somebody else's CV
+   * into the house format is a common one-off that should not add them to the
+   * pool.
+   */
+  async function downloadTippCv() {
+    setBuilding(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/candidates/tipp-cv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fields }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? "Could not build the CV.");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `TippFocus - ${fields.full_name || "candidate"}.docx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setBuilding(false);
+    }
+  }
 
   function submit(force: boolean) {
     setError(null);
@@ -190,13 +234,31 @@ export function CvReviewDialog({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-border p-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
-            Cancel
-          </Button>
-          <Button onClick={() => submit(false)} disabled={isPending}>
-            {isPending ? "Saving..." : "Confirm & Save Candidate"}
-          </Button>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-4">
+          {/* Listed here rather than after the download, because this is the
+              screen where the gaps can still be typed in. */}
+          <div className="min-w-0 text-body-sm text-muted-foreground">
+            {missingForTemplate.length > 0 && (
+              <span>
+                Blank on the TiPP CV:{" "}
+                <span className="text-foreground">{missingForTemplate.join(", ")}</span>
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
+              Cancel
+            </Button>
+            {/* Converting someone else's CV does not have to mean adding them
+                to the pool, so this deliberately saves nothing. */}
+            <Button variant="outline" onClick={downloadTippCv} disabled={isPending || building}>
+              <FileDown className="size-4" />
+              {building ? "Building..." : "Download TiPP CV"}
+            </Button>
+            <Button onClick={() => submit(false)} disabled={isPending || building}>
+              {isPending ? "Saving..." : "Confirm & Save Candidate"}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

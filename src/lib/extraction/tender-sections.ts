@@ -106,7 +106,40 @@ export function stripRepeatedLines(lines: string[]): string[] {
   return out;
 }
 
+/**
+ * Lines that repeat across pages, most frequent first.
+ *
+ * These are the running headers and footers, and they are the single most
+ * reliable place to find the issuing authority: a bid document prints its
+ * owner's name on every page, whereas the cover page phrases it a different way
+ * in every tender. stripRepeatedLines already computes this in order to discard
+ * it; this exposes the same signal for the parser to read instead.
+ */
+export function repeatedLines(lines: string[], minCount = REPEAT_THRESHOLD): string[] {
+  const counts = new Map<string, { count: number; text: string }>();
+
+  for (const line of lines) {
+    const text = line.trim();
+    const key = text.toLowerCase();
+    if (!key || isPageFurniture(line)) continue;
+    const entry = counts.get(key);
+    if (entry) entry.count += 1;
+    else counts.set(key, { count: 1, text });
+  }
+
+  return [...counts.values()]
+    .filter((e) => e.count >= minCount)
+    .sort((a, b) => b.count - a.count || b.text.length - a.text.length)
+    .map((e) => e.text);
+}
+
 export interface TenderBody {
+  /**
+   * Every line, before repeated headers and footers were collapsed. The
+   * repetition is itself a signal, since it identifies the issuing authority,
+   * so it has to survive for the parser to read.
+   */
+  raw: string[];
   /** Lines of the substantive section (or the whole document if none found). */
   core: string[];
   /** Whether a requirements section was actually identified. */
@@ -136,7 +169,7 @@ export function tenderBody(text: string): TenderBody {
     if (CORE_START_PATTERNS.some((re) => re.test(headingText(line)))) starts.push(i);
   }
 
-  if (starts.length === 0) return { core: all, foundCore: false, all };
+  if (starts.length === 0) return { core: all, foundCore: false, all, raw };
 
   const bodyFrom = (startIndex: number): string[] => {
     const core: string[] = [];
@@ -163,7 +196,7 @@ export function tenderBody(text: string): TenderBody {
   }
 
   // Too small to be the real thing, fall back to the whole document.
-  if (best.length < 20) return { core: all, foundCore: false, all };
+  if (best.length < 20) return { core: all, foundCore: false, all, raw };
 
-  return { core: best, foundCore: true, all };
+  return { core: best, foundCore: true, all, raw };
 }

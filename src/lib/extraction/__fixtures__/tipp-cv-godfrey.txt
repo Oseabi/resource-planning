@@ -1,0 +1,750 @@
+
+
+FULL NAME (S)
+
+Godfrey Marange
+
+DATE OF BIRTH
+
+01 January 1980
+
+DESIGNATED GROUP
+
+African Male
+
+LANGUAGES
+
+English
+
+AVAILABILITY
+
+Immediately Available
+
+ 
+
+CANDIDATE SUMMARY
+
+ 
+
+Godfrey is an experienced IT Business Analysis Consultant and Product Owner with a background IT Operations. Starting as a Microsoft Certified Systems Engineer in 2004, he has worked across corporate finance, healthcare, and local government, building a robust foundation in IT support and managed services.
+
+
+
+He holds a BSc. Hons in Digital Innovation and Design from the Technological University of Dublin and am approved to sit for the CBAP exam next month, which recognizes his completion of over 7,500 hours across the six BABOK knowledge areas. He has tech startup experience; therefore, he brings additional entrepreneurial expertise, business modelling skills, and competencies in Business & Process Analysis.
+
+
+
+CAREER SUMMARY
+
+ 
+
+COMPANY
+
+POSITION
+
+DURATION
+
+Tipp Focus Holdings 
+
+Business Analyst 
+
+Jan 2025 - Current
+
+Enthucate Tech t/a connected smart schools
+
+Product Owner 
+
+September 2023 – August 2024
+
+City of Johannesburg Municipality
+
+Business Analyst Consultant
+
+July 2022 – July 2023
+
+Sol Plaatjie Municipality
+
+Business Analyst & Project Lead
+
+January 2022 – December 2022
+
+RH Managers
+
+ 
+
+Business Analyst/IT Operations Consultant
+
+January 2015 – December 2021
+
+Johannesburg Development Agency
+
+Business Analyst & Project Lead Consultant
+
+October 2020 – October 2022
+
+Tysys Capital Group
+
+
+
+ICT Consultant
+
+January 2016 – March 2020
+
+Netsurit
+
+
+
+Technical Support Consultant
+
+February 2013 – April 2015
+
+Beden Networks
+
+Senior System Engineer
+
+December 2010 – January 2013
+
+Fulham Investments
+
+
+
+IT Administrator
+
+October 2009 – November 2010
+
+Nyaleti Technologies
+
+
+
+Systems Support Engineer
+
+June 2006 – February 2009
+
+Trust Holding/Trustbank and Trustfin Zimbabwe
+
+Systems Support Officer
+
+March 2004 – February 2006
+
+ 
+
+QUALIFICATION
+
+ 
+
+QUALIFICATION 
+
+INSTITUTION 
+
+YEAR
+
+Certified Business Analyst Professional (CBAP) 
+
+International Institute of Business Analysis- (IIBA)
+
+
+
+2025
+
+BSc. Hons in Digital Innovation and Design 
+
+Technological University Dublin
+
+2018
+
+Dip. Networking and PC Maintenance
+
+McMaine School of Computing
+
+2003
+
+ 
+
+CERTIFICATES AND COURSES
+
+ 
+
+QUALIFICATION 
+
+INSTITUTION 
+
+YEAR
+
+Microsoft Certified It Professional
+
+Microsoft Learning
+
+2012
+
+Microsoft Certified It Professional
+
+Microsoft Learning
+
+2012
+
+Microsoft Certified Systems Engineer
+
+Microsoft Learning
+
+2004
+
+
+
+SKILLS 
+
+ 
+
+	
+
+BABOK Knowledge Areas
+
+SCRUM
+
+AGILE Project Management
+
+Stakeholder Management
+
+SAP 
+
+UI/UX
+
+User Story Development
+
+JIRA, Trello, Monday
+
+MS Projects, Visio
+
+BPMN 2.0
+
+Workflow Mapping: Lucidchart, Plant UML, MS Visio
+
+BRD/ BRS Documentation
+
+UML, Balsamiq, Axure, Figma
+
+Microsoft Server Support
+
+Test Case Development
+
+As-Is and To-Be or Current State and Future State Development
+
+Test Case Development for UAT
+
+System Integration Testing and Error Resolution 
+
+API Documentation
+
+Microsoft Server Support, Cloud Services (Azure, Office 365)
+
+SAP 
+
+
+
+
+
+
+
+EMPLOYMENT RECORD
+
+ 
+
+
+
+Company		
+
+Tipp Focus Holdings	
+
+Client
+
+CoJ
+
+Role
+
+Business Analyst
+
+Duration
+
+January 2025 – Current 
+
+Duties
+
+Improving service efficiency, enabling business transformation, and contributing to large government tender submissions.
+
+ CoJ e-Journal System – Support and Enhancements
+
+Designed and implemented a fit-for-purpose IT Service Management (ITSM) solution for the e-Journal Support System, including configuration of support processes and helpdesk functions.
+
+Introduced a structured solution enhancement process to manage and prioritize change requests.
+
+Developed a testing framework and authored detailed test cases to support User Acceptance Testing (UAT) for new system enhancements.
+
+Collaborated with internal and municipal stakeholders to optimize system performance and end-user experience.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Company		
+
+Tipp Focus Holdings	
+
+Client
+
+OVG
+
+Role
+
+Business Analyst
+
+Duration
+
+January 2025 – June 2025 
+
+Duties
+
+Contributed to the Business Architecture phase of a strategic Enterprise Architecture programme.
+
+Led business process re-engineering efforts across key functional units, including Governance, Risk & Compliance and Internal Audit.
+
+Conducted As-Is analysis, Gap Analysis, and develop As-Is and To-Be business process models aligned to the OVG Target Operating Model using BPMN 2.0 and ARIS tools.
+
+Facilitated validation workshops and contributed to Business Process Requirements (BPR) documentation.
+
+
+
+
+
+
+
+
+
+Company		
+
+Enthucate Tech t/a connected smart schools	
+
+Role
+
+Product Owner
+
+Duration
+
+September 2023 – August 2024
+
+Duties:
+
+MS Innovations 
+
+ Solution design, and project implementation, through this process, 
+
+Designing business models for the solution, go-to-market strategies, and pitch presentations.
+
+
+
+Keynote Projects Designed and Managed
+
+Skills Demonstrated in the projects 
+
+Product life cycle management
+
+Applied Agile methodologies (SCRUM) across all project stages, using JIRA and Trello. 
+
+Stakeholder collaboration sessions with clients,
+
+User Story Mapping and Writing
+
+Defined and documented product features and processes
+
+Quality assurance and user acceptance testing (UAT) processes
+
+Post-deployment support and iterative enhancements
+
+
+
+Connected Smart Schools:
+
+Designed DISaaS (Digital Infrastructure for Schools as a Service) solution for fully digitized schools.
+
+Formed a partnership with MTN for fixed-line solutions for schools including a 1st in the market Fibre to Schools (FTS) solution.
+
+
+
+Connect + Funda:
+
+Designed onboarding and CRM solution for a groundbreaking education MVNO solution providing cheap data packages for student.
+
+Currently working on onboarding 520 000 TVET Students in South Africa.
+
+
+
+Enthucate:
+
+Designed an integrated education productivity app that combines all our previous edutech solutions into one super app.
+
+
+
+MySeeds:
+
+Designed and led development of a school incentives and rewards app integrating with school management systems and offering points for student performance in academics and attendance. 
+
+Students will redeem these points for shopping discounts. 
+
+Signed agreement for rollout with Ekurhuleni district of schools in South Africa, Edon Group and Jet Stores.
+
+
+
+Mustard Seed School Management System:
+
+Designed and led development of uniquely designed school management system ideal for public sector schools in Africa. 
+
+Project incubated through Microsoft BizSpark startup 
+
+Did an impact Project with Microsoft for Mustard Seed integrated with Microsoft Office 365 at Kutlwanong Maths and Science impacting over 5000 students.
+
+
+
+Mitzis LMS:
+
+Designed and led development of custom seta raining online learning platform with live lesson features and automated assessment and completion filing.
+
+
+
+GauLift:
+
+Designed and led development of a custom ride-sharing or carpooling app like Uber for government issued vehicles for the Gauteng department of transport on behalf of E-Gov department. 
+
+Solution integrated with Active Directory.
+
+
+
+ 
+
+Company
+
+City of Johannesburg Municipality	
+
+Role
+
+Business Analyst Consultant	
+
+Duration
+
+July 2022 – July 2023
+
+Duties: 
+
+
+
+Implementing IT Service Management (ITSM) processes within SAP Solution Manager.
+
+Upgrading the deprecated SolMan version to the latest iteration
+
+Crafting Standard Operating Procedures (SOPs) using BPMN 2.0 aligned with ITIL principles, and 
+
+Designing a Center of Excellence (COE) Strategy for SAP Support to enhance operations for the City of Johannesburg municipality. 
+
+Employed BABOK knowledge areas, to ensure alignment between IT solutions and CoJ's operational objectives. 
+
+Collaborated with key stakeholders to define and align business objectives and success factors with ITSM processes. 
+
+Led critical project implementing ITSM processes in SAP Solution Manager, upgrading to latest version
+
+Designed the Service Catalogue and contributing to Service Transition, Operation, Change Management, and Continual Improvement efforts. 
+
+Designed and implemented metrics to assess IT services' adherence to Service Level Agreements (SLAs). 
+
+Presented findings and recommendations to stakeholders, facilitating informed decision-making. 
+
+Crafted SOPs aligned with ITIL principles and designed COE Strategy for SAP Support in City of Johannesburg
+
+Developed robust processes using BPMN to meet municipality's unique requirements and presented findings to stakeholders
+
+
+
+ 
+
+Company
+
+Sol Plaatjie Municipality	
+
+Role
+
+Business Analyst & Project Lead	
+
+Duration
+
+January 2022 – December 2022
+
+Duties:
+
+  Led a team of business analysts to analyze requirements 
+
+ Design a solution to enhance the ease of doing business for the municipality. 
+
+ Applying business analysis principles to elicit and document requirements, creating solution requirements, and crafting user stories. 
+
+Collaborated with stakeholders to prioritize and document business and technical requirements.
+
+Developed an approved prototype and created user stories for clear and actionable development requirements.
+
+Acted as a liaison, fostering effective communication, and aligning project scope with stakeholder needs.
+
+Redefined the project scope and ensured better alignment with the stakeholder needs, goals, and objectives. Impact: The approved prototype and refined project scope were instrumental in improving the ease of doing business for both residents and local businesses within the municipality. 
+
+
+
+ 
+
+Company
+
+RH Managers
+
+Role
+
+Business Analyst/IT Operations Consultant	
+
+Duration
+
+January 2015 – December 2021
+
+
+
+ Duties :
+
+Led Office 365 centralization, enhancing collaboration and productivity platform for 40 hospitals and head offices.
+
+Designed and implemented centralized cloud solution on Azure platform, improving scalability and efficiency of group servers.
+
+Implemented robust backup and disaster recovery strategy, ensuring critical data protection and business continuity.
+
+Designed process improvement initiatives regarding IT and System processes
+
+Acted as Business Analyst for SAP implementation, orchestrating migration of hospital management systems and improving operational efficiency.
+
+Designed and documented standardized IT Policies in compliance with the Kings Report for JSE, ensuring alignment with regulatory requirements for a listed partner like RH Bophelo. 
+
+
+
+ 
+
+Company
+
+Johannesburg Development Agency	
+
+Role
+
+Business Analyst & Project Lead Consultant	
+
+Duration
+
+October 2020 – October 2022
+
+Duties:
+
+Collaborated with stakeholders to gather requirements and finalize solution designs, ensuring alignment with organizational objectives.
+
+Produced a robust business case outlining the financial and strategic advantages of the cloud backup and disaster recovery solution, while defining the solution scope to align with long-term goals.
+
+Designed a resilient cloud backup solution utilizing Veeam Backup on Azure, providing off-site backup capabilities for data redundancy and disaster recovery.
+
+Led end-to-end project management of the solution's implementation, orchestrating the deployment of end-user backup and designing streamlined processes for improved efficiency.
+
+Business Continuity Audit: Actively participated in a comprehensive solution business continuity audit, serving as the primary consultant.
+
+Assisted in addressing compliance issues, ultimately helping the organization achieve a compliant and reliable backup solution.
+
+Recognition on a Global Stage: MS Innovations' exceptional solution propelled us to be recognized as one of the six most promising tech startups in the EdTech category by Silicon Valley Forum. We had the privilege of representing Africa as the first-ever contestant in the Tech World Cup hosted in San Francisco in 2014. 
+
+ Responsible for guiding the development and implementation of our pioneering solutions. 
+
+Used agile methodologies using Trello and Jira, applied Lean Startup principles, and employed customer acquisition modeling techniques to drive success. 
+
+
+
+
+
+Company
+
+Tysys Capital Group
+
+Role
+
+ICT Consultant	
+
+Duration
+
+January 2016 – March 2020
+
+Duties
+
+Developed strategic IT strategy aligning technology with business objectives
+
+Implemented cloud-based solutions and Microsoft Office 365 for enhanced productivity
+
+Introduced SharePoint Online for efficient document management and collaboration
+
+Designed comprehensive backup and disaster recovery plan ensuring data security and business continuity
+
+Backup and Disaster Recovery: Designed, implemented, and managed a comprehensive backup and disaster recovery plan, safeguarding critical data and ensuring business continuity. The solution included offsite backup for added redundancy. 
+
+VOIP Telephony: Implemented a VOIP telephony solution, enhancing communication efficiency while reducing operational costs, benefiting both branch offices and the head office. 
+
+Fiber Internet Services: Successfully introduced a fiber internet solution, significantly improving internet services' speed, reliability, and overall performance across all offices. 
+
+Project Management: Orchestrated end-to-end project management, ensuring that projects were executed within stipulated timelines and budgets. 
+
+Team Management: Managed a team of support technicians, providing leadership and direction, while handling escalations and ensuring service excellence. 
+
+
+
+
+
+Company
+
+Netsurit
+
+Role
+
+Technical Support Consultant	
+
+Duration
+
+February 2013 – April 2015
+
+Duties:
+
+As an outsourced onsite IT Consultant, he was entrusted to provide ICT support services for high-profile clients: Bidvest Topturf, Bidvest Automotive, Ster Kinekor, Thebe Reed Investments, Kaizer Chiefs FC.
+
+
+
+
+
+Company
+
+Beden Networks
+
+Role
+
+Senior System Engineer
+
+Duration
+
+December 2010 – January 2013
+
+Duties:
+
+Successfully migrated MS Exchange to Google Apps for clients
+
+Managed 60 user LAN for 3 companies with Active Directory, Pastel Evolution, and 8 conference rooms
+
+Implemented efficient and seamless transition to Google Apps resulting in improved productivity
+
+Streamlined network infrastructure resulting in enhanced collaboration and client satisfaction
+
+
+
+
+
+Company
+
+Fulham Investments
+
+Role
+
+IT Administrator	
+
+Duration
+
+October 2009 – November 2010
+
+Duties:
+
+Appointed as group IT administrator for Fulham Investments, overseeing multiple companies which were Digital Planet, Focus Rooms, Net Partnering, Digital Marketing Services
+
+Reported directly to IT Manager for all four companies
+
+Provided comprehensive support for servers, desktops, networks, and printers
+
+Delivered IT support for call center operations
+
+
+
+
+
+Company
+
+Nyaleti Technologies
+
+Role
+
+Systems Support Engineer	
+
+Duration
+
+June 2006 – February 2009
+
+Duties:
+
+Implemented Active Directory and Exchange platform for Quartile Capital
+
+Successfully migrated Council for the Built Environment from mail daemon to MS Exchange
+
+Provided IT support for SACWU
+
+Delivered efficient and effective solutions for clients
+
+
+
+
+
+Company
+
+Trust Holding/Trustbank and Trustfin Zimbabwe	
+
+Role
+
+Systems Support Officer	
+
+Duration
+
+March 2004 – February 2006
+
+Duties:
+
+Supported user LAN, ensuring smooth operations
+
+Provided desktop and server support for efficient functioning
+
+Upgraded Active Directory from Server 2000 to Server 2003
+
+Supported financial services systems for seamless business operations
+
+
+
+
+

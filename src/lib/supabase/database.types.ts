@@ -81,6 +81,8 @@ export interface Database {
           work_experience: WorkExperience[];
           education: Education[];
           availability: CandidateAvailability;
+          /** Employment equity group, as it should read on a submitted CV. */
+          designated_group: string | null;
           /** Manual override for when they next come free; null means now. */
           available_from: string | null;
           status: CandidateStatus;

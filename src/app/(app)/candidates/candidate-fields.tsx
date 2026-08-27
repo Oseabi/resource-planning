@@ -24,6 +24,22 @@ const AVAILABILITY_LABELS: Record<string, string> = {
   unavailable: "Unavailable",
 };
 
+/**
+ * The phrasings that appear on real CVs, offered as suggestions only. Free text
+ * stays allowed, because a client sometimes dictates the exact wording and a
+ * fixed list would block it.
+ */
+const DESIGNATED_GROUPS = [
+  "African Male",
+  "African Female",
+  "Coloured Male",
+  "Coloured Female",
+  "Indian Male",
+  "Indian Female",
+  "White Male",
+  "White Female",
+];
+
 const STATUS_LABELS: Record<string, string> = {
   active: "Active",
   inactive: "Inactive",
@@ -123,6 +139,21 @@ export function CandidateFields({
                 <SelectItem value="placed">Placed</SelectItem>
               </SelectContent>
             </Select>
+          </Field>
+          {/* On the TiPP Focus CV template, and read automatically from a CV
+              already on it. Everything else has to be typed once. */}
+          <Field label="Designated group" htmlFor="cf-designated-group" highlight={extracted.designated_group}>
+            <ComboboxInput
+              id="cf-designated-group"
+              value={value.designated_group}
+              onChange={(v) => set("designated_group", v)}
+              suggestions={DESIGNATED_GROUPS}
+              placeholder="e.g. African Female"
+              highlight={extracted.designated_group}
+            />
+            <p className="mt-1 text-body-sm text-muted-foreground">
+              Appears on the submitted CV and is scored on most public sector bids.
+            </p>
           </Field>
           {/* Only needed when no placement explains the gap, e.g. parental leave
               or a candidate who has told you a date directly. */}
@@ -247,6 +278,7 @@ export const EMPTY_CANDIDATE: CandidateFormFields = {
   years_experience: null,
   professional_summary: null,
   availability: "available",
+  designated_group: null,
   available_from: null,
   status: "active",
   location: null,

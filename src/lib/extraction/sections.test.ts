@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { splitSections } from "@/lib/extraction/sections";
+import { splitSections, collapseLetterSpacing, matchHeading } from "@/lib/extraction/sections";
 import {
   parseListItems,
   classifySkills,
@@ -155,5 +155,157 @@ describe("parseTextToFields on a software CV", () => {
     expect(f.education.length).toBeGreaterThanOrEqual(1);
     expect(f.languages).toContain("Afrikaans");
     expect(f.certifications.some((c) => /Dynamics 365/.test(c))).toBe(true);
+  });
+});
+
+/**
+ * Letter-spaced headings, which broke a real CV completely.
+ *
+ * Tracking a heading out is a common design choice, and the extracted text
+ * keeps the spaces. One CV in the corpus produced no work history, no
+ * education, no summary and no experience total, because not one of its
+ * sections was recognised.
+ */
+describe("collapseLetterSpacing", () => {
+  it("recovers a heading that was tracked out", () => {
+    expect(collapseLetterSpacing("W O R K - E X P E R I E N C E")).toBe("WORK EXPERIENCE");
+    expect(collapseLetterSpacing("P R O F E S S I O N A L - S U M M A R Y")).toBe(
+      "PROFESSIONAL SUMMARY",
+    );
+  });
+
+  it("leaves an ordinary heading untouched", () => {
+    expect(collapseLetterSpacing("WORK EXPERIENCE")).toBe("WORK EXPERIENCE");
+    expect(collapseLetterSpacing("Education & Certifications")).toBe("Education & Certifications");
+  });
+
+  it("leaves prose alone even when it has short words", () => {
+    const prose = "I am a hard worker and I do a lot of work";
+    expect(collapseLetterSpacing(prose)).toBe(prose);
+  });
+
+  it("makes the tracked-out heading match as a section", () => {
+    expect(matchHeading("W O R K - E X P E R I E N C E")).toContain("experience");
+  });
+});
+
+describe("headings that terminate a section", () => {
+  it("stops the skills list at PROJECTS", () => {
+    // Without a match for PROJECTS the whole projects write-up was read as
+    // skills. One CV came back with 66 technical skills, among them
+    // "supporting multiple chat rooms" and a github.com link.
+    const { sections } = splitSections(`TECHNICAL SKILLS
+
+React, Node.js, PostgreSQL
+
+PROJECTS
+
+ChatFlow Real-Time Chat Application
+
+Built a chat application with WebSockets, supporting multiple chat rooms.`);
+    expect(sections.technical_skills?.trim()).toBe("React, Node.js, PostgreSQL");
+    expect(sections.projects).toContain("ChatFlow");
+    expect(sections.technical_skills).not.toContain("chat rooms");
+  });
+
+  it("leaves PROJECT EXPERIENCE as employment history", () => {
+    // The projects patterns are anchored so they cannot swallow a section that
+    // is genuinely a work history.
+    expect(matchHeading("PROJECT EXPERIENCE")).toEqual([]);
+    expect(matchHeading("PROJECTS")).toEqual(["projects"]);
+    expect(matchHeading("Key Projects")).toEqual(["projects"]);
+  });
+
+  it("stops a section at headings nothing reads", () => {
+    for (const heading of ["INTERESTS", "PUBLICATIONS", "PERSONAL DETAILS", "DECLARATION"]) {
+      expect(matchHeading(heading)).toEqual(["other"]);
+    }
+  });
+
+  it("files awards with the other achievements", () => {
+    expect(matchHeading("AWARDS")).toEqual(["achievements"]);
+  });
+});
+
+describe("skills lists with grouped labels", () => {
+  it("does not glue one group onto the label of the next", () => {
+    // These lines are about as long as a wrapped sentence, so the unwrapper
+    // joined them and invented "R Frontend: React".
+    const items = parseListItems(`Languages:  JavaScript, HTML5, SQL, R
+Frontend:  React, Vite, Tailwind CSS`);
+    expect(items).toContain("React");
+    expect(items).toContain("Vite");
+    expect(items.join(" ")).not.toContain("R Frontend");
+    // The label names the group, it is not a skill in its own right.
+    expect(items).not.toContain("Languages");
+  });
+
+  it("keeps a bracketed list of dialects out of the skill name", () => {
+    // Splitting inside the brackets produced "SQL (PostgreSQL", which the
+    // bracket repair turned into a "SQL PostgreSQL" nobody has heard of.
+    const items = parseListItems("data modelling, SQL (PostgreSQL, MS SQL), Microsoft Access");
+    expect(items).toContain("SQL");
+    expect(items).toContain("PostgreSQL");
+    expect(items).toContain("MS SQL");
+    expect(items).not.toContain("SQL PostgreSQL");
+  });
+
+  it("names each product under the vendor that supplies it", () => {
+    const items = parseListItems("SAP (S/4HANA, ECC, GRC, SuccessFactors)");
+    expect(items).toContain("SAP S/4HANA");
+    expect(items).toContain("SAP GRC");
+    expect(items).toContain("SAP");
+  });
+
+  it("leaves a version note attached to the thing it qualifies", () => {
+    // No comma inside the brackets, so this is a qualifier rather than a list.
+    const items = parseListItems("JavaScript (ES6+), Socket.io (WebSockets)");
+    expect(items).toContain("JavaScript (ES6+)");
+    expect(items).toContain("Socket.io (WebSockets)");
+  });
+
+  it("starts a new item after a bracket closes", () => {
+    // The CV left out a comma: "Microsoft Excel (Advanced) Jira, Lucid chart".
+    const items = parseListItems("Microsoft Office Suite, Microsoft Excel (Advanced) Jira, Lucid chart");
+    expect(items).toContain("Microsoft Excel (Advanced)");
+    expect(items).toContain("Jira");
+  });
+
+  it("keeps links and sentence clauses out of a skills list", () => {
+    const items = parseListItems(`github.com/Oseabi/chat-app, supporting multiple chat rooms,
+Implemented automated status tracking, Socket.io, Reporting`);
+    expect(items).not.toContain("github.com/Oseabi/chat-app");
+    expect(items).not.toContain("supporting multiple chat rooms");
+    expect(items).not.toContain("Implemented automated status tracking");
+    // A one-word gerund is a real skill and a product name is not a link.
+    expect(items).toContain("Socket.io");
+    expect(items).toContain("Reporting");
+  });
+});
+
+describe("skills that only look like duplicates", () => {
+  const cv = (skills: string) => `Sipho Ndlovu
+sipho@example.com
+
+TECHNICAL SKILLS
+${skills}
+
+EXPERIENCE
+Software Developer | Acme	2021 - present
+`;
+
+  it("keeps two technologies whose names overlap", () => {
+    // Plain containment was treating these as the same skill, so a tender
+    // asking for SQL stopped matching a developer who had listed it.
+    const f = parseTextToFields(cv("PostgreSQL, Supabase (PostgreSQL + RLS), SQL, Git, GitHub"), "sipho.pdf");
+    for (const skill of ["PostgreSQL", "SQL", "Git", "GitHub"]) {
+      expect(f.technical_skills).toContain(skill);
+    }
+  });
+
+  it("still drops a name written out more fully elsewhere", () => {
+    const f = parseTextToFields(cv("JavaScript, JavaScript (ES6+)"), "sipho.pdf");
+    expect(f.technical_skills).toContain("JavaScript (ES6+)");
+    expect(f.technical_skills).not.toContain("JavaScript");
   });
 });

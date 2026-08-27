@@ -1,4 +1,8 @@
-import type { WorkExperience, Education } from "@/lib/supabase/database.types";
+import type {
+  WorkExperience,
+  Education,
+  CandidateAvailability,
+} from "@/lib/supabase/database.types";
 
 /**
  * Fields the extraction engine attempts to pull from a CV or RFQ/RFI document.
@@ -23,10 +27,18 @@ export interface ExtractedCandidateFields {
   qualifications: string[];
   sectors: string[];
   languages: string[];
+  /** Stated outright on the TiPP Focus template; absent from most other CVs. */
+  designated_group: string | null;
   linkedin_url: string | null;
   portfolio_url: string | null;
   work_experience: WorkExperience[];
   education: Education[];
+  /**
+   * Only set when the document states it outright, as the TiPP Focus template
+   * does under AVAILABILITY. Undefined means the CV did not say, which is not
+   * the same as saying the candidate is available.
+   */
+  availability?: CandidateAvailability;
 }
 
 export interface ExtractionResult {
@@ -62,6 +74,7 @@ export function emptyExtractedFields(): ExtractedCandidateFields {
     qualifications: [],
     sectors: [],
     languages: [],
+    designated_group: null,
     linkedin_url: null,
     portfolio_url: null,
     work_experience: [],
