@@ -180,7 +180,19 @@ const WRAPPED_LINE_LENGTH = 60;
  * when `prev` looks genuinely unfinished, so a plain newline-separated list
  * ("MongoDB\nPostgreSQL") stays as separate items.
  */
+/**
+ * The start of a labelled group in a skills list, "Frontend:  React, Vite".
+ * Requires whitespace after the colon so a time ("09:00") or a ratio does not
+ * qualify.
+ */
+const GROUP_LABEL_START_RE = /^[A-Z][A-Za-z0-9 &/+.#-]{1,30}:\s/;
+
 function isContinuation(prev: string, line: string): boolean {
+  // A grouped skills list wraps to roughly the width of a wrapped sentence, so
+  // the length test below joined each group onto the one above it. That glued
+  // the last skill of one group to the next group's label and invented
+  // "R Frontend: React" and "PDFKit Databases: PostgreSQL".
+  if (GROUP_LABEL_START_RE.test(line)) return false;
   if (/[.!?;:]$/.test(prev)) return false; // prev completed a sentence/label
   if (/[-‐‑‒]$/.test(prev)) return true; // word split across the break
   if (/[,&/+]$/.test(prev)) return true; // dangling separator
@@ -213,7 +225,30 @@ const FILLER_ITEMS = new Set([
   "of", "in", "on", "as", "by", "from", "other", "others", "various",
 ]);
 /** Category labels that describe a group rather than being a skill themselves. */
-const META_LABEL_RE = /\b(skills?|competenc\w*|tools?|environments?|expertise|proficienc\w*|areas?|technolog\w*)\b/i;
+const META_LABEL_RE =
+  /\b(skills?|competenc\w*|tools?|environments?|expertise|proficienc\w*|areas?|technolog\w*|languages?|frameworks?|platforms?|libraries|methodolog\w*|front[- ]?end|back[- ]?end|full[- ]?stack|databases?|devops|testing|security|enterprise|other)\b/i;
+
+/**
+ * A link to the work is not a skill: "github.com/Oseabi/chat-app".
+ *
+ * Careful with the bare-domain case. A first attempt treated any ".io", ".dev"
+ * or ".app" name as a link and lost "Socket.io (WebSockets)", so a bare domain
+ * only counts on the TLDs no product is named after, plus the deploy hosts CVs
+ * actually link to.
+ */
+const URL_ITEM_RE =
+  /https?:\/\/|(?:^|\s)www\.|\b[a-z0-9-]+\.[a-z]{2,}\/\S|\b[a-z0-9-]+\.(?:vercel\.app|netlify\.app|github\.io|pages\.dev|herokuapp\.com)\b|\b[a-z0-9-]+\.(?:com|co\.za|org|net)\b/i;
+
+/**
+ * A clause lifted out of a sentence rather than the name of a skill. Comma
+ * splitting a paragraph produces plenty of these, and they read as nonsense on
+ * a profile: "supporting multiple chat rooms" was listed as a technical skill.
+ *
+ * Only applied from three words up, so one-word gerunds that genuinely are
+ * skills ("Reporting", "Budgeting") and short terms ("Managed Services") stay.
+ */
+const PROSE_START_RE =
+  /^(?:[a-z]+ing|designed|developed|implemented|delivered|built|created|configured|maintained|performed|supported|applied|deployed|persisted|achieved|assisted|coordinated|conducted|executed|improved|increased|reduced|responsible)\b/i;
 
 function cleanItem(raw: string): string | null {
   let v = raw.replace(BULLET_START_RE, "").replace(/[\s.,;:]+$/, "").trim();
@@ -225,6 +260,8 @@ function cleanItem(raw: string): string | null {
 
   if (v.length < 2 || v.length > 45) return null;
   if (v.split(/\s+/).length > 6) return null;
+  if (URL_ITEM_RE.test(v)) return null;
+  if (v.split(/\s+/).length >= 3 && PROSE_START_RE.test(v)) return null;
   if (FILLER_ITEMS.has(v.toLowerCase())) return null;
   if (!/[A-Za-z]/.test(v)) return null;
   return v;
@@ -235,6 +272,92 @@ function cleanItem(raw: string): string | null {
  * commas, pipes, semicolons, slashes-between-spaces, wrapped lines, and
  * "Category: a, b, c" groupings. Drops filler and prose-like fragments.
  */
+/**
+ * Split a list line on its separators, ignoring any that sit inside brackets,
+ * and treat a closing bracket followed by a capital as a separator too.
+ *
+ * "SQL (PostgreSQL, MS SQL)" is one skill written with its dialects. Splitting
+ * on the inner comma produced "SQL (PostgreSQL" and "MS SQL)", which the
+ * bracket repair below then turned into a "SQL PostgreSQL" nobody has heard of.
+ * The closing-bracket rule covers the other half of the same line, "Microsoft
+ * Excel (Advanced) Jira", where the CV simply left out a comma.
+ */
+function splitListLine(body: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let depth = 0;
+
+  const flush = () => {
+    parts.push(current);
+    current = "";
+  };
+
+  for (let i = 0; i < body.length; i += 1) {
+    const ch = body[i];
+
+    if (ch === "(" || ch === "[") depth += 1;
+    else if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
+
+    if (depth === 0) {
+      if (ch === "," || ch === ";" || ch === "|" || ch === "\t") {
+        flush();
+        continue;
+      }
+      // A slash separates items only when it stands alone, so "Agile/Scrum"
+      // survives while "AS-IS / TO-BE" splits.
+      if (ch === "/" && /\s$/.test(current) && /^\s/.test(body.slice(i + 1))) {
+        flush();
+        continue;
+      }
+      // "(Advanced) Jira": a new item starts after the bracket closes.
+      if (ch === " " && current.endsWith(")") && /^[A-Z]/.test(body.slice(i + 1))) {
+        flush();
+        continue;
+      }
+    }
+
+    current += ch;
+  }
+
+  flush();
+  return parts;
+}
+
+/** "SAP (S/4HANA, ECC, GRC)": a prefix followed by a bracketed list of two or more. */
+const BRACKETED_GROUP_RE = /^(.{2,40}?)\s*\(([^)]*,[^)]*)\)$/;
+
+/**
+ * Expand "SAP (S/4HANA, ECC, GRC, SuccessFactors)" into the vendor, each
+ * product, and each product under the vendor's name, so "SAP GRC" is matchable
+ * and a bare "GRC" is not the only record of it.
+ *
+ * The combination is skipped where the inner item already carries the prefix,
+ * which is what separates a vendor listing its products from a language listing
+ * its dialects: "SQL (PostgreSQL, MS SQL)" must not yield a "SQL PostgreSQL".
+ *
+ * Only groups containing a comma are expanded. A single bracket is a version or
+ * a qualifier rather than a list, and "JavaScript (ES6+)" reads better whole.
+ */
+function expandBracketedGroup(chunk: string): string[] {
+  const match = chunk.trim().match(BRACKETED_GROUP_RE);
+  if (!match) return [chunk];
+
+  const prefix = match[1].trim();
+  const inner = match[2]
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+  if (inner.length < 2) return [chunk];
+
+  const prefixToken = prefix.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const out = [prefix, ...inner];
+  for (const item of inner) {
+    const flat = item.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (prefixToken.length >= 2 && !flat.includes(prefixToken)) out.push(`${prefix} ${item}`);
+  }
+  return out;
+}
+
 export function parseListItems(text: string): string[] {
   if (!text) return [];
   const chunks: string[] = [];
@@ -248,9 +371,9 @@ export function parseListItems(text: string): string[] {
     if (grouped) {
       const label = grouped[1].trim();
       if (!META_LABEL_RE.test(label)) chunks.push(label);
-      chunks.push(...grouped[2].split(/[,;|]|\s+\/\s+|\t/));
+      chunks.push(...splitListLine(grouped[2]).flatMap(expandBracketedGroup));
     } else {
-      chunks.push(...body.split(/[,;|]|\s+\/\s+|\t/));
+      chunks.push(...splitListLine(body).flatMap(expandBracketedGroup));
     }
   }
 

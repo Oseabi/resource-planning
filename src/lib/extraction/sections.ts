@@ -12,6 +12,8 @@ export type SectionName =
   | "certifications"
   | "languages"
   | "achievements"
+  | "projects"
+  | "other"
   | "references";
 
 export interface SplitSections {
@@ -65,6 +67,8 @@ const HEADING_MATCHERS: { name: SectionName; patterns: RegExp[] }[] = [
       /^(?:key |selected )?accomplishments?\b/i,
       /^career highlights?\b/i,
       /^highlights?\b/i,
+      /^(?:awards?|prizes?)\b/i,
+      /^awards? (?:&|and) recognition\b/i,
     ],
   },
   {
@@ -102,6 +106,34 @@ const HEADING_MATCHERS: { name: SectionName; patterns: RegExp[] }[] = [
   {
     name: "languages",
     patterns: [/^languages?\b/i],
+  },
+  {
+    // Anchored, so "PROJECT EXPERIENCE" stays employment history rather than
+    // being diverted here.
+    name: "projects",
+    patterns: [
+      /^(?:key |selected |personal |side |notable |featured |academic )*projects?$/i,
+      /^portfolio$/i,
+    ],
+  },
+  {
+    // Nothing reads these. They exist so a heading the splitter does not know
+    // stops the section above it. One CV wrote its skills list directly above
+    // PROJECTS, and with no match for that word the entire projects section was
+    // read as skills: the candidate came back with 66 of them, among them
+    // "supporting multiple chat rooms" and a github.com URL.
+    name: "other",
+    patterns: [
+      /^(?:personal |additional |other )?(?:interests?|hobbies)\b/i,
+      /^publications?\b/i,
+      /^(?:professional )?(?:memberships?|affiliations?|associations?)\b/i,
+      /^personal (?:details|information|particulars)\b/i,
+      /^(?:additional|other|further) information\b/i,
+      /^declaration\b/i,
+      /^extra[- ]?curricular\b/i,
+      /^(?:community )?(?:volunteer|voluntary)/i,
+      /^availability\b/i,
+    ],
   },
   {
     name: "references",
