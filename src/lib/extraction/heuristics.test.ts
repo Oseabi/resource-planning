@@ -6,6 +6,7 @@ import {
   guessName,
   guessRole,
   guessExperienceYears,
+  parseExperience,
 } from "@/lib/extraction/heuristics";
 import { parseTextToFields } from "@/lib/extraction/local-parser";
 import { ALL_ROLES } from "@/lib/vocabulary";
@@ -132,5 +133,59 @@ describe("parseTextToFields (integration)", () => {
     expect(fields.skills).toEqual([]);
     expect(fields.technical_skills).toEqual([]);
     expect(fields.certifications).toEqual([]);
+  });
+});
+
+/**
+ * Employment written with no dates, which is common on early-career CVs and
+ * previously produced an empty work history: every entry required a date range,
+ * so a CV listing four jobs on four lines yielded nothing at all.
+ */
+describe("parseExperience: entries with no dates", () => {
+  it("reads one job per line and splits employer from role", () => {
+    const section = [
+      "Timula gemer & water- bookkeeper",
+      "RC Belle- beautician",
+      "Matseke's VIP catering events- sales administrator",
+      "Cyprus direct marketing (Credico)-Independent sales agent",
+    ].join("\n");
+
+    const entries = parseExperience(section);
+    expect(entries).toHaveLength(4);
+    expect(entries[0]).toMatchObject({ title: "bookkeeper", company: "Timula gemer & water" });
+    // The dash has no space before it here, and none after it on the last line.
+    expect(entries[3]).toMatchObject({
+      title: "Independent sales agent",
+      company: "Cyprus direct marketing (Credico)",
+    });
+  });
+
+  it("records the dates as unknown rather than inventing them", () => {
+    const [entry] = parseExperience("RC Belle- beautician");
+    expect(entry.start_date).toBeNull();
+    expect(entry.end_date).toBeNull();
+    expect(entry.is_current).toBe(false);
+  });
+
+  it("ignores prose and bullets in the same section", () => {
+    const section = [
+      "Acme Corp- developer",
+      "I was responsible for maintaining the payment service.",
+      "• Fixed the nightly batch",
+      "References available on request",
+    ].join("\n");
+
+    const entries = parseExperience(section);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].company).toBe("Acme Corp");
+  });
+
+  it("never displaces a dated entry", () => {
+    // The fallback only runs when nothing else matched, so a CV that already
+    // parses cannot be affected by it.
+    const section = "Senior Developer | Acme Corp\nJanuary 2020 - March 2023\nBuilt the platform";
+    const entries = parseExperience(section);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].start_date).toBe("January 2020");
   });
 });

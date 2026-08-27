@@ -400,7 +400,73 @@ export function parseExperience(text: string): WorkExperience[] {
     desc.push(line.replace(/^[\-–—*•·▪◦‣∙]\s*/, ""));
   }
   flush();
+
+  // Nothing matched, so fall back to reading each line as a job in its own
+  // right. Plenty of CVs, especially early-career ones, list employment with no
+  // dates at all: "Timula gemer & water- bookkeeper". Requiring a date range
+  // dropped every one of those, leaving the work history empty, which is worse
+  // than an entry whose dates are unknown.
+  //
+  // Guarded on finding nothing, so a CV that already parses cannot be affected.
+  if (entries.length === 0) return datelessEntries(lines);
+
   return entries.slice(0, 15);
+}
+
+/** Roles seen on the CVs this has to read, used to tell a job from a heading. */
+const ROLE_WORD_RE =
+  /\b(?:manager|consultant|analyst|developer|engineer|administrator|assistant|officer|director|specialist|coordinator|supervisor|technician|architect|designer|accountant|bookkeeper|clerk|agent|advisor|adviser|lead|head|intern|trainee|representative|beautician|cashier|waiter|waitress|tutor|teacher|nurse|driver)\b/i;
+
+/**
+ * Split "Employer- Role" into its halves.
+ *
+ * Looser than splitTitleCompany, which needs spaces either side of the dash.
+ * These lines are typed by hand and the spacing is inconsistent: "RC Belle-
+ * beautician", "Timula gemer & water- bookkeeper", "Cyprus direct marketing
+ * (Credico)-Independent sales agent" all appear on one CV. The last dash is
+ * used so a hyphenated employer name stays intact.
+ */
+function splitOnDash(line: string): [string, string | null] {
+  const at = Math.max(line.lastIndexOf("-"), line.lastIndexOf("–"), line.lastIndexOf("—"));
+  if (at <= 0) return [line, null];
+
+  const left = line.slice(0, at).trim();
+  const right = line.slice(at + 1).trim();
+  // Too short either side and this was a hyphenated word, not a separator.
+  return left.length >= 3 && right.length >= 3 ? [left, right] : [line, null];
+}
+
+/**
+ * One job per line, for CVs that carry no dates.
+ *
+ * Only the lines that name a recognisable role are taken, so a stray heading or
+ * a line of prose in the same section does not become an employment record.
+ */
+function datelessEntries(lines: string[]): WorkExperience[] {
+  const out: WorkExperience[] = [];
+
+  for (const line of lines) {
+    if (line.length < 6 || line.length > 90) continue;
+    if (/^[\-–—*•·▪◦‣∙]/.test(line)) continue; // a bullet is a duty, not a job
+    if (/[.!?]$/.test(line)) continue; // a sentence is prose
+    if (!ROLE_WORD_RE.test(line)) continue;
+
+    const [left, right] = splitOnDash(line);
+    // Written employer-first on this layout, but the half naming the role is
+    // the title whichever side it landed on.
+    const roleIsRight = right !== null && ROLE_WORD_RE.test(right);
+
+    out.push({
+      title: (roleIsRight ? right : left).trim() || "Role",
+      company: (roleIsRight ? left : (right ?? "")).trim(),
+      start_date: null,
+      end_date: null,
+      is_current: false,
+      description: null,
+    });
+  }
+
+  return out.slice(0, 15);
 }
 
 /** A short, non-bullet, non-sentence line directly under a role header. */

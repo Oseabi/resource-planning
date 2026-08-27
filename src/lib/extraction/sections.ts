@@ -128,8 +128,35 @@ function matchSingle(text: string): SectionName | null {
  * Sections a heading line maps to. Returns several for combined headings such as
  * "EDUCATION & CERTIFICATIONS", so the block feeds both parsers.
  */
+/**
+ * Undo letter-spaced headings, "W O R K - E X P E R I E N C E".
+ *
+ * Tracking a heading out is a common CV design, and the extracted text keeps
+ * the spaces, so the heading never matches and the section is lost. One real CV
+ * yielded no work history, no education and no summary for exactly this reason:
+ * not one of its sections was recognised.
+ *
+ * Only collapsed when nearly every token is a single character, which prose and
+ * ordinary headings never are.
+ */
+export function collapseLetterSpacing(line: string): string {
+  const tokens = line.trim().split(/\s+/);
+  if (tokens.length < 4) return line;
+
+  const singles = tokens.filter((t) => t.length === 1).length;
+  if (singles < tokens.length * 0.8) return line;
+
+  // The separator between words survives as its own token, so it becomes the
+  // word break once the letters are joined.
+  return tokens
+    .join("")
+    .replace(/[-–—_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function matchHeading(line: string): SectionName[] {
-  const trimmed = line
+  const trimmed = collapseLetterSpacing(line)
     .trim()
     .replace(/^[\s\-–—*•·▪◦‣∙]+/, "")
     .replace(/[:\s]+$/, "")

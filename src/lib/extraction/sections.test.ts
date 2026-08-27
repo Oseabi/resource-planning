@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { splitSections } from "@/lib/extraction/sections";
+import { splitSections, collapseLetterSpacing, matchHeading } from "@/lib/extraction/sections";
 import {
   parseListItems,
   classifySkills,
@@ -155,5 +155,36 @@ describe("parseTextToFields on a software CV", () => {
     expect(f.education.length).toBeGreaterThanOrEqual(1);
     expect(f.languages).toContain("Afrikaans");
     expect(f.certifications.some((c) => /Dynamics 365/.test(c))).toBe(true);
+  });
+});
+
+/**
+ * Letter-spaced headings, which broke a real CV completely.
+ *
+ * Tracking a heading out is a common design choice, and the extracted text
+ * keeps the spaces. One CV in the corpus produced no work history, no
+ * education, no summary and no experience total, because not one of its
+ * sections was recognised.
+ */
+describe("collapseLetterSpacing", () => {
+  it("recovers a heading that was tracked out", () => {
+    expect(collapseLetterSpacing("W O R K - E X P E R I E N C E")).toBe("WORK EXPERIENCE");
+    expect(collapseLetterSpacing("P R O F E S S I O N A L - S U M M A R Y")).toBe(
+      "PROFESSIONAL SUMMARY",
+    );
+  });
+
+  it("leaves an ordinary heading untouched", () => {
+    expect(collapseLetterSpacing("WORK EXPERIENCE")).toBe("WORK EXPERIENCE");
+    expect(collapseLetterSpacing("Education & Certifications")).toBe("Education & Certifications");
+  });
+
+  it("leaves prose alone even when it has short words", () => {
+    const prose = "I am a hard worker and I do a lot of work";
+    expect(collapseLetterSpacing(prose)).toBe(prose);
+  });
+
+  it("makes the tracked-out heading match as a section", () => {
+    expect(matchHeading("W O R K - E X P E R I E N C E")).toContain("experience");
   });
 });
