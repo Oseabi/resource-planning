@@ -1,5 +1,5 @@
 import "server-only";
-import { extractDocumentText } from "@/lib/extraction/text";
+import { extractDocumentText, extractDocumentTables } from "@/lib/extraction/text";
 import { parseTextToFields } from "@/lib/extraction/local-parser";
 import { emptyExtractedFields, type ExtractionResult } from "@/lib/extraction/types";
 
@@ -24,7 +24,10 @@ export async function extractFromDocument(
   // AI path intentionally not wired yet (no budget); falls through to local.
   // if (isAiExtractionEnabled()) return extractWithAi(buffer, mimeType, filename);
 
-  const rawText = await extractDocumentText(buffer, mimeType, filename);
+  const [rawText, tables] = await Promise.all([
+    extractDocumentText(buffer, mimeType, filename),
+    extractDocumentTables(buffer, mimeType, filename),
+  ]);
   const trimmed = rawText.trim();
 
   if (trimmed.length === 0) {
@@ -39,7 +42,7 @@ export async function extractFromDocument(
   }
 
   return {
-    fields: parseTextToFields(rawText, filename),
+    fields: parseTextToFields(rawText, filename, tables),
     raw_text: rawText,
     engine: "local",
     no_text_found: false,

@@ -22,6 +22,8 @@ import {
 import { splitSections } from "@/lib/extraction/sections";
 import { emptyExtractedFields, type ExtractedCandidateFields } from "@/lib/extraction/types";
 import { parseTippTemplate } from "@/lib/extraction/tipp-template";
+import { parseTippTables } from "@/lib/extraction/tipp-tables";
+import type { DocumentTables } from "@/lib/extraction/docx-tables";
 
 function dedupe(values: string[]): string[] {
   const seen = new Set<string>();
@@ -101,7 +103,31 @@ function headlineRoles(preamble: string): string[] {
  * section-aware heuristics + the seeded vocabulary. No AI, no network. Every
  * value is editable on the review form before saving.
  */
-export function parseTextToFields(text: string, filename?: string): ExtractedCandidateFields {
+export function parseTextToFields(
+  text: string,
+  filename?: string,
+  tables: DocumentTables = [],
+): ExtractedCandidateFields {
+  // Real tables beat reconstructed ones, so they are tried first. Falls through
+  // for PDFs, which carry no table structure, and for anything the table reader
+  // does not recognise as the template.
+  const fromTables = tables.length > 0 ? parseTippTables(tables) : null;
+  if (fromTables) {
+    // Some of the template's content is not in a table at all: contact details
+    // sit in the page header, and one CV writes its summary as a loose
+    // paragraph between two tables. Those fields are read from the text and
+    // filled in behind the table result, which stays authoritative for
+    // everything it did find.
+    const fromText = parseTippTemplate(text);
+    return {
+      ...fromTables,
+      email: fromTables.email ?? extractEmail(text),
+      phone: fromTables.phone ?? extractPhone(text),
+      linkedin_url: fromTables.linkedin_url ?? extractLinks(text).linkedin_url,
+      professional_summary: fromTables.professional_summary ?? fromText?.professional_summary ?? null,
+    };
+  }
+
   // Every CV the business receives comes off one Word template, and its tables
   // flatten in a way the generic heuristics below read badly, reporting the
   // table header as the candidate role. When the template is recognised its own

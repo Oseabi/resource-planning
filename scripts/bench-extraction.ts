@@ -23,6 +23,7 @@ import { extractText as extractPdfText, getDocumentProxy } from "unpdf";
 import { extractPdfTextWithLines, type PdfDocumentLike } from "@/lib/extraction/pdf-lines";
 import { parseRfqText } from "@/lib/extraction/rfq-parser";
 import { parseTextToFields } from "@/lib/extraction/local-parser";
+import { tablesFromHtml } from "@/lib/extraction/docx-tables";
 
 async function readDocument(file: string): Promise<string> {
   const buf = fs.readFileSync(file);
@@ -73,7 +74,13 @@ async function benchTender(file: string) {
 
 async function benchCv(file: string) {
   const text = await readDocument(file);
-  const f = parseTextToFields(text, path.basename(file));
+  // Mirrors the app: a .docx also yields its tables, which the parser prefers.
+  let tables: string[][][] = [];
+  if (/.docx$/i.test(file)) {
+    const { value } = await mammoth.convertToHtml({ path: file });
+    tables = tablesFromHtml(value);
+  }
+  const f = parseTextToFields(text, path.basename(file), tables);
   return [
     `  chars    ${text.length}`,
     `  name     ${show(f.full_name)}`,
@@ -84,6 +91,7 @@ async function benchCv(file: string) {
     `  summary  ${show(f.professional_summary, 60)}`,
     `  skills   ${f.skills.length} | tech ${f.technical_skills.length} | certs ${f.certifications.length}`,
     `  work     ${f.work_experience.length} | education ${f.education.length}`,
+    `  quals    ${show(f.qualifications)}`,
     `  work[0]  ${show(f.work_experience[0] ? `${f.work_experience[0].title} @ ${f.work_experience[0].company}` : null)}`,
   ];
 }
