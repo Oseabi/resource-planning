@@ -57,13 +57,33 @@ export function matchDictionary(text: string, terms: string[]): string[] {
     if (re.test(text)) found.push(term);
   }
 
-  // Drop any term that is a whole substring of another matched term.
+  // Drop a term that appears as a whole token inside another matched term,
+  // "SuccessFactors" beside "SAP SuccessFactors".
+  //
+  // Token boundaries, not plain containment. "React" contains the letters of
+  // "R" and "MongoDB" contains those of "Go", so a substring test quietly
+  // deleted both languages from every CV that listed them, and the careful
+  // short-term matching above went to waste.
   return found.filter((term) => {
     const lower = term.toLowerCase();
-    return !found.some(
-      (other) => other !== term && other.toLowerCase().includes(lower),
-    );
+    return !found.some((other) => {
+      if (other === term) return false;
+      const otherLower = other.toLowerCase();
+      return otherLower.length > lower.length && containsToken(otherLower, lower);
+    });
   });
+}
+
+/** True when `needle` sits in `haystack` bounded by non-alphanumerics. */
+function containsToken(haystack: string, needle: string): boolean {
+  for (let from = 0; ; from += 1) {
+    const at = haystack.indexOf(needle, from);
+    if (at === -1) return false;
+    const before = at === 0 ? "" : haystack[at - 1];
+    const after = haystack[at + needle.length] ?? "";
+    if (!/[a-z0-9]/.test(before) && !/[a-z0-9]/.test(after)) return true;
+    from = at;
+  }
 }
 
 const NAME_LINE_RE = /^[A-Za-z][A-Za-z'’.-]*(?:\s+[A-Za-z][A-Za-z'’.-]*){1,3}$/;

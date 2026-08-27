@@ -72,6 +72,32 @@ describe("matchDictionary", () => {
   it("respects word boundaries", () => {
     expect(matchDictionary("Revitalise the process", ["Revit"])).toEqual([]);
   });
+
+  it("keeps a one-letter language that another match merely spells", () => {
+    // "React" contains the letters of "R", and subsuming on plain containment
+    // deleted the language from every CV that listed it. Same for "Go", which
+    // "MongoDB" quietly swallowed.
+    const skills = matchDictionary(
+      `Languages: JavaScript, SQL, R
+Backend: React, Go, MongoDB`,
+      ["R", "React", "Go", "MongoDB", "SQL", "JavaScript"],
+    );
+    expect(skills).toContain("R");
+    expect(skills).toContain("Go");
+    expect(skills).toContain("React");
+    expect(skills).toContain("MongoDB");
+  });
+
+  it("does not read a bare R out of React", () => {
+    // The short-term rules still hold: one letter has to stand on its own.
+    expect(matchDictionary("Frontend: React, Redux", ["R", "React"])).toEqual(["React"]);
+  });
+
+  it("still folds a name into its vendor-qualified form", () => {
+    expect(
+      matchDictionary("Runs SAP SuccessFactors", ["SuccessFactors", "SAP SuccessFactors"]),
+    ).toEqual(["SAP SuccessFactors"]);
+  });
 });
 
 describe("guessName", () => {
