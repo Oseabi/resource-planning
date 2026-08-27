@@ -11,6 +11,7 @@ import {
   splitList,
   splitDuration,
   expandSkillLine,
+  mostRecentRole,
   yearsFromRows,
 } from "@/lib/extraction/tipp-template";
 import { parseTextToFields } from "@/lib/extraction/local-parser";
@@ -263,6 +264,76 @@ describe("splitList", () => {
       "IsiXhosa",
       "SeSotho",
     ]);
+  });
+
+  it("splits on an ampersand, which real CVs mix in with commas", () => {
+    // Found on a held-out CV, which reported a language of "Setswana & isiZulu".
+    expect(splitList("English, N. Sotho, Setswana & isiZulu")).toEqual([
+      "English",
+      "N. Sotho",
+      "Setswana",
+      "isiZulu",
+    ]);
+  });
+});
+
+/**
+ * These three came from CVs held back while the parser was written, and each
+ * one broke it. They are the reason the benchmark keeps a set aside.
+ */
+describe("variations found on held-out CVs", () => {
+  it("reads a duration written to the day, with ordinal suffixes", () => {
+    expect(splitDuration("11th Jun 2018 – 11th Dec 2018")).toEqual({
+      start: "11th Jun 2018",
+      end: "11th Dec 2018",
+      current: false,
+    });
+    expect(splitDuration("19th September 2022 - Present")).toEqual({
+      start: "19th September 2022",
+      end: null,
+      current: true,
+    });
+  });
+
+  it("still finds career rows when the dates carry a day", () => {
+    // Previously none matched, so the table was mistaken for prose and the
+    // whole thing ended up in the professional summary.
+    const rows = parseCareerSummary([
+      "COMPANY",
+      "POSITION",
+      "DURATION",
+      "Just Dynamics",
+      "Intern",
+      "11th Jun 2018 – 11th Dec 2018",
+      "Tipp Focus",
+      "Microsoft Dynamics 365 Consultant",
+      "19th September 2022 - Present",
+    ]);
+    expect(rows).toHaveLength(2);
+    expect(rows[1].position).toBe("Microsoft Dynamics 365 Consultant");
+  });
+
+  it("takes the current role from the latest row, not the first", () => {
+    // Some CVs list the career table oldest first, which reported a 2018
+    // internship as somebody's present job.
+    const oldestFirst = [
+      { position: "Intern", duration: "11th Jun 2018 – 11th Dec 2018" },
+      { position: "Junior Developer", duration: "14th Jan 2019 – 29th Sep 2019" },
+      { position: "Microsoft Dynamics 365 Consultant", duration: "19th September 2022 - Present" },
+    ];
+    expect(mostRecentRole(oldestFirst)).toBe("Microsoft Dynamics 365 Consultant");
+
+    const newestFirst = [...oldestFirst].reverse();
+    expect(mostRecentRole(newestFirst)).toBe("Microsoft Dynamics 365 Consultant");
+  });
+
+  it("falls back to the latest start date when no row is still running", () => {
+    expect(
+      mostRecentRole([
+        { position: "Analyst", duration: "2015 - 2018" },
+        { position: "Senior Analyst", duration: "2019 - 2021" },
+      ]),
+    ).toBe("Senior Analyst");
   });
 });
 

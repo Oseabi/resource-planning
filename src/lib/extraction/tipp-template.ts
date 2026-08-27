@@ -66,11 +66,22 @@ const MONTHS =
   "january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec";
 
 /**
- * A duration cell, e.g. "January 2015 - December 2021" or "Jan 2025 - Current".
+ * An optional leading day, with or without an ordinal suffix.
+ *
+ * Some CVs write the career table to the day: "11th Jun 2018 - 11th Dec 2018",
+ * "1st Oct 2019", "19th September 2022 - Present". Without this the duration
+ * cell is not recognised at all, no rows are found, and the whole career table
+ * is mistaken for prose and lands in the professional summary.
+ */
+const DAY = "(?:\\d{1,2}(?:st|nd|rd|th)?[\\s,]+)?";
+
+/**
+ * A duration cell, e.g. "January 2015 - December 2021", "Jan 2025 - Current"
+ * or "11th Jun 2018 - 11th Dec 2018".
  * Hyphen, en dash and em dash all appear in real files, so all three match.
  */
 const DURATION_RE = new RegExp(
-  `^\\s*((?:${MONTHS})?\\s*\\d{4})\\s*(?:[-\\u2013\\u2014]|to)\\s*((?:${MONTHS})?\\s*\\d{4}|current|present|to date|ongoing)\\s*$`,
+  `^\\s*(${DAY}(?:${MONTHS})?\\s*\\d{4})\\s*(?:[-\\u2013\\u2014]|to)\\s*(${DAY}(?:${MONTHS})?\\s*\\d{4}|current|present|to date|ongoing)\\s*$`,
   "i",
 );
 
@@ -249,11 +260,17 @@ export function expandSkillLine(line: string): string[] {
     .filter((part) => part.length > 1);
 }
 
-/** Split "English, IsiXhosa and SeSotho" into its parts. */
+/**
+ * Split "English, IsiXhosa and SeSotho" into its parts.
+ *
+ * "&" is included because real CVs mix separators in one cell, for example
+ * "English, N. Sotho, Setswana & isiZulu", which otherwise yields a language
+ * called "Setswana & isiZulu".
+ */
 export function splitList(value: string | null): string[] {
   if (!value) return [];
   return value
-    .split(/,|;|\/|\band\b/i)
+    .split(/,|;|\/|&|\band\b/i)
     .map((v) => v.trim())
     .filter((v) => v.length > 1);
 }
@@ -417,6 +434,36 @@ export function splitDuration(duration: string | null): {
   return { start: m[1].trim(), end: isCurrent ? null : end, current: isCurrent };
 }
 
+/**
+ * The job title from the most recent row, used when the CV states no POSITION.
+ *
+ * Not simply the first row: the career table is newest-first on some CVs and
+ * oldest-first on others, so taking row one reports an intern from 2018 as
+ * somebody's current role. A row still running wins outright, otherwise the
+ * latest start date does.
+ */
+export function mostRecentRole(
+  rows: { position: string; duration: string }[],
+): string | null {
+  let best: { position: string; year: number; current: boolean } | null = null;
+
+  for (const row of rows) {
+    if (!row.position?.trim()) continue;
+    const { start, current } = splitDuration(row.duration);
+    const year = yearOf(start) ?? 0;
+
+    if (
+      !best ||
+      (current && !best.current) ||
+      (current === best.current && year > best.year)
+    ) {
+      best = { position: row.position.trim(), year, current };
+    }
+  }
+
+  return best?.position ?? null;
+}
+
 /** Calendar year out of a duration half. */
 function yearOf(value: string | null): number | null {
   const m = value?.match(/(?:19|20)\d{2}/);
@@ -536,7 +583,11 @@ export function parseTippTemplate(
   // POSITION is the stated role. Older copies use that slot for DATE OF BIRTH
   // and state no role at all, so the most recent job title stands in.
   const statedRole = firstValue(sectionLines(sections, "POSITION"));
-  const current_role = statedRole ?? careerRows[0]?.position ?? employment[0]?.role ?? null;
+  const current_role =
+    statedRole ??
+    mostRecentRole(careerRows) ??
+    mostRecentRole(employment.map((b) => ({ position: b.role ?? "", duration: b.duration ?? "" }))) ??
+    null;
 
   const durations = careerRows.length
     ? careerRows.map((r) => r.duration)
