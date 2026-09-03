@@ -20,6 +20,7 @@ import { fillSummary } from "@/lib/positions";
 import { PositionMatches } from "@/app/(app)/position-matches";
 import { findBidConflicts } from "@/app/(app)/assignment-actions";
 import { ConfirmTeamBanner } from "@/app/(app)/tenders/[id]/confirm-team-banner";
+import { DeliveryPanel } from "@/app/(app)/tenders/[id]/delivery-panel";
 
 function formatValue(value: number | null): string {
   if (value == null) return "-";
@@ -147,6 +148,17 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
           {isAdmin && <DeleteTenderButton tenderId={tender.id} tenderTitle={tender.title} />}
         </div>
       </div>
+
+      {/* Only once the bid is won. Before that the contract does not exist and
+          the page is about assembling a team to bid with. */}
+      {delivery && (
+        <DeliveryPanel
+          tenderId={id}
+          state={delivery}
+          contractStartDate={tender.contract_start_date}
+          contractEndDate={tender.contract_end_date}
+        />
+      )}
 
       <div>
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
