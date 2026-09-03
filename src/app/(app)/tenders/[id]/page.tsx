@@ -21,6 +21,7 @@ import { PositionMatches } from "@/app/(app)/position-matches";
 import { findBidConflicts } from "@/app/(app)/assignment-actions";
 import { ConfirmTeamBanner } from "@/app/(app)/tenders/[id]/confirm-team-banner";
 import { DeliveryPanel } from "@/app/(app)/tenders/[id]/delivery-panel";
+import { SeatCoveragePanel } from "@/app/(app)/tenders/[id]/seat-coverage-panel";
 
 function formatValue(value: number | null): string {
   if (value == null) return "-";
@@ -167,6 +168,25 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
             {fill.filledSeats} of {fill.totalSeats} seat{fill.totalSeats === 1 ? "" : "s"} filled
           </span>
         </div>
+        {/* Rendered for every status but lost, because the question is asked
+            hardest before the bid goes in. */}
+        {tender.status !== "lost" && (
+          <div className="mb-3">
+            <SeatCoveragePanel
+              tenderId={id}
+              startDate={tender.contract_start_date}
+              seats={positionViews.map((p) => ({
+                positionId: p.id,
+                role: p.role,
+                quantity: p.quantity,
+                matches: p.matches.map((m) => ({ candidateId: m.candidateId, score: m.score })),
+              }))}
+              // findBidConflicts already ran for the shortlist above, so the
+              // people promised elsewhere cost no extra query.
+              softCommitments={Object.keys(conflictsByCandidate)}
+            />
+          </div>
+        )}
         {tender.status === "won" && (
           <ConfirmTeamBanner
             tenderId={id}
