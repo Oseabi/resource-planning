@@ -10,6 +10,11 @@ export interface Deployment {
   /** Stable key. Seat id where there is one, otherwise the placement's own id. */
   key: string;
   positionId: string | null;
+  /**
+   * The placement behind this row, when there is one. Null for a bare proposal
+   * on a bid not yet won, which correctly has no dates to edit.
+   */
+  placementId: string | null;
   /** Null for a placement with no seat behind it, e.g. one predating positions. */
   role: string | null;
   /** 'proposed' on a bid not yet won, 'placed' once it is real. */
@@ -128,6 +133,7 @@ export async function loadDeployments(
     rows.push({
       key: position.id,
       positionId: position.id,
+      placementId: placement?.id ?? null,
       role: position.role,
       status: a.status === "placed" ? "placed" : "proposed",
       parentType: position.parent_type,
@@ -157,6 +163,7 @@ export async function loadDeployments(
     rows.push({
       key: `placement:${p.id}`,
       positionId: p.position_id,
+      placementId: p.id,
       role: viaPosition?.role ?? null,
       status: "placed",
       parentType,
