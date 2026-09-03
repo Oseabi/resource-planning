@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/layout/empty-state";
-import { TenderStatusBadge, StrengthBar } from "@/app/(app)/tenders/tender-badges";
+import { TenderStatusBadge, DeliveryStateBadge, StrengthBar } from "@/app/(app)/tenders/tender-badges";
+import { deliveryState } from "@/lib/delivery";
 import { RfqUploadZone } from "@/app/(app)/tenders/rfq-upload-zone";
 import { poolStrength } from "@/lib/matching";
 
@@ -33,7 +34,7 @@ export default async function TendersPage() {
 
   const { data: tenders } = await supabase
     .from("tenders")
-    .select("id, title, client, value, submission_deadline, status")
+    .select("id, title, client, value, submission_deadline, status, contract_start_date, contract_end_date")
     .order("created_at", { ascending: false });
 
   const rows = tenders ?? [];
@@ -59,6 +60,11 @@ export default async function TendersPage() {
   }
 
   const liveCount = rows.filter((t) => t.status === "live").length;
+  // A won bid used to read the same whether it was starting next month, running
+  // now, or finished two years ago, so the contracts carrying the company's
+  // people were the least visible thing on the page.
+  const deliveryByTender = new Map(rows.map((t) => [t.id, deliveryState(t)]));
+  const inDeliveryCount = [...deliveryByTender.values()].filter((d) => d === "in_delivery").length;
   const now = new Date();
   const in7 = new Date(now.getTime() + 7 * 24 * 3600 * 1000);
   const deadlinesSoon = rows.filter((t) => {
@@ -86,8 +92,9 @@ export default async function TendersPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Live tenders" value={String(liveCount)} />
+        <StatCard label="In delivery" value={String(inDeliveryCount)} />
         <StatCard label="Deadlines (next 7 days)" value={String(deadlinesSoon)} accent={deadlinesSoon > 0} />
         <StatCard label="Avg. match strength" value={strengths.length ? `${avgStrength}%` : "-"} />
       </div>
@@ -131,7 +138,12 @@ export default async function TendersPage() {
                         <TableCell className="text-foreground">{formatValue(t.value)}</TableCell>
                         <TableCell className="text-foreground">{formatDate(t.submission_deadline)}</TableCell>
                         <TableCell>
-                          <TenderStatusBadge status={t.status} />
+                          <div className="flex flex-col items-start gap-1">
+                            <TenderStatusBadge status={t.status} />
+                            {deliveryByTender.get(t.id) && (
+                              <DeliveryStateBadge state={deliveryByTender.get(t.id)!} />
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           {strength != null ? (
@@ -161,7 +173,12 @@ export default async function TendersPage() {
                             {t.client ?? "-"} · {formatValue(t.value)} · Due {formatDate(t.submission_deadline)}
                           </div>
                         </div>
-                        <TenderStatusBadge status={t.status} />
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <TenderStatusBadge status={t.status} />
+                          {deliveryByTender.get(t.id) && (
+                            <DeliveryStateBadge state={deliveryByTender.get(t.id)!} />
+                          )}
+                        </div>
                       </div>
                       <div className="mt-2">
                         {strength != null ? (
