@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import type { TenderStatus } from "@/lib/supabase/database.types";
+import { DELIVERY_LABELS, type DeliveryState } from "@/lib/delivery";
 
 const STATUS_STYLES: Record<TenderStatus, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -27,6 +28,31 @@ export function TenderStatusBadge({ status }: { status: TenderStatus }) {
     >
       <span className="size-1.5 rounded-full bg-current" />
       {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+const DELIVERY_STYLES: Record<DeliveryState, string> = {
+  awarded: "bg-primary/10 text-primary",
+  in_delivery: "bg-success/10 text-success",
+  completed: "bg-muted text-muted-foreground",
+};
+
+/**
+ * Where a won bid sits in its contract. Sits beside the status badge rather
+ * than replacing it, because "we won this" and "it is running right now" are
+ * different facts and a reader wants both.
+ */
+export function DeliveryStateBadge({ state }: { state: DeliveryState }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-label-md font-medium",
+        DELIVERY_STYLES[state],
+      )}
+    >
+      <span className="size-1.5 rounded-full bg-current" />
+      {DELIVERY_LABELS[state]}
     </span>
   );
 }

@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil, Briefcase, MapPin, CalendarClock, Banknote, Clock } from "lucide-react";
+import { ArrowLeft, Pencil, Briefcase, MapPin, CalendarClock, CalendarRange, Banknote, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { Button } from "@/components/ui/button";
-import { TenderStatusBadge } from "@/app/(app)/tenders/tender-badges";
+import { TenderStatusBadge, DeliveryStateBadge } from "@/app/(app)/tenders/tender-badges";
+import { deliveryState, contractWindowLabel } from "@/lib/delivery";
 import { CvDownloadButton } from "@/app/(app)/candidates/[id]/cv-download-button";
 import { DeleteTenderButton } from "@/app/(app)/tenders/[id]/delete-tender-button";
 import {
@@ -83,6 +84,8 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
   }));
   const strength = poolStrength(matches.map((m) => m.score));
 
+  const delivery = deliveryState(tender);
+
   const tags: { icon: React.ReactNode; label: string }[] = [];
   for (const r of tender.required_roles.slice(0, 4)) tags.push({ icon: <Briefcase className="size-3.5" />, label: r });
   if (tender.min_experience_years != null)
@@ -91,6 +94,14 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
   if (tender.value != null) tags.push({ icon: <Banknote className="size-3.5" />, label: formatValue(tender.value) });
   if (tender.submission_deadline)
     tags.push({ icon: <CalendarClock className="size-3.5" />, label: `Due ${tender.submission_deadline}` });
+  // The contract window has been stored since the first migration and shown
+  // nowhere, so a running contract looked identical to one that finished a year
+  // ago.
+  if (tender.contract_start_date || tender.contract_end_date)
+    tags.push({
+      icon: <CalendarRange className="size-3.5" />,
+      label: contractWindowLabel(tender.contract_start_date, tender.contract_end_date),
+    });
 
   return (
     <div className="space-y-6">
@@ -106,6 +117,7 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
               <span className="text-label-sm uppercase tracking-wide text-muted-foreground">{tender.client}</span>
             )}
             <TenderStatusBadge status={tender.status} />
+            {delivery && <DeliveryStateBadge state={delivery} />}
           </div>
           <h1 className="mt-1 text-display font-semibold text-foreground">{tender.title}</h1>
           {tender.reference_number && (
@@ -144,7 +156,12 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
           </span>
         </div>
         {tender.status === "won" && (
-          <ConfirmTeamBanner tenderId={id} proposedCount={proposedCount} />
+          <ConfirmTeamBanner
+            tenderId={id}
+            proposedCount={proposedCount}
+            contractStartDate={tender.contract_start_date}
+            contractEndDate={tender.contract_end_date}
+          />
         )}
         <PositionMatches
           positions={positionViews}

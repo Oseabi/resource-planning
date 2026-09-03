@@ -204,6 +204,8 @@ export interface Database {
           value: number | null;
           submission_deadline: string | null;
           contract_start_date: string | null;
+          /** When the awarded contract finishes. Null means open ended. */
+          contract_end_date: string | null;
           required_roles: string[];
           required_skills: string[];
           required_certifications: string[];

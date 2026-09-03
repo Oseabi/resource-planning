@@ -41,6 +41,9 @@ function toForm(f: ExtractedTenderFields): TenderFormFields {
     value: f.value,
     submission_deadline: f.submission_deadline,
     contract_start_date: f.contract_start_date,
+    // The parser reads a start date but has no notion of a contract period, so
+    // the end is always typed in.
+    contract_end_date: null,
     required_roles: f.required_roles,
     required_skills: f.required_skills,
     required_certifications: f.required_certifications,

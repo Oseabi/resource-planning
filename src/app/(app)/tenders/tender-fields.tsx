@@ -34,6 +34,7 @@ export const EMPTY_TENDER: TenderFormFields = {
   value: null,
   submission_deadline: null,
   contract_start_date: null,
+  contract_end_date: null,
   required_roles: [],
   required_skills: [],
   required_certifications: [],
@@ -81,6 +82,12 @@ export function TenderFields({
           </Field>
           <Field label="Contract start date" htmlFor="tf-start" highlight={extracted.contract_start_date}>
             <Input id="tf-start" type="date" value={value.contract_start_date ?? ""} onChange={(e) => set("contract_start_date", e.target.value || null)} />
+          </Field>
+          {/* The end of the window is what makes a won bid a running contract
+              rather than a result, so the delivery view and the extension both
+              hang off it. Left blank it reads as open ended. */}
+          <Field label="Contract end date" htmlFor="tf-end">
+            <Input id="tf-end" type="date" min={value.contract_start_date ?? undefined} value={value.contract_end_date ?? ""} onChange={(e) => set("contract_end_date", e.target.value || null)} />
           </Field>
           <Field label="Status" htmlFor="tf-status">
             <Select value={value.status} onValueChange={(v) => set("status", v as TenderStatus)}>

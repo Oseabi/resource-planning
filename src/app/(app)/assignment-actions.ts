@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { seatCount } from "@/lib/positions";
 import { recordEvent } from "@/app/(app)/activity-actions";
+import { validatePlacementWindow } from "@/lib/delivery";
 
 export type AssignResult = { error: string | null };
 
@@ -259,11 +260,18 @@ export async function findBidConflicts(
  *
  * Called when a tender's status becomes `won`: the bid is no longer speculative,
  * so the team genuinely is placed and should count toward revenue.
+ *
+ * The end date matters more than it looks. Written null, every member reads as
+ * committed with no end in sight, drops out of the bench forecast permanently
+ * and never satisfies a "free by" question. Confirming a team used to make that
+ * team invisible to every forward-looking number in the system.
  */
 export async function confirmTenderTeam(
   tenderId: string,
   feeValue: number,
   startDate: string,
+  /** Null keeps the placement open ended, as the vacancy path already allows. */
+  endDate?: string | null,
 ): Promise<{ error: string | null; placed?: number }> {
   const supabase = await createClient();
   const {
@@ -273,6 +281,8 @@ export async function confirmTenderTeam(
   if (!(Number(feeValue) >= 0) || !startDate) {
     return { error: "Fee and start date are required." };
   }
+  const windowError = validatePlacementWindow(startDate, endDate ?? null);
+  if (windowError) return { error: windowError };
 
   const { data: positions } = await supabase
     .from("positions")
@@ -298,6 +308,7 @@ export async function confirmTenderTeam(
       position_id: a.position_id,
       fee_value: Number(feeValue),
       start_date: startDate,
+      end_date: endDate || null,
       created_by: user.id,
     })),
   );
@@ -315,10 +326,13 @@ export async function confirmTenderTeam(
   await recordEvent("tender", tenderId, "team_confirmed", {
     placed: proposed.length,
     start_date: startDate,
+    end_date: endDate || "open ended",
   });
 
   revalidatePath(`/tenders/${tenderId}`);
+  revalidatePath("/tenders");
   revalidatePath("/candidates");
+  revalidatePath("/dashboard");
   revalidatePath("/analytics");
   return { error: null, placed: proposed.length };
 }
