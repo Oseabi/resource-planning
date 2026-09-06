@@ -108,6 +108,20 @@ export async function SeatCoveragePanel({
             <span className="text-body-sm text-muted-foreground">
               {s.free} free of {s.needed} needed
             </span>
+            {/* Without this a seat reads "0 free of 2 needed" and says nothing
+                about why, so nobody qualified and everybody busy look the same.
+                They call for opposite responses: one is a hiring problem, the
+                other a scheduling one. */}
+            {s.committedHard > 0 && (
+              <span className="rounded-lg bg-muted px-2 py-0.5 text-label-md font-medium text-muted-foreground">
+                {s.committedHard} on other work
+              </span>
+            )}
+            {s.qualified === 0 && (
+              <span className="rounded-lg bg-destructive/10 px-2 py-0.5 text-label-md font-medium text-destructive">
+                Nobody qualified
+              </span>
+            )}
             {s.committedSoft > 0 && (
               <span className="rounded-lg bg-primary/10 px-2 py-0.5 text-label-md font-medium text-primary">
                 {s.committedSoft} promised to other bids

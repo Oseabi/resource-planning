@@ -58,7 +58,7 @@ export async function DeliveryPanel({
       ? "Nobody is placed on this contract yet, so only the tender's own dates will move."
       : contractEndDate === null
         ? "This contract has no end date recorded, so nobody moves with it. Give the team dates first, or set each placement individually."
-        : `${aligned.length} placement${aligned.length === 1 ? "" : "s"} end on ${formatDate(contractEndDate)} and will move with the contract.` +
+        : `${aligned.length} placement${aligned.length === 1 ? " ends" : "s end"} on ${formatDate(contractEndDate)} and will move with the contract.` +
           (overridden.length > 0
             ? ` ${overridden.length} ${overridden.length === 1 ? "has its own end date and will not" : "have their own end dates and will not"}.`
             : "");
