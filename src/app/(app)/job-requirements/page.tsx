@@ -23,17 +23,41 @@ export default async function JobRequirementsPage() {
 
   const rows = requirements ?? [];
 
-  // Match counts per requirement (single query, grouped in app).
+  // Distinct candidates scored against this requirement, counted through its
+  // seats.
+  //
+  // Scores are stored per position, not per requirement, since 0012 gave each
+  // seat its own skills and experience floor. This asked for match_target_type
+  // 'job_requirement', which nothing has written since, so the column read 0
+  // however much matching had been run. Counted distinct rather than summed,
+  // because one candidate is scored once per seat and adding those up would
+  // report far more people than exist.
   const ids = rows.map((r) => r.id);
   const countByReq = new Map<string, number>();
   if (ids.length) {
-    const { data: matches } = await supabase
-      .from("matches")
-      .select("match_target_id")
-      .eq("match_target_type", "job_requirement")
-      .in("match_target_id", ids);
-    for (const m of matches ?? []) {
-      countByReq.set(m.match_target_id, (countByReq.get(m.match_target_id) ?? 0) + 1);
+    const { data: positions } = await supabase
+      .from("positions")
+      .select("id, parent_id")
+      .eq("parent_type", "job_requirement")
+      .in("parent_id", ids);
+
+    const requirementByPosition = new Map((positions ?? []).map((p) => [p.id, p.parent_id]));
+    if (requirementByPosition.size > 0) {
+      const { data: matches } = await supabase
+        .from("matches")
+        .select("match_target_id, candidate_id")
+        .eq("match_target_type", "position")
+        .in("match_target_id", [...requirementByPosition.keys()]);
+
+      const seen = new Map<string, Set<string>>();
+      for (const m of matches ?? []) {
+        const reqId = requirementByPosition.get(m.match_target_id);
+        if (!reqId) continue;
+        const set = seen.get(reqId) ?? new Set<string>();
+        set.add(m.candidate_id);
+        seen.set(reqId, set);
+      }
+      for (const [reqId, set] of seen) countByReq.set(reqId, set.size);
     }
   }
 

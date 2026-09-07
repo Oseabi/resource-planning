@@ -1,3 +1,7 @@
+-- DO NOT RUN. This database holds real records.
+-- Stages a demo walkthrough, and renames a candidate matched by LIKE.
+-- See supabase/archive/README.md.
+
 -- ============================================================================
 -- Demo prep. Three cosmetic fixes so a walkthrough does not undersell the app.
 -- Paste into the Supabase SQL Editor and Run.

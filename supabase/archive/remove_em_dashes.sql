@@ -1,3 +1,7 @@
+-- DO NOT RUN. This database holds real records.
+-- Rewrites free text across five tables and four tender titles by LIKE, is not
+-- scoped to demo rows, and has no undo. See supabase/archive/README.md.
+
 -- ============================================================================
 -- Remove em dashes from stored data.
 --

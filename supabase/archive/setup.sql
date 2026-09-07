@@ -1,3 +1,8 @@
+-- DO NOT RUN. This database holds real records.
+-- This file opens with drop table ... cascade on every application table, and
+-- predates the activity table so it no longer builds the full schema either.
+-- See supabase/archive/README.md.
+
 -- ============================================================================
 -- Resource Planning, full database setup
 -- Paste this whole file into the Supabase dashboard SQL Editor and click "Run".

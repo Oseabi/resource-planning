@@ -39,24 +39,43 @@ export default async function TendersPage() {
 
   const rows = tenders ?? [];
 
-  // Match strength per tender from persisted matches.
+  // Match strength per tender, rolled up from its seats.
+  //
+  // Scores are stored per position, not per tender: since 0012 each seat has
+  // its own skills, certifications and experience floor, so a candidate scores
+  // differently against each one and there is no single tender-wide score to
+  // read. This column asked for match_target_type 'tender', which nothing has
+  // written since, so every row read "Not matched" however much matching had
+  // been run. The same roll-up loadPositionViews performs on the detail page.
   const strengthByTender = new Map<string, number>();
   if (rows.length) {
-    const { data: matches } = await supabase
-      .from("matches")
-      .select("match_target_id, score")
-      .eq("match_target_type", "tender")
+    const { data: positions } = await supabase
+      .from("positions")
+      .select("id, parent_id")
+      .eq("parent_type", "tender")
       .in(
-        "match_target_id",
+        "parent_id",
         rows.map((t) => t.id),
       );
-    const grouped = new Map<string, number[]>();
-    for (const m of matches ?? []) {
-      const list = grouped.get(m.match_target_id) ?? [];
-      list.push(m.score);
-      grouped.set(m.match_target_id, list);
+
+    const tenderByPosition = new Map((positions ?? []).map((p) => [p.id, p.parent_id]));
+    if (tenderByPosition.size > 0) {
+      const { data: matches } = await supabase
+        .from("matches")
+        .select("match_target_id, score")
+        .eq("match_target_type", "position")
+        .in("match_target_id", [...tenderByPosition.keys()]);
+
+      const grouped = new Map<string, number[]>();
+      for (const m of matches ?? []) {
+        const tenderId = tenderByPosition.get(m.match_target_id);
+        if (!tenderId) continue;
+        const list = grouped.get(tenderId) ?? [];
+        list.push(m.score);
+        grouped.set(tenderId, list);
+      }
+      for (const [tid, scores] of grouped) strengthByTender.set(tid, poolStrength(scores));
     }
-    for (const [tid, scores] of grouped) strengthByTender.set(tid, poolStrength(scores));
   }
 
   const liveCount = rows.filter((t) => t.status === "live").length;
