@@ -39,6 +39,15 @@ const STATUSES: TenderStatus[] = ["draft", "live", "submitted", "won", "lost"];
 /** Bids that have to be staffed, so a seatless row is a row nobody can answer for. */
 const NEEDS_SEATS: TenderStatus[] = ["live", "submitted", "won"];
 
+/**
+ * The bid number in docs/tender-register-template.xlsx's example row.
+ *
+ * Forgetting to delete the example is the likeliest mistake anybody makes with
+ * a filled-in template, and it is an exact string rather than a guess, so it is
+ * worth saying plainly instead of quietly creating a tender that does not exist.
+ */
+const TEMPLATE_EXAMPLE_REFERENCE = "SCM/2026/0148";
+
 export interface SeatSpec {
   role: string;
   quantity: number;
@@ -401,6 +410,10 @@ export function readRows(
 
     if (status && NEEDS_SEATS.includes(status) && seatResult.seats.length === 0) {
       reasons.push(`a ${status} bid has to say what it needs to be staffed with`);
+    }
+
+    if (cell("reference_number").trim().toUpperCase() === TEMPLATE_EXAMPLE_REFERENCE) {
+      reasons.push("this is the example row from the template, delete it before sending the file");
     }
 
     if (!cell("reference_number").trim()) warnings.push("no reference number");
