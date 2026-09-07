@@ -155,6 +155,16 @@ const HEADERS = "title,reference_number,client,status,contract_start_date,contra
 const rows = (body: string) => readRows(parseCsv(`${HEADERS}\n${body}`), index);
 
 describe("readRows", () => {
+  it("refuses the template's own example row", () => {
+    // Forgetting to delete it is the likeliest mistake anybody makes with a
+    // filled-in template, and it would otherwise create a tender for a bid that
+    // does not exist.
+    const { problems } = rows(
+      "Provision of ERP support and maintenance services,SCM/2026/0148,City of Cape Town,live,,,,Project Manager",
+    );
+    expect(problems[0].reasons.join(" ")).toMatch(/example row from the template/);
+  });
+
   it("reads a complete row", () => {
     const { parsed, problems } = rows(
       "ERP support,REF-1,Eskom,live,2026-04-01,2028-03-31,R 12 500 000,3 x Business Analyst @5 | Project Manager",
