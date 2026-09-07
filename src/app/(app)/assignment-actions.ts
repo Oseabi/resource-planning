@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { seatCount } from "@/lib/positions";
 import { recordEvent } from "@/app/(app)/activity-actions";
+import { validatePlacementWindow } from "@/lib/delivery";
 
 export type AssignResult = { error: string | null };
 
@@ -259,11 +260,18 @@ export async function findBidConflicts(
  *
  * Called when a tender's status becomes `won`: the bid is no longer speculative,
  * so the team genuinely is placed and should count toward revenue.
+ *
+ * The end date matters more than it looks. Written null, every member reads as
+ * committed with no end in sight, drops out of the bench forecast permanently
+ * and never satisfies a "free by" question. Confirming a team used to make that
+ * team invisible to every forward-looking number in the system.
  */
 export async function confirmTenderTeam(
   tenderId: string,
   feeValue: number,
   startDate: string,
+  /** Null keeps the placement open ended, as the vacancy path already allows. */
+  endDate?: string | null,
 ): Promise<{ error: string | null; placed?: number }> {
   const supabase = await createClient();
   const {
@@ -273,6 +281,8 @@ export async function confirmTenderTeam(
   if (!(Number(feeValue) >= 0) || !startDate) {
     return { error: "Fee and start date are required." };
   }
+  const windowError = validatePlacementWindow(startDate, endDate ?? null);
+  if (windowError) return { error: windowError };
 
   const { data: positions } = await supabase
     .from("positions")
@@ -298,6 +308,7 @@ export async function confirmTenderTeam(
       position_id: a.position_id,
       fee_value: Number(feeValue),
       start_date: startDate,
+      end_date: endDate || null,
       created_by: user.id,
     })),
   );
@@ -315,10 +326,93 @@ export async function confirmTenderTeam(
   await recordEvent("tender", tenderId, "team_confirmed", {
     placed: proposed.length,
     start_date: startDate,
+    end_date: endDate || "open ended",
   });
 
   revalidatePath(`/tenders/${tenderId}`);
+  revalidatePath("/tenders");
   revalidatePath("/candidates");
+  revalidatePath("/dashboard");
   revalidatePath("/analytics");
   return { error: null, placed: proposed.length };
+}
+
+/**
+ * Move one placement's dates.
+ *
+ * The contract window on a tender covers the normal case, where the whole team
+ * runs for the same period. This is the exception: somebody joined late, left
+ * early, or the dates were recorded wrong and nothing in the app could correct
+ * them, because until now no code updated a placement at all.
+ *
+ * A placement carrying its own end date is also what marks it as deliberately
+ * overridden, so extending the contract afterwards leaves it alone.
+ *
+ * Deliberately does not touch candidates.status. The trigger that sets 'placed'
+ * fires on insert only, so setting an end date in the past leaves someone
+ * flagged as placed while availableFrom reports them free. That inconsistency
+ * already exists and fixing it means deciding who owns that column, which is a
+ * change of its own.
+ */
+export async function updatePlacementDates(
+  placementId: string,
+  startDate: string,
+  endDate: string | null,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated." };
+
+  const windowError = validatePlacementWindow(startDate, endDate);
+  if (windowError) return { error: windowError };
+
+  // Read first, so the timeline can say what moved from what, and so a missing
+  // row is reported rather than silently ignored.
+  const { data: placement } = await supabase
+    .from("placements")
+    .select("id, candidate_id, source_type, source_id, start_date, end_date")
+    .eq("id", placementId)
+    .single();
+  if (!placement) return { error: "That placement no longer exists. Reload the page." };
+
+  // .select() for the same reason unassignCandidate does it: an UPDATE matching
+  // nothing is not an error and RLS filters rows rather than raising, so without
+  // the count a no-op reports success and writes a timeline entry for a change
+  // that never happened.
+  const { data: updated, error } = await supabase
+    .from("placements")
+    .update({ start_date: startDate, end_date: endDate })
+    .eq("id", placementId)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "Those dates could not be saved. Reload the page and try again." };
+  }
+
+  const { data: candidate } = await supabase
+    .from("candidates")
+    .select("full_name")
+    .eq("id", placement.candidate_id)
+    .single();
+
+  const detail = {
+    candidate: candidate?.full_name ?? "Unknown candidate",
+    from_start: placement.start_date,
+    to_start: startDate,
+    from_end: placement.end_date ?? "open ended",
+    to_end: endDate ?? "open ended",
+  };
+
+  await Promise.all([
+    recordEvent(placement.source_type, placement.source_id, "dates_changed", detail),
+    recordEvent("candidate", placement.candidate_id, "dates_changed", detail),
+  ]);
+
+  revalidatePath(parentPath(placement.source_type, placement.source_id));
+  revalidatePath(`/candidates/${placement.candidate_id}`);
+  revalidatePath("/candidates");
+  revalidatePath("/dashboard");
+  return { error: null };
 }

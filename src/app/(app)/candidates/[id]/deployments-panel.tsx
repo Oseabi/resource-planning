@@ -3,6 +3,7 @@ import { Briefcase, CalendarRange, FileText, UserSquare2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDate, durationLabel } from "@/lib/availability";
 import type { Deployment } from "@/lib/deployments-repo";
+import { EditPlacementDates } from "@/app/(app)/edit-placement-dates";
 
 const PHASE_LABEL = {
   current: "On now",
@@ -117,6 +118,16 @@ export function DeploymentsPanel({ deployments }: { deployments: Deployment[] })
                 >
                   {PHASE_LABEL[d.phase]}
                 </span>
+                {/* Only where a placement exists. A proposed seat on a bid not
+                    yet won has no dates to edit. */}
+                {d.placementId && (
+                  <EditPlacementDates
+                    placementId={d.placementId}
+                    startDate={d.startDate}
+                    endDate={d.endDate}
+                    label={`${d.role ?? "Placement"} on ${d.project}`}
+                  />
+                )}
               </div>
             </li>
           ))}

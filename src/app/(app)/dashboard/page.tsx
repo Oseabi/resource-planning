@@ -18,6 +18,8 @@ import { benchForecast } from "@/lib/availability";
 import { seatCount } from "@/lib/positions";
 import { expiryStatus, daysUntilExpiry } from "@/lib/oem-letters";
 import { ExpiryBadge } from "@/app/(app)/oem-letters/expiry-badge";
+import { deliveryState, contractWindowLabel } from "@/lib/delivery";
+import { DeliveryStateBadge } from "@/app/(app)/tenders/tender-badges";
 
 /** Bids inside this many days are the ones worth looking at this morning. */
 const DEADLINE_WINDOW_DAYS = 14;
@@ -31,14 +33,18 @@ export default async function DashboardPage() {
     await Promise.all([
       supabase
         .from("tenders")
-        .select("id, title, client, status, value, submission_deadline, sectors, required_skills"),
+        .select(
+          "id, title, client, status, value, submission_deadline, sectors, required_skills, contract_start_date, contract_end_date",
+        ),
       supabase.from("oem_letters").select("id, title, oem_vendor, categories, expiry_date"),
       supabase
         .from("candidates")
         .select(
           "id, status, availability, available_from, years_experience, resource_categories, skills, technical_skills, certifications",
         ),
-      supabase.from("placements").select("candidate_id, start_date, end_date"),
+      supabase
+        .from("placements")
+        .select("candidate_id, start_date, end_date, source_type, source_id"),
     ]);
 
   const allTenders = tenders ?? [];
@@ -47,6 +53,10 @@ export default async function DashboardPage() {
   const allPlacements = placements ?? [];
 
   // Only bids still being put together can act on what this page says.
+  //
+  // Deliberately not widened to include won tenders. The seat and gap tiles
+  // below are about a bid being assembled, and a fully staffed running contract
+  // would read as an unfilled-seat problem. Running work gets its own card.
   const openTenders = allTenders.filter((t) => t.status === "draft" || t.status === "live");
   const openTenderIds = openTenders.map((t) => t.id);
 
@@ -171,6 +181,23 @@ export default async function DashboardPage() {
     .sort((a, b) => (daysUntilExpiry(a.expiry_date) ?? 0) - (daysUntilExpiry(b.expiry_date) ?? 0))
     .slice(0, 4);
 
+  // Contracts the company is delivering right now, or about to start. These
+  // hold the people, and until the contract window existed they were invisible
+  // on every operational screen the moment the bid was marked won.
+  //
+  // Soonest to finish first: that is the contract about to free people up, and
+  // the one whose follow-on bid is already late.
+  const headcountByTender = new Map<string, number>();
+  for (const p of allPlacements) {
+    if (p.source_type !== "tender") continue;
+    headcountByTender.set(p.source_id, (headcountByTender.get(p.source_id) ?? 0) + 1);
+  }
+  const runningContracts = allTenders
+    .map((t) => ({ tender: t, state: deliveryState(t) }))
+    .filter((r) => r.state === "in_delivery" || r.state === "awarded")
+    .sort((a, b) => (a.tender.contract_end_date ?? "9999").localeCompare(b.tender.contract_end_date ?? "9999"))
+    .slice(0, 5);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -235,6 +262,37 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_340px]">
         {/* Bids needing attention */}
+        <SectionCard title="Running contracts" href="/tenders" linkLabel="All tenders">
+          {runningContracts.length === 0 ? (
+            <Empty>No contracts are running or about to start.</Empty>
+          ) : (
+            <ul className="divide-y divide-border">
+              {runningContracts.map(({ tender, state }) => (
+                <li key={tender.id} className="flex items-start justify-between gap-2 px-4 py-2.5">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/tenders/${tender.id}`}
+                      className="block truncate text-body-sm font-medium text-foreground hover:text-primary"
+                    >
+                      {tender.title}
+                    </Link>
+                    <div className="truncate text-body-sm text-muted-foreground">
+                      {tender.client ? `${tender.client} · ` : ""}
+                      {contractWindowLabel(tender.contract_start_date, tender.contract_end_date)}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <DeliveryStateBadge state={state!} />
+                    <span className="text-body-sm text-muted-foreground">
+                      {headcountByTender.get(tender.id) ?? 0} placed
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SectionCard>
+
         <SectionCard title="Bids needing attention" href="/tenders" linkLabel="All tenders">
           {bids.length === 0 ? (
             <Empty>No open bids with a submission deadline set.</Empty>

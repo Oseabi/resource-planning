@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,14 +24,22 @@ import { confirmTenderTeam } from "@/app/(app)/assignment-actions";
 export function ConfirmTeamBanner({
   tenderId,
   proposedCount,
+  contractStartDate,
+  contractEndDate,
 }: {
   tenderId: string;
   proposedCount: number;
+  contractStartDate: string | null;
+  contractEndDate: string | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [fee, setFee] = useState("");
-  const [startDate, setStartDate] = useState("");
+  // Seeded from the contract, which is the window the team is being placed for.
+  // Initial value only: the dialog mounts with the page, and router.refresh()
+  // after a save remounts it with whatever the tender now says.
+  const [startDate, setStartDate] = useState(contractStartDate ?? "");
+  const [endDate, setEndDate] = useState(contractEndDate ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -39,7 +48,12 @@ export function ConfirmTeamBanner({
   function submit() {
     setError(null);
     startTransition(async () => {
-      const result = await confirmTenderTeam(tenderId, Number(fee || 0), startDate);
+      const result = await confirmTenderTeam(
+        tenderId,
+        Number(fee || 0),
+        startDate,
+        endDate || null,
+      );
       if (result.error) {
         setError(result.error);
         return;
@@ -96,15 +110,41 @@ export function ConfirmTeamBanner({
                 Applied to each member; adjust individual placements afterwards if they differ.
               </p>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="confirm-start">Start date</Label>
-              <Input
-                id="confirm-start"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="confirm-start">Start date</Label>
+                <Input
+                  id="confirm-start"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="confirm-end">End date</Label>
+                <Input
+                  id="confirm-end"
+                  type="date"
+                  min={startDate || undefined}
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </div>
             </div>
+            <p className="text-body-sm text-muted-foreground">
+              {contractStartDate
+                ? "Taken from this tender's contract dates. Adjust an individual placement afterwards if someone's dates differ."
+                : "Leave the end date blank for an open-ended placement, though anyone open ended stops counting toward future availability."}
+            </p>
+            {!contractStartDate && (
+              <p className="text-body-sm text-muted-foreground">
+                This tender has no contract dates set.{" "}
+                <Link href={`/tenders/${tenderId}/edit`} className="underline">
+                  Set them on the tender
+                </Link>{" "}
+                so the whole team gets the same window.
+              </p>
+            )}
           </div>
 
           {error && <p className="text-body-sm text-destructive">{error}</p>}

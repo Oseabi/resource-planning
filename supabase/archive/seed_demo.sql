@@ -1,3 +1,7 @@
+-- DO NOT RUN. This database holds real records.
+-- Inserts 20 fake candidates and 10 fake tenders, which would appear in real
+-- shortlists and pipeline value. See supabase/archive/README.md.
+
 -- ============================================================================
 -- Demo dataset, 20 candidates and 10 multi-role tenders.
 -- Paste this whole file into the Supabase dashboard SQL Editor and click "Run".

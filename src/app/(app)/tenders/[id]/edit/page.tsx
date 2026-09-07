@@ -24,6 +24,7 @@ export default async function EditTenderPage({ params }: { params: Promise<{ id:
     value: tender.value,
     submission_deadline: tender.submission_deadline,
     contract_start_date: tender.contract_start_date,
+    contract_end_date: tender.contract_end_date,
     required_roles: tender.required_roles,
     required_skills: tender.required_skills,
     required_certifications: tender.required_certifications,

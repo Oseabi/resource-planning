@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/layout/empty-state";
-import { TenderStatusBadge, StrengthBar } from "@/app/(app)/tenders/tender-badges";
+import { TenderStatusBadge, DeliveryStateBadge, StrengthBar } from "@/app/(app)/tenders/tender-badges";
+import { deliveryState } from "@/lib/delivery";
 import { RfqUploadZone } from "@/app/(app)/tenders/rfq-upload-zone";
 import { poolStrength } from "@/lib/matching";
 
@@ -33,32 +34,56 @@ export default async function TendersPage() {
 
   const { data: tenders } = await supabase
     .from("tenders")
-    .select("id, title, client, value, submission_deadline, status")
+    .select("id, title, client, value, submission_deadline, status, contract_start_date, contract_end_date")
     .order("created_at", { ascending: false });
 
   const rows = tenders ?? [];
 
-  // Match strength per tender from persisted matches.
+  // Match strength per tender, rolled up from its seats.
+  //
+  // Scores are stored per position, not per tender: since 0012 each seat has
+  // its own skills, certifications and experience floor, so a candidate scores
+  // differently against each one and there is no single tender-wide score to
+  // read. This column asked for match_target_type 'tender', which nothing has
+  // written since, so every row read "Not matched" however much matching had
+  // been run. The same roll-up loadPositionViews performs on the detail page.
   const strengthByTender = new Map<string, number>();
   if (rows.length) {
-    const { data: matches } = await supabase
-      .from("matches")
-      .select("match_target_id, score")
-      .eq("match_target_type", "tender")
+    const { data: positions } = await supabase
+      .from("positions")
+      .select("id, parent_id")
+      .eq("parent_type", "tender")
       .in(
-        "match_target_id",
+        "parent_id",
         rows.map((t) => t.id),
       );
-    const grouped = new Map<string, number[]>();
-    for (const m of matches ?? []) {
-      const list = grouped.get(m.match_target_id) ?? [];
-      list.push(m.score);
-      grouped.set(m.match_target_id, list);
+
+    const tenderByPosition = new Map((positions ?? []).map((p) => [p.id, p.parent_id]));
+    if (tenderByPosition.size > 0) {
+      const { data: matches } = await supabase
+        .from("matches")
+        .select("match_target_id, score")
+        .eq("match_target_type", "position")
+        .in("match_target_id", [...tenderByPosition.keys()]);
+
+      const grouped = new Map<string, number[]>();
+      for (const m of matches ?? []) {
+        const tenderId = tenderByPosition.get(m.match_target_id);
+        if (!tenderId) continue;
+        const list = grouped.get(tenderId) ?? [];
+        list.push(m.score);
+        grouped.set(tenderId, list);
+      }
+      for (const [tid, scores] of grouped) strengthByTender.set(tid, poolStrength(scores));
     }
-    for (const [tid, scores] of grouped) strengthByTender.set(tid, poolStrength(scores));
   }
 
   const liveCount = rows.filter((t) => t.status === "live").length;
+  // A won bid used to read the same whether it was starting next month, running
+  // now, or finished two years ago, so the contracts carrying the company's
+  // people were the least visible thing on the page.
+  const deliveryByTender = new Map(rows.map((t) => [t.id, deliveryState(t)]));
+  const inDeliveryCount = [...deliveryByTender.values()].filter((d) => d === "in_delivery").length;
   const now = new Date();
   const in7 = new Date(now.getTime() + 7 * 24 * 3600 * 1000);
   const deadlinesSoon = rows.filter((t) => {
@@ -86,8 +111,9 @@ export default async function TendersPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Live tenders" value={String(liveCount)} />
+        <StatCard label="In delivery" value={String(inDeliveryCount)} />
         <StatCard label="Deadlines (next 7 days)" value={String(deadlinesSoon)} accent={deadlinesSoon > 0} />
         <StatCard label="Avg. match strength" value={strengths.length ? `${avgStrength}%` : "-"} />
       </div>
@@ -131,7 +157,12 @@ export default async function TendersPage() {
                         <TableCell className="text-foreground">{formatValue(t.value)}</TableCell>
                         <TableCell className="text-foreground">{formatDate(t.submission_deadline)}</TableCell>
                         <TableCell>
-                          <TenderStatusBadge status={t.status} />
+                          <div className="flex flex-col items-start gap-1">
+                            <TenderStatusBadge status={t.status} />
+                            {deliveryByTender.get(t.id) && (
+                              <DeliveryStateBadge state={deliveryByTender.get(t.id)!} />
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           {strength != null ? (
@@ -161,7 +192,12 @@ export default async function TendersPage() {
                             {t.client ?? "-"} · {formatValue(t.value)} · Due {formatDate(t.submission_deadline)}
                           </div>
                         </div>
-                        <TenderStatusBadge status={t.status} />
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <TenderStatusBadge status={t.status} />
+                          {deliveryByTender.get(t.id) && (
+                            <DeliveryStateBadge state={deliveryByTender.get(t.id)!} />
+                          )}
+                        </div>
                       </div>
                       <div className="mt-2">
                         {strength != null ? (

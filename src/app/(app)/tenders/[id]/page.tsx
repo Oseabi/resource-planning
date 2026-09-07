@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil, Briefcase, MapPin, CalendarClock, Banknote, Clock } from "lucide-react";
+import { ArrowLeft, Pencil, Briefcase, MapPin, CalendarClock, CalendarRange, Banknote, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { Button } from "@/components/ui/button";
-import { TenderStatusBadge } from "@/app/(app)/tenders/tender-badges";
+import { TenderStatusBadge, DeliveryStateBadge } from "@/app/(app)/tenders/tender-badges";
+import { deliveryState, contractWindowLabel } from "@/lib/delivery";
 import { CvDownloadButton } from "@/app/(app)/candidates/[id]/cv-download-button";
 import { DeleteTenderButton } from "@/app/(app)/tenders/[id]/delete-tender-button";
 import {
@@ -19,6 +20,8 @@ import { fillSummary } from "@/lib/positions";
 import { PositionMatches } from "@/app/(app)/position-matches";
 import { findBidConflicts } from "@/app/(app)/assignment-actions";
 import { ConfirmTeamBanner } from "@/app/(app)/tenders/[id]/confirm-team-banner";
+import { DeliveryPanel } from "@/app/(app)/tenders/[id]/delivery-panel";
+import { SeatCoveragePanel } from "@/app/(app)/tenders/[id]/seat-coverage-panel";
 
 function formatValue(value: number | null): string {
   if (value == null) return "-";
@@ -83,6 +86,8 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
   }));
   const strength = poolStrength(matches.map((m) => m.score));
 
+  const delivery = deliveryState(tender);
+
   const tags: { icon: React.ReactNode; label: string }[] = [];
   for (const r of tender.required_roles.slice(0, 4)) tags.push({ icon: <Briefcase className="size-3.5" />, label: r });
   if (tender.min_experience_years != null)
@@ -91,6 +96,14 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
   if (tender.value != null) tags.push({ icon: <Banknote className="size-3.5" />, label: formatValue(tender.value) });
   if (tender.submission_deadline)
     tags.push({ icon: <CalendarClock className="size-3.5" />, label: `Due ${tender.submission_deadline}` });
+  // The contract window has been stored since the first migration and shown
+  // nowhere, so a running contract looked identical to one that finished a year
+  // ago.
+  if (tender.contract_start_date || tender.contract_end_date)
+    tags.push({
+      icon: <CalendarRange className="size-3.5" />,
+      label: contractWindowLabel(tender.contract_start_date, tender.contract_end_date),
+    });
 
   return (
     <div className="space-y-6">
@@ -106,6 +119,7 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
               <span className="text-label-sm uppercase tracking-wide text-muted-foreground">{tender.client}</span>
             )}
             <TenderStatusBadge status={tender.status} />
+            {delivery && <DeliveryStateBadge state={delivery} />}
           </div>
           <h1 className="mt-1 text-display font-semibold text-foreground">{tender.title}</h1>
           {tender.reference_number && (
@@ -136,6 +150,17 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
         </div>
       </div>
 
+      {/* Only once the bid is won. Before that the contract does not exist and
+          the page is about assembling a team to bid with. */}
+      {delivery && (
+        <DeliveryPanel
+          tenderId={id}
+          state={delivery}
+          contractStartDate={tender.contract_start_date}
+          contractEndDate={tender.contract_end_date}
+        />
+      )}
+
       <div>
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-headline-sm font-semibold text-foreground">Team required</h2>
@@ -143,8 +168,32 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
             {fill.filledSeats} of {fill.totalSeats} seat{fill.totalSeats === 1 ? "" : "s"} filled
           </span>
         </div>
+        {/* Rendered for every status but lost, because the question is asked
+            hardest before the bid goes in. */}
+        {tender.status !== "lost" && (
+          <div className="mb-3">
+            <SeatCoveragePanel
+              tenderId={id}
+              startDate={tender.contract_start_date}
+              seats={positionViews.map((p) => ({
+                positionId: p.id,
+                role: p.role,
+                quantity: p.quantity,
+                matches: p.matches.map((m) => ({ candidateId: m.candidateId, score: m.score })),
+              }))}
+              // findBidConflicts already ran for the shortlist above, so the
+              // people promised elsewhere cost no extra query.
+              softCommitments={Object.keys(conflictsByCandidate)}
+            />
+          </div>
+        )}
         {tender.status === "won" && (
-          <ConfirmTeamBanner tenderId={id} proposedCount={proposedCount} />
+          <ConfirmTeamBanner
+            tenderId={id}
+            proposedCount={proposedCount}
+            contractStartDate={tender.contract_start_date}
+            contractEndDate={tender.contract_end_date}
+          />
         )}
         <PositionMatches
           positions={positionViews}
