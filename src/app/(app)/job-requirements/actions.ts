@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { purgeActivity } from "@/app/(app)/activity-actions";
 import type { JobRequirementStatus, Json } from "@/lib/supabase/database.types";
 import {
@@ -92,14 +93,27 @@ export async function updateRequirement(
 export async function deleteRequirement(id: string): Promise<{ error: string | null }> {
   const supabase = await createClient();
 
+  // Checked before anything is removed rather than left to RLS. RLS restricts
+  // DELETE on job_requirements to admins but allows any authenticated user to
+  // delete positions and placements, so the sweep below would succeed for a
+  // non-admin and then fail on the requirement itself, gutting a record that
+  // survives.
+  if (!(await isCurrentUserAdmin())) {
+    return { error: "Only an admin can delete a job requirement." };
+  }
+
   // Placements reference a requirement by a plain source_id, so the database
   // cannot cascade them, they are removed here along with the requirement.
-  const { data: placements } = await supabase
-    .from("placements")
-    .select("id, candidate_id")
-    .eq("source_type", "job_requirement")
-    .eq("source_id", id);
+  const [{ data: positions }, { data: placements }] = await Promise.all([
+    supabase.from("positions").select("id").eq("parent_type", "job_requirement").eq("parent_id", id),
+    supabase
+      .from("placements")
+      .select("id, candidate_id")
+      .eq("source_type", "job_requirement")
+      .eq("source_id", id),
+  ]);
 
+  const positionIds = (positions ?? []).map((p) => p.id);
   const affectedCandidates = [...new Set((placements ?? []).map((p) => p.candidate_id))];
 
   if ((placements ?? []).length > 0) {
@@ -111,7 +125,26 @@ export async function deleteRequirement(id: string): Promise<{ error: string | n
     if (placementError) return { error: placementError.message };
   }
 
-  // RLS restricts DELETE to admins; a non-admin call is rejected here.
+  // Seats scored per position since 0012. Removed before the positions
+  // themselves, which nothing would cascade from.
+  if (positionIds.length > 0) {
+    const { error: matchError } = await supabase
+      .from("matches")
+      .delete()
+      .eq("match_target_type", "position")
+      .in("match_target_id", positionIds);
+    if (matchError) return { error: matchError.message };
+
+    // Assignments reference positions with a real foreign key, so removing the
+    // seats takes them with it.
+    const { error: positionError } = await supabase
+      .from("positions")
+      .delete()
+      .eq("parent_type", "job_requirement")
+      .eq("parent_id", id);
+    if (positionError) return { error: positionError.message };
+  }
+
   const { error } = await supabase.from("job_requirements").delete().eq("id", id);
   if (error) return { error: error.message };
 
@@ -130,7 +163,8 @@ export async function deleteRequirement(id: string): Promise<{ error: string | n
     }
   }
 
-  // Clean up computed match scores for this requirement.
+  // Match rows written before 0012 moved scoring onto positions. Nothing writes
+  // this type any more, but rows from that era can still be sitting there.
   await supabase
     .from("matches")
     .delete()

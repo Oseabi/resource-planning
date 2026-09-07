@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { purgeActivity, recordEvent } from "@/app/(app)/activity-actions";
 import { validateExtension, placementsAlignedTo } from "@/lib/delivery";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -129,26 +130,105 @@ export async function updateTender(id: string, fields: TenderFormFields): Promis
   return { id };
 }
 
+/**
+ * Delete a tender and everything hanging off it.
+ *
+ * Nothing here can be left to the database. positions.parent_id,
+ * placements.source_id and activity.entity_id are all polymorphic across two
+ * parent tables, so none of them carries a foreign key and none of them
+ * cascades. Deleting only the tender row used to leave its seats behind, and
+ * through them their assignments, so a candidate's profile went on showing a
+ * seat on a project that no longer opens.
+ */
 export async function deleteTender(id: string): Promise<{ error: string | null }> {
   const supabase = await createClient();
 
-  const { data: tender } = await supabase
-    .from("tenders")
-    .select("source_document_path")
-    .eq("id", id)
-    .single();
+  // Checked before anything is removed, not left to RLS. RLS restricts DELETE
+  // on tenders to admins but deliberately allows any authenticated user to
+  // delete positions and placements, so the sweep below would succeed for a
+  // non-admin and then fail on the tender itself, gutting a record that
+  // survives.
+  if (!(await isCurrentUserAdmin())) {
+    return { error: "Only an admin can delete a tender." };
+  }
+
+  const [{ data: tender }, { data: positions }, { data: placements }] = await Promise.all([
+    supabase.from("tenders").select("source_document_path").eq("id", id).single(),
+    supabase.from("positions").select("id").eq("parent_type", "tender").eq("parent_id", id),
+    supabase
+      .from("placements")
+      .select("id, candidate_id")
+      .eq("source_type", "tender")
+      .eq("source_id", id),
+  ]);
+
+  const positionIds = (positions ?? []).map((p) => p.id);
+  const affectedCandidates = [...new Set((placements ?? []).map((p) => p.candidate_id))];
+
+  // Dependents first, parent last. A failure part way then leaves a tender that
+  // still lists its seats, which is visible on the page and can be retried. The
+  // other order leaves orphans with no parent left to retry from.
+  if ((placements ?? []).length > 0) {
+    const { error: placementError } = await supabase
+      .from("placements")
+      .delete()
+      .eq("source_type", "tender")
+      .eq("source_id", id);
+    if (placementError) return { error: placementError.message };
+  }
+
+  if (positionIds.length > 0) {
+    const { error: matchError } = await supabase
+      .from("matches")
+      .delete()
+      .eq("match_target_type", "position")
+      .in("match_target_id", positionIds);
+    if (matchError) return { error: matchError.message };
+  }
+
+  // Match rows written before 0012 moved scoring onto positions. Nothing writes
+  // this type any more, but rows from that era can still be sitting there.
+  await supabase.from("matches").delete().eq("match_target_type", "tender").eq("match_target_id", id);
+
+  if (positionIds.length > 0) {
+    // Assignments reference positions with a real foreign key, so removing the
+    // seats takes them with it.
+    const { error: positionError } = await supabase
+      .from("positions")
+      .delete()
+      .eq("parent_type", "tender")
+      .eq("parent_id", id);
+    if (positionError) return { error: positionError.message };
+  }
 
   const { error } = await supabase.from("tenders").delete().eq("id", id);
   if (error) return { error: error.message };
 
-  // Clean up dependents: computed match scores for this tender and its RFQ file.
-  await supabase.from("matches").delete().eq("match_target_type", "tender").eq("match_target_id", id);
   await purgeActivity("tender", id);
+
+  // A placement marks its candidate "placed" via trigger, and nothing reverses
+  // that on delete. Free anyone left with no remaining placement, otherwise they
+  // stay hidden from matching with no record explaining why.
+  for (const candidateId of affectedCandidates) {
+    const { count } = await supabase
+      .from("placements")
+      .select("id", { count: "exact", head: true })
+      .eq("candidate_id", candidateId);
+    if ((count ?? 0) === 0) {
+      await supabase.from("candidates").update({ status: "active" }).eq("id", candidateId);
+    }
+  }
+
   if (tender?.source_document_path) {
     await createAdminClient().storage.from(DOC_BUCKET).remove([tender.source_document_path]);
   }
 
   revalidatePath("/tenders");
+  revalidatePath("/dashboard");
+  if (affectedCandidates.length > 0) {
+    revalidatePath("/candidates");
+    revalidatePath("/analytics");
+  }
   return { error: null };
 }
 
