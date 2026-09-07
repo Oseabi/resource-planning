@@ -35,6 +35,7 @@ export const EMPTY_TENDER: TenderFormFields = {
   submission_deadline: null,
   contract_start_date: null,
   contract_end_date: null,
+  reference_letters_required: null,
   required_roles: [],
   required_skills: [],
   required_certifications: [],
@@ -88,6 +89,13 @@ export function TenderFields({
               hang off it. Left blank it reads as open ended. */}
           <Field label="Contract end date" htmlFor="tf-end">
             <Input id="tf-end" type="date" min={value.contract_start_date ?? undefined} value={value.contract_end_date ?? ""} onChange={(e) => set("contract_end_date", e.target.value || null)} />
+          </Field>
+          {/* A compliance requirement rather than a staffing one: short of these
+              a bid is disqualified before anybody reads the team. Zero is a real
+              answer, so it is kept distinct from blank, which means not yet read
+              off the RFQ. */}
+          <Field label="Reference letters required" htmlFor="tf-refletters">
+            <Input id="tf-refletters" type="number" min={0} step="1" value={value.reference_letters_required ?? ""} onChange={(e) => set("reference_letters_required", e.target.value === "" ? null : Number(e.target.value))} placeholder="e.g. 3" />
           </Field>
           <Field label="Status" htmlFor="tf-status">
             <Select value={value.status} onValueChange={(v) => set("status", v as TenderStatus)}>

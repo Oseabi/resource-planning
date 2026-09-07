@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Pencil, Briefcase, MapPin, CalendarClock, CalendarRange, Banknote, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { cn } from "@/lib/utils";
 import { isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { Button } from "@/components/ui/button";
 import { TenderStatusBadge, DeliveryStateBadge } from "@/app/(app)/tenders/tender-badges";
@@ -22,6 +23,8 @@ import { findBidConflicts } from "@/app/(app)/assignment-actions";
 import { ConfirmTeamBanner } from "@/app/(app)/tenders/[id]/confirm-team-banner";
 import { DeliveryPanel } from "@/app/(app)/tenders/[id]/delivery-panel";
 import { SeatCoveragePanel } from "@/app/(app)/tenders/[id]/seat-coverage-panel";
+import { letterCoverage, coverageLabel } from "@/lib/reference-letters";
+import { FileCheck2 } from "lucide-react";
 
 function formatValue(value: number | null): string {
   if (value == null) return "-";
@@ -37,11 +40,16 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
   // The tender and its match rows are independent, so they go out together
   // rather than one after the other. isCurrentUserAdmin is request-cached, the
   // layout has already resolved it, so it adds no round-trip.
-  const [{ data: tender }, isAdmin, positionData, activity] = await Promise.all([
+  const [{ data: tender }, isAdmin, positionData, activity, { data: referenceLetters }] = await Promise.all([
     supabase.from("tenders").select("*").eq("id", id).single(),
     isCurrentUserAdmin(),
     loadPositionViews(supabase, "tender", id),
     loadActivity("tender", id),
+    // Compliance sits beside staffing: short of reference letters a bid is
+    // disqualified before anybody reads the team.
+    supabase
+      .from("reference_letters")
+      .select("id, client, contract_value, work_completed_on, sectors, contact_name, contact_email, contact_phone"),
   ]);
   if (!tender) notFound();
 
@@ -87,6 +95,7 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
   const strength = poolStrength(matches.map((m) => m.score));
 
   const delivery = deliveryState(tender);
+  const letters = letterCoverage(tender.reference_letters_required, referenceLetters ?? []);
 
   const tags: { icon: React.ReactNode; label: string }[] = [];
   for (const r of tender.required_roles.slice(0, 4)) tags.push({ icon: <Briefcase className="size-3.5" />, label: r });
@@ -170,6 +179,27 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
         </div>
         {/* Rendered for every status but lost, because the question is asked
             hardest before the bid goes in. */}
+        {tender.status !== "lost" && letters.state !== "unknown" && (
+          <div
+            className={cn(
+              "mb-3 flex flex-wrap items-center gap-2 rounded-lg border px-4 py-2.5 text-body-sm",
+              letters.state === "met"
+                ? "border-border bg-card text-muted-foreground"
+                : "border-destructive/30 bg-destructive/5 text-foreground",
+            )}
+          >
+            <FileCheck2 className="size-4 shrink-0 text-muted-foreground" />
+            <span>Reference letters: {coverageLabel(letters)}</span>
+            {letters.uncontactable > 0 && (
+              <span className="rounded-lg bg-muted px-2 py-0.5 text-label-md font-medium text-muted-foreground">
+                {letters.uncontactable} with no contact details
+              </span>
+            )}
+            <Link href="/reference-letters" className="ml-auto underline">
+              All letters
+            </Link>
+          </div>
+        )}
         {tender.status !== "lost" && (
           <div className="mb-3">
             <SeatCoveragePanel

@@ -168,6 +168,38 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["oem_letters"]["Row"]>;
         Relationships: [];
       };
+      reference_letters: {
+        Row: {
+          id: string;
+          /** Who signed it. */
+          client: string;
+          project_title: string;
+          /** Practice areas; shares vocabulary with candidates.resource_categories. */
+          categories: string[];
+          sectors: string[];
+          /** Tenders qualify references by size and recency, so both are held. */
+          contract_value: number | null;
+          work_started_on: string | null;
+          work_completed_on: string | null;
+          issue_date: string | null;
+          contact_name: string | null;
+          contact_email: string | null;
+          contact_phone: string | null;
+          reference_number: string | null;
+          notes: string | null;
+          file_path: string | null;
+          original_filename: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["reference_letters"]["Row"]> & {
+          client: string;
+          project_title: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["reference_letters"]["Row"]>;
+        Relationships: [];
+      };
       job_requirements: {
         Row: {
           id: string;
@@ -206,6 +238,8 @@ export interface Database {
           contract_start_date: string | null;
           /** When the awarded contract finishes. Null means open ended. */
           contract_end_date: string | null;
+          /** Client reference letters this tender asks for. Null means not yet read off the RFQ. */
+          reference_letters_required: number | null;
           required_roles: string[];
           required_skills: string[];
           required_certifications: string[];

@@ -24,6 +24,7 @@ export interface TenderFormFields {
   submission_deadline: string | null;
   contract_start_date: string | null;
   contract_end_date: string | null;
+  reference_letters_required: number | null;
   required_roles: string[];
   required_skills: string[];
   required_certifications: string[];

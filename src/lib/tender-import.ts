@@ -31,6 +31,7 @@ export const IMPORT_COLUMNS = [
   "required_certifications",
   "sectors",
   "min_experience_years",
+  "reference_letters_required",
 ] as const;
 
 const REQUIRED_COLUMNS = ["title"] as const;
@@ -58,6 +59,8 @@ export interface ParsedTender {
   required_certifications: string[];
   sectors: string[];
   min_experience_years: number | null;
+  /** Client reference letters the tender asks for. A compliance requirement, not a staffing one. */
+  reference_letters_required: number | null;
   status: TenderStatus;
   seats: SeatSpec[];
   /** Columns this row left blank. These are never written over an existing value. */
@@ -379,6 +382,18 @@ export function readRows(
     const years = parseCount(cell("min_experience_years"));
     if (years.error) reasons.push(`min_experience_years: ${years.error}`);
 
+    // Zero is a real answer here, meaning the tender asks for none, so this
+    // cannot go through parseCount which treats zero as a mistake.
+    const lettersRaw = cell("reference_letters_required").trim();
+    let referenceLetters: number | null = null;
+    if (lettersRaw) {
+      if (!/^\d+$/.test(lettersRaw)) {
+        reasons.push(`reference_letters_required: "${lettersRaw}" is not a whole number`);
+      } else {
+        referenceLetters = Number(lettersRaw);
+      }
+    }
+
     const seatResult = parseSeatsCell(cell("seats"), years.count, index);
     reasons.push(...seatResult.errors.map((e) => `seats: ${e}`));
     notes.push(...seatResult.notes);
@@ -413,6 +428,7 @@ export function readRows(
       required_certifications: parseList(cell("required_certifications")),
       sectors: parseList(cell("sectors")),
       min_experience_years: years.count,
+      reference_letters_required: referenceLetters,
       status: status!,
       seats: seatResult.seats,
       blankColumns,
@@ -559,6 +575,7 @@ const WRITABLE = [
   "contract_end_date",
   "status",
   "min_experience_years",
+  "reference_letters_required",
 ] as const;
 const LIST_COLUMNS = ["required_skills", "required_certifications", "sectors"] as const;
 

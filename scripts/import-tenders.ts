@@ -222,6 +222,7 @@ async function main() {
       contract_end_date: p.row.contract_end_date,
       status: p.row.status,
       min_experience_years: p.row.min_experience_years,
+      reference_letters_required: p.row.reference_letters_required,
       required_skills: p.row.required_skills,
       required_certifications: p.row.required_certifications,
       sectors: p.row.sectors,
