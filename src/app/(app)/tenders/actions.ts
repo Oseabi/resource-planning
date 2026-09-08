@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { isCurrentUserAdmin } from "@/lib/auth/current-user";
+import { getCurrentProfile, isCurrentUserAdmin } from "@/lib/auth/current-user";
+import { resolveTenderDepartment } from "@/lib/departments";
 import { purgeActivity, recordEvent } from "@/app/(app)/activity-actions";
 import { validateExtension, placementsAlignedTo } from "@/lib/delivery";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -15,6 +16,14 @@ const DOC_BUCKET = "cvs"; // shared private bucket; tender docs live under tende
 
 export interface TenderFormFields {
   title: string;
+  /**
+   * The business unit that owns this bid, and therefore who can see it.
+   *
+   * Set from the creator for anybody who is not an admin: the form does not ask,
+   * and a submitted value is ignored rather than validated, because the thing
+   * that decides visibility is never taken from the client.
+   */
+  department_id: string | null;
   /** Roles this bid must staff; persisted to the positions table, not here. */
   positions: PositionInput[];
   reference_number: string | null;
@@ -77,6 +86,18 @@ export async function createTender(formData: FormData): Promise<SaveTenderResult
   }
   if (!fields.title?.trim()) return { error: "Title is required." };
 
+  const profile = await getCurrentProfile();
+  const { data: departments } = await supabase.from("departments").select("id, name, slug");
+  const resolved = resolveTenderDepartment({
+    isAdmin: profile?.isAdmin ?? false,
+    creatorDepartmentId: profile?.departmentId ?? null,
+    submittedDepartmentId: fields.department_id,
+    departments: departments ?? [],
+  });
+  // Said in a sentence here rather than left to the policy, which would refuse
+  // the insert with a message about row-level security.
+  if (resolved.error) return { error: resolved.error };
+
   let docPath: string | null = null;
   const file = formData.get("file");
   if (file instanceof File && file.size > 0) {
@@ -95,6 +116,7 @@ export async function createTender(formData: FormData): Promise<SaveTenderResult
     .insert({
       ...tenderColumns,
       title: fields.title.trim(),
+      department_id: resolved.departmentId!,
       source_document_path: docPath,
       created_by: user.id,
     })
@@ -121,14 +143,21 @@ export async function updateTender(id: string, fields: TenderFormFields): Promis
 
   if (!fields.title?.trim()) return { error: "Title is required." };
 
-  const { positions, ...tenderColumns } = fields;
+  const { positions, department_id, ...tenderColumns } = fields;
+
+  // Only an admin can move a bid between departments, and only to a real one.
+  // For anybody else the column is left out of the update entirely, so their
+  // save is a clean no-op on it rather than an opaque policy rejection that
+  // takes the whole row down with it.
+  const profile = await getCurrentProfile();
+  const departmentChange = profile?.isAdmin && department_id ? { department_id } : {};
 
   // Counted, not assumed. An update RLS filters out returns zero rows and no
   // error, so without this the action would report success on a tender the
   // caller cannot see, and then go on to rewrite its seats.
   const { data: updated, error } = await supabase
     .from("tenders")
-    .update({ ...tenderColumns, title: fields.title.trim() })
+    .update({ ...tenderColumns, ...departmentChange, title: fields.title.trim() })
     .eq("id", id)
     .select("id");
 

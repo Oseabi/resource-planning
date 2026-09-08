@@ -30,10 +30,9 @@ export default async function CandidateProfilePage({
     await Promise.all([
       supabase.from("candidates").select("*").eq("id", id).single(),
       isCurrentUserAdmin(),
-      supabase
-        .from("placements")
-        .select("candidate_id, start_date, end_date")
-        .eq("candidate_id", id),
+      // Company wide. "When are they next free" is a question about the
+      // person, not about one department's book of work.
+      supabase.rpc("candidate_commitments").eq("candidate_id", id),
       loadActivity("candidate", id),
       loadDeployments(supabase, id),
     ]);

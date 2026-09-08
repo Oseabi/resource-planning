@@ -10,6 +10,12 @@ export interface CurrentProfile {
   role: ProfileRole;
   mustChangePassword: boolean;
   isAdmin: boolean;
+  /** Admins can delete within a department too, so this is true for both. */
+  isManager: boolean;
+  /** The business unit this person belongs to. Null for admins, who see all four. */
+  departmentId: string | null;
+  /** Carried so the chrome can say which department a page is showing. */
+  departmentName: string | null;
 }
 
 /**
@@ -38,19 +44,28 @@ export const getCurrentProfile = cache(async (): Promise<CurrentProfile | null> 
   if (!user) return null;
 
   const supabase = await createClient();
+  // The department is joined rather than fetched separately: this query already
+  // runs once per request, and every caller that wants the id also wants the
+  // name to put on screen.
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, role, must_change_password")
+    .select("full_name, role, must_change_password, department_id, departments(name)")
     .eq("id", user.id)
     .single();
+
+  const role = (profile?.role ?? "user") as ProfileRole;
 
   return {
     id: user.id,
     email: user.email ?? null,
     fullName: profile?.full_name ?? user.email ?? "User",
-    role: (profile?.role ?? "user") as ProfileRole,
+    role,
     mustChangePassword: profile?.must_change_password ?? false,
-    isAdmin: profile?.role === "admin",
+    isAdmin: role === "admin",
+    // A missing profile row degrades to "user" above, so this fails closed too.
+    isManager: role === "admin" || role === "manager",
+    departmentId: profile?.department_id ?? null,
+    departmentName: profile?.departments?.name ?? null,
   };
 });
 
@@ -58,4 +73,10 @@ export const getCurrentProfile = cache(async (): Promise<CurrentProfile | null> 
 export const isCurrentUserAdmin = cache(async (): Promise<boolean> => {
   const profile = await getCurrentProfile();
   return profile?.isAdmin ?? false;
+});
+
+/** Admin or department manager. Both can delete within a department. */
+export const isCurrentUserManager = cache(async (): Promise<boolean> => {
+  const profile = await getCurrentProfile();
+  return profile?.isManager ?? false;
 });

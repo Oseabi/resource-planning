@@ -4,19 +4,22 @@ import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { TenderForm } from "@/app/(app)/tenders/tender-form";
 import type { TenderFormFields } from "@/app/(app)/tenders/actions";
+import { loadDepartmentContext } from "@/lib/departments-repo";
 import { loadPositions, toPositionInputs } from "@/lib/positions-repo";
 
 export default async function EditTenderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const [{ data: tender }, positionRows] = await Promise.all([
+  const [{ data: tender }, positionRows, departments] = await Promise.all([
     supabase.from("tenders").select("*").eq("id", id).single(),
     loadPositions(supabase, "tender", id),
+    loadDepartmentContext(),
   ]);
   if (!tender) notFound();
 
   const initial: TenderFormFields = {
     title: tender.title,
+    department_id: tender.department_id,
     positions: toPositionInputs(positionRows),
     reference_number: tender.reference_number,
     client: tender.client,
@@ -43,7 +46,13 @@ export default async function EditTenderPage({ params }: { params: Promise<{ id:
       <div>
         <h1 className="text-display font-semibold text-foreground">Edit tender</h1>
       </div>
-      <TenderForm mode="edit" tenderId={id} initial={initial} />
+      <TenderForm
+        mode="edit"
+        tenderId={id}
+        initial={initial}
+        departments={departments.options}
+        ownDepartmentName={departments.ownDepartmentName}
+      />
     </div>
   );
 }

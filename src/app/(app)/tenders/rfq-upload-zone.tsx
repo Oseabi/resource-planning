@@ -15,6 +15,7 @@ import {
 import { TenderFields, type TenderExtractedFlags } from "@/app/(app)/tenders/tender-fields";
 import { createTender, type TenderFormFields } from "@/app/(app)/tenders/actions";
 import type { ExtractedTenderFields } from "@/lib/extraction/rfq-parser";
+import type { DepartmentOption } from "@/lib/departments";
 
 interface RfqExtraction {
   fields: ExtractedTenderFields;
@@ -24,6 +25,9 @@ interface RfqExtraction {
 
 function toForm(f: ExtractedTenderFields): TenderFormFields {
   return {
+    // Resolved server side from the creator, or picked by an admin in the
+    // dialog. Never guessed from the RFQ document.
+    department_id: null,
     title: f.title ?? "",
     // Each extracted role becomes a one-seat line, seeded with the tender-wide
     // skills/certs the parser found. The reviewer adjusts quantities and trims
@@ -72,7 +76,14 @@ function toFlags(f: ExtractedTenderFields): TenderExtractedFlags {
   };
 }
 
-export function RfqUploadZone() {
+export function RfqUploadZone({
+  departments = [],
+  ownDepartmentName = null,
+}: {
+  /** Only non-empty for an admin, who has to say where the bid belongs. */
+  departments?: DepartmentOption[];
+  ownDepartmentName?: string | null;
+} = {}) {
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,6 +167,8 @@ export function RfqUploadZone() {
             setExtraction(null);
             setFile(null);
           }}
+          departments={departments}
+          ownDepartmentName={ownDepartmentName}
         />
       )}
     </>
@@ -166,10 +179,14 @@ function RfqReviewDialog({
   extraction,
   file,
   onClose,
+  departments,
+  ownDepartmentName,
 }: {
   extraction: RfqExtraction;
   file: File;
   onClose: () => void;
+  departments: DepartmentOption[];
+  ownDepartmentName: string | null;
 }) {
   const router = useRouter();
   const [fields, setFields] = useState<TenderFormFields>(() => toForm(extraction.fields));
@@ -230,7 +247,13 @@ function RfqReviewDialog({
           </div>
 
           <div className="min-h-0 overflow-y-auto p-4">
-            <TenderFields value={fields} onChange={setFields} extracted={flags} />
+            <TenderFields
+              value={fields}
+              onChange={setFields}
+              extracted={flags}
+              departments={departments}
+              ownDepartmentName={ownDepartmentName}
+            />
             {error && <p className="mt-3 text-body-sm text-destructive">{error}</p>}
           </div>
         </div>

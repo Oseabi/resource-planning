@@ -62,10 +62,15 @@ export async function SeatCoveragePanel({
   const supabase = await createClient();
   const [{ data: candidates }, { data: placements }] = await Promise.all([
     supabase.from("candidates").select("id, available_from").in("id", qualifiedIds),
-    supabase
-      .from("placements")
-      .select("candidate_id, start_date, end_date")
-      .in("candidate_id", qualifiedIds),
+    // Every commitment, not just this department's.
+    //
+    // placements is department scoped, so reading it directly here would show a
+    // candidate already contracted to another department as free, and this
+    // panel would invite a double booking. The pool is shared, so the question
+    // "are they free on the start date" has to be answered across the whole
+    // business. candidate_commitments returns the dates and nothing else: no
+    // project, no client, no department.
+    supabase.rpc("candidate_commitments").in("candidate_id", qualifiedIds),
   ]);
 
   const coverage = seatCoverage({

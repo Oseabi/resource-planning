@@ -2,8 +2,11 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { TenderForm } from "@/app/(app)/tenders/tender-form";
 import { EMPTY_TENDER } from "@/app/(app)/tenders/tender-fields";
+import { loadDepartmentContext } from "@/lib/departments-repo";
 
-export default function NewTenderPage() {
+export default async function NewTenderPage() {
+  const departments = await loadDepartmentContext();
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <Link href="/tenders" className="inline-flex items-center gap-1.5 text-body-sm text-muted-foreground hover:text-foreground">
@@ -16,7 +19,12 @@ export default function NewTenderPage() {
           Define the bid and its team requirements, then match candidates against it.
         </p>
       </div>
-      <TenderForm mode="create" initial={EMPTY_TENDER} />
+      <TenderForm
+        mode="create"
+        initial={EMPTY_TENDER}
+        departments={departments.options}
+        ownDepartmentName={departments.ownDepartmentName}
+      />
     </div>
   );
 }

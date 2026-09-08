@@ -16,6 +16,7 @@ BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 COLUMNS = [
     ("title", 46, True,
      "Provision of ERP support and maintenance services"),
+    ("department", 22, False, "Tipp Consulting"),
     ("reference_number", 20, False, "SCM/2026/0148"),
     ("client", 24, False, "City of Cape Town"),
     ("location", 16, False, "Cape Town"),
@@ -81,6 +82,22 @@ status_rule.errorTitle = "Not a recognised status"
 ws.add_data_validation(status_rule)
 status_rule.add("I2:I500")
 
+# Which of the four owns the bid. A dropdown rather than free text: the
+# importer refuses a name it does not recognise, and a bid filed into the wrong
+# department is simply invisible to the people who own it.
+department_rule = DataValidation(
+    type="list",
+    formula1='"Tipp Consulting,Tipp Resourcing,Tipp Human Capital,Tipp Construction"',
+    allow_blank=True,
+    showErrorMessage=True,
+)
+department_rule.error = ("Use one of: Tipp Consulting, Tipp Resourcing, "
+                        "Tipp Human Capital, Tipp Construction")
+department_rule.errorTitle = "Not a recognised department"
+ws.add_data_validation(department_rule)
+department_col = get_column_letter([c[0] for c in COLUMNS].index("department") + 1)
+department_rule.add(f"{department_col}2:{department_col}500")
+
 # Keep the date columns as text so a regional setting cannot rewrite them.
 for name in DATE_COLUMNS:
     col = get_column_letter([c[0] for c in COLUMNS].index(name) + 1)
@@ -134,6 +151,12 @@ for idx, text in enumerate(heads, start=1):
 GUIDE = [
     ("title", "Yes", "What the tender is called. Use the wording from the RFQ so it can be found again.",
      "Provision of ERP support and maintenance services"),
+    ("department", "No",
+     "Which of the four owns the bid: Tipp Consulting, Tipp Resourcing, Tipp Human Capital or "
+     "Tipp Construction. Pick from the dropdown. This decides who can see it, so a bid put in "
+     "the wrong one is invisible to the team that owns it. Left blank it goes to the department "
+     "of whoever loads the file.",
+     "Tipp Consulting"),
     ("reference_number", "No",
      "The issuing authority's bid number. Worth filling in: it is how the system recognises a "
      "tender it has already seen, so this file can be re-sent without creating duplicates.",
@@ -205,6 +228,11 @@ RULES = [
      "reports that nobody can fill the seat, even when three people obviously can. Common short "
      "forms like BA and PM are expanded automatically, and anything else is reported back to you "
      "in a list rather than quietly accepted."),
+    ("A bid can only be seen by its own department",
+     "Each of the four departments sees only its own tenders, so the department column decides "
+     "who this bid is visible to. Getting it wrong does not produce an error: the bid is created "
+     "and simply never appears for the people working on it. If a whole file belongs to one "
+     "department, the column can be left blank and it will follow whoever loads it."),
     ("Use a pipe between list items",
      "Skills, certifications, sectors and seats all separate with a pipe. Commas are fine inside "
      "an item, so 'Roads, bridges and structures' stays as one thing."),

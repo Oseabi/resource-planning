@@ -14,6 +14,7 @@ import { CreateUserDialog } from "@/app/(app)/settings/users/create-user-dialog"
 import { ResetPasswordDialog } from "@/app/(app)/settings/users/reset-password-dialog";
 import { RoleSelect } from "@/app/(app)/settings/users/role-select";
 import { DeleteUserDialog } from "@/app/(app)/settings/users/delete-user-dialog";
+import { DepartmentSelect } from "@/app/(app)/settings/users/department-select";
 
 export default async function UsersSettingsPage() {
   const supabase = await createClient();
@@ -35,10 +36,15 @@ export default async function UsersSettingsPage() {
     );
   }
 
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, full_name, email, role, must_change_password, created_at")
-    .order("created_at", { ascending: false });
+  const [{ data: profiles }, { data: departments }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, full_name, email, role, department_id, must_change_password, created_at")
+      .order("created_at", { ascending: false }),
+    supabase.from("departments").select("id, name, slug").order("sort_order"),
+  ]);
+
+  const allDepartments = departments ?? [];
 
   return (
     <div>
@@ -46,7 +52,8 @@ export default async function UsersSettingsPage() {
         <div>
           <h1 className="text-display font-semibold text-foreground">User Management</h1>
           <p className="mt-1 text-body-lg text-muted-foreground">
-            Manage platform access, roles, and accounts for your team.
+            Manage platform access, roles, and accounts for your team. A person&apos;s department
+            decides which tenders they can see; admins see all four.
           </p>
         </div>
         <CreateUserDialog />
@@ -61,6 +68,7 @@ export default async function UsersSettingsPage() {
                 <TableHead>User name</TableHead>
                 <TableHead>Email address</TableHead>
                 <TableHead>Role</TableHead>
+                <TableHead>Department</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -75,6 +83,16 @@ export default async function UsersSettingsPage() {
                       userId={profile.id}
                       role={profile.role}
                       disabled={profile.id === current.id}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    {/* Not disabled for yourself the way Role is: an admin
+                        moving their own department is harmless, since they see
+                        all four regardless. */}
+                    <DepartmentSelect
+                      userId={profile.id}
+                      departmentId={profile.department_id}
+                      departments={allDepartments}
                     />
                   </TableCell>
                   <TableCell>
@@ -116,8 +134,15 @@ export default async function UsersSettingsPage() {
                   <Badge className="shrink-0 bg-success text-success-foreground">Active</Badge>
                 )}
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <RoleSelect userId={profile.id} role={profile.role} disabled={profile.id === current.id} />
+                <DepartmentSelect
+                  userId={profile.id}
+                  departmentId={profile.department_id}
+                  departments={allDepartments}
+                />
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <div className="flex items-center gap-2">
                   <ResetPasswordDialog userId={profile.id} email={profile.email} />
                   <DeleteUserDialog

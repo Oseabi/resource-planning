@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { isCurrentUserAdmin } from "@/lib/auth/current-user";
+import { resolveTenderDepartment } from "@/lib/departments";
+import { getCurrentProfile, isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { purgeActivity } from "@/app/(app)/activity-actions";
 import type { JobRequirementStatus, Json } from "@/lib/supabase/database.types";
 import {
@@ -16,6 +17,8 @@ import { sendMatchAlert, isEmailConfigured } from "@/lib/email/resend";
 
 export interface RequirementFormFields {
   title: string;
+  /** The business unit that owns this vacancy, and therefore who can see it. */
+  department_id: string | null;
   /** Roles this requirement must staff; persisted to the positions table. */
   positions: PositionInput[];
   client: string | null;
@@ -43,12 +46,27 @@ export async function createRequirement(
   if (!user) return { error: "Not authenticated." };
   if (!fields.title?.trim()) return { error: "Title is required." };
 
+  const profile = await getCurrentProfile();
+  const { data: departments } = await supabase.from("departments").select("id, name, slug");
+  const resolved = resolveTenderDepartment({
+    isAdmin: profile?.isAdmin ?? false,
+    creatorDepartmentId: profile?.departmentId ?? null,
+    submittedDepartmentId: fields.department_id,
+    departments: departments ?? [],
+  });
+  if (resolved.error) return { error: resolved.error };
+
   // Positions live in their own table, so they must not reach this insert.
   const { positions, ...requirementColumns } = fields;
 
   const { data, error } = await supabase
     .from("job_requirements")
-    .insert({ ...requirementColumns, title: fields.title.trim(), created_by: user.id })
+    .insert({
+      ...requirementColumns,
+      title: fields.title.trim(),
+      department_id: resolved.departmentId!,
+      created_by: user.id,
+    })
     .select("id")
     .single();
 
@@ -80,12 +98,16 @@ export async function updateRequirement(
 
   if (!fields.title?.trim()) return { error: "Title is required." };
 
-  const { positions, ...requirementColumns } = fields;
+  const { positions, department_id, ...requirementColumns } = fields;
+
+  // Only an admin moves a vacancy between departments, and only to a real one.
+  const profile = await getCurrentProfile();
+  const departmentChange = profile?.isAdmin && department_id ? { department_id } : {};
 
   // Counted, not assumed, for the same reason as updateTender.
   const { data: updated, error } = await supabase
     .from("job_requirements")
-    .update({ ...requirementColumns, title: fields.title.trim() })
+    .update({ ...requirementColumns, ...departmentChange, title: fields.title.trim() })
     .eq("id", id)
     .select("id");
 

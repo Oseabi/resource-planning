@@ -13,6 +13,7 @@ import { TagInput } from "@/components/ui/tag-input";
 import { PositionsEditor } from "@/app/(app)/positions-editor";
 import type { TenderFormFields } from "@/app/(app)/tenders/actions";
 import type { TenderStatus } from "@/lib/supabase/database.types";
+import type { DepartmentOption } from "@/lib/departments";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
@@ -27,6 +28,7 @@ export type TenderExtractedFlags = Partial<Record<keyof TenderFormFields, boolea
 
 export const EMPTY_TENDER: TenderFormFields = {
   title: "",
+  department_id: null,
   positions: [],
   reference_number: null,
   client: null,
@@ -48,10 +50,16 @@ export function TenderFields({
   value,
   onChange,
   extracted = {},
+  departments = [],
+  ownDepartmentName = null,
 }: {
   value: TenderFormFields;
   onChange: (next: TenderFormFields) => void;
   extracted?: TenderExtractedFlags;
+  /** Only passed for an admin, who works across all four. */
+  departments?: DepartmentOption[];
+  /** Shown to everybody else, so they can see where the bid is going. */
+  ownDepartmentName?: string | null;
 }) {
   function set<K extends keyof TenderFormFields>(key: K, val: TenderFormFields[K]) {
     onChange({ ...value, [key]: val });
@@ -97,6 +105,35 @@ export function TenderFields({
           <Field label="Reference letters required" htmlFor="tf-refletters">
             <Input id="tf-refletters" type="number" min={0} step="1" value={value.reference_letters_required ?? ""} onChange={(e) => set("reference_letters_required", e.target.value === "" ? null : Number(e.target.value))} placeholder="e.g. 3" />
           </Field>
+          {/* An admin chooses; a manager's bid lands in their own department
+              without the form asking, which is right almost every time and
+              takes a required field off a form filled in under deadline
+              pressure. The read-only line is still shown, because "which
+              department is this going to" is a fair question to be able to
+              answer before saving. */}
+          {departments.length > 0 ? (
+            <Field label="Department" htmlFor="tf-department">
+              <Select
+                value={value.department_id ?? ""}
+                onValueChange={(v) => set("department_id", v || null)}
+              >
+                <SelectTrigger id="tf-department" className="w-full">
+                  <SelectValue placeholder="Pick a department" />
+                </SelectTrigger>
+                <SelectContent>
+                  {departments.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          ) : (
+            <Field label="Department" htmlFor="tf-department-static">
+              <Input id="tf-department-static" value={ownDepartmentName ?? "Not assigned"} readOnly disabled />
+            </Field>
+          )}
           <Field label="Status" htmlFor="tf-status">
             <Select value={value.status} onValueChange={(v) => set("status", v as TenderStatus)}>
               <SelectTrigger id="tf-status" className="w-full">

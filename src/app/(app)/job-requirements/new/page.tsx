@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { RequirementForm, EMPTY_REQUIREMENT } from "@/app/(app)/job-requirements/requirement-form";
+import { loadDepartmentContext } from "@/lib/departments-repo";
 
-export default function NewRequirementPage() {
+export default async function NewRequirementPage() {
+  const departments = await loadDepartmentContext();
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <Link href="/job-requirements" className="inline-flex items-center gap-1.5 text-body-sm text-muted-foreground hover:text-foreground">
@@ -15,7 +18,12 @@ export default function NewRequirementPage() {
           Define the role and requirements, then match candidates against it.
         </p>
       </div>
-      <RequirementForm mode="create" initial={EMPTY_REQUIREMENT} />
+      <RequirementForm
+        mode="create"
+        initial={EMPTY_REQUIREMENT}
+        departments={departments.options}
+        ownDepartmentName={departments.ownDepartmentName}
+      />
     </div>
   );
 }

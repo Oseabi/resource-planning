@@ -39,11 +39,14 @@ export function RoleSelect({
         });
       }}
     >
-      <SelectTrigger size="sm" className="w-28">
+      <SelectTrigger size="sm" className="w-32">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="user">User</SelectItem>
+        {/* A manager runs one department: they can delete within it without
+            being made a global admin, which would hand them all four. */}
+        <SelectItem value="manager">Manager</SelectItem>
         <SelectItem value="admin">Admin</SelectItem>
       </SelectContent>
     </Select>

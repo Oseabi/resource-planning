@@ -144,6 +144,22 @@ export async function updateUserRole(userId: string, role: ProfileRole) {
   await requireAdmin();
 
   const admin = createAdminClient();
+
+  // Demoting the last admin locks everybody out of this screen, and out of
+  // every delete in the system. deleteUser already refuses it; so does this.
+  if (role !== "admin") {
+    const { data: target } = await admin.from("profiles").select("role").eq("id", userId).single();
+    if (target?.role === "admin") {
+      const { count } = await admin
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("role", "admin");
+      if ((count ?? 0) <= 1) {
+        throw new Error("This is the only admin. Promote another admin before changing this one.");
+      }
+    }
+  }
+
   const { error } = await admin.from("profiles").update({ role }).eq("id", userId);
 
   if (error) {
@@ -151,4 +167,32 @@ export async function updateUserRole(userId: string, role: ProfileRole) {
   }
 
   revalidatePath("/settings/users");
+}
+
+/**
+ * Move somebody to another business unit, which is what decides the tenders
+ * they can see.
+ *
+ * As much a privilege grant as the role is, so it goes through the same door:
+ * requireAdmin here, and the prevent_role_self_escalation trigger in the
+ * database, which 0018 extended to cover this column. Without that trigger
+ * change a manager could reassign themselves, because profiles_update_self lets
+ * anybody write their own row.
+ */
+export async function updateUserDepartment(userId: string, departmentId: string | null) {
+  await requireAdmin();
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("profiles")
+    .update({ department_id: departmentId })
+    .eq("id", userId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/settings/users");
+  // Every scoped list changes for that person, so nothing cached survives.
+  revalidatePath("/", "layout");
 }

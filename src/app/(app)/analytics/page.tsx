@@ -100,6 +100,9 @@ export default async function AnalyticsPage() {
   const health = poolHealth(allCandidates);
   const categories = categoryBreakdown(allCandidates);
   const bands = experienceBands(allCandidates);
+  // Demand is this department's, supply is the whole company's. That mismatch
+  // is deliberate and is the right question: "can my department's demand be
+  // met from the shared pool". It would otherwise read as an oversight.
   const gaps = skillGaps(demandedSkills(allReqs, allTenders, positions ?? []), allCandidates);
 
   const perf = tenderPerformance(allTenders);
@@ -141,6 +144,16 @@ export default async function AnalyticsPage() {
         <p className="mt-1 text-body-lg text-muted-foreground">
           Pool strength, bid performance, compliance readiness, and delivery operations.
         </p>
+        {/* Two of these four tabs are company wide and two are not, and nothing
+            about a number tells you which. The pool is shared by design and the
+            letters are company assets, so those tabs cannot narrow; the bid and
+            delivery figures come from tenders, which are department owned. Said
+            out loud, because a number that quietly means something else is
+            worse than one that is missing. */}
+        <p className="mt-2 text-body-sm text-muted-foreground">
+          Tenders &amp; Bids and Operations show your department. Resource Pool and Compliance
+          are company wide, because the candidate pool and the letters are shared across all four.
+        </p>
       </div>
 
       {/* Headline KPIs spanning every area */}
@@ -177,9 +190,9 @@ export default async function AnalyticsPage() {
 
       <Tabs defaultValue="pool">
         <TabsList>
-          <TabsTrigger value="pool">Resource Pool</TabsTrigger>
+          <TabsTrigger value="pool">Resource Pool (all)</TabsTrigger>
           <TabsTrigger value="tenders">Tenders &amp; Bids</TabsTrigger>
-          <TabsTrigger value="compliance">Compliance</TabsTrigger>
+          <TabsTrigger value="compliance">Compliance (all)</TabsTrigger>
           <TabsTrigger value="ops">Operations</TabsTrigger>
         </TabsList>
 

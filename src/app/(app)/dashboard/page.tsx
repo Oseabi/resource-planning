@@ -29,8 +29,18 @@ const ALL_DEADLINES = 3650;
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  const [{ data: tenders }, { data: letters }, { data: candidates }, { data: placements }] =
-    await Promise.all([
+  // Two placement reads, because they answer two different questions. The bench
+  // forecast asks when people come free, which is a question about the shared
+  // pool and has to see every department's commitments. The headcount tally
+  // asks who is on which of our contracts, which is this department's business
+  // and is correctly scoped.
+  const [
+    { data: tenders },
+    { data: letters },
+    { data: candidates },
+    { data: commitments },
+    { data: ownPlacements },
+  ] = await Promise.all([
       supabase
         .from("tenders")
         .select(
@@ -42,15 +52,14 @@ export default async function DashboardPage() {
         .select(
           "id, status, availability, available_from, years_experience, resource_categories, skills, technical_skills, certifications",
         ),
-      supabase
-        .from("placements")
-        .select("candidate_id, start_date, end_date, source_type, source_id"),
+      supabase.rpc("candidate_commitments"),
+      supabase.from("placements").select("source_type, source_id"),
     ]);
 
   const allTenders = tenders ?? [];
   const allLetters = letters ?? [];
   const allCandidates = candidates ?? [];
-  const allPlacements = placements ?? [];
+  const allCommitments = commitments ?? [];
 
   // Only bids still being put together can act on what this page says.
   //
@@ -173,7 +182,7 @@ export default async function DashboardPage() {
   const health = poolHealth(allCandidates);
   // Six months is far enough to plan a bid team around and short enough that the
   // dates behind it are still worth anything.
-  const forecast = benchForecast(allCandidates, allPlacements, 6);
+  const forecast = benchForecast(allCandidates, allCommitments, 6);
   const categories = categoryBreakdown(allCandidates).slice(0, 6);
   const compliance = complianceSummary(allLetters);
   const watchLetters = allLetters
@@ -188,7 +197,7 @@ export default async function DashboardPage() {
   // Soonest to finish first: that is the contract about to free people up, and
   // the one whose follow-on bid is already late.
   const headcountByTender = new Map<string, number>();
-  for (const p of allPlacements) {
+  for (const p of ownPlacements ?? []) {
     if (p.source_type !== "tender") continue;
     headcountByTender.set(p.source_id, (headcountByTender.get(p.source_id) ?? 0) + 1);
   }
