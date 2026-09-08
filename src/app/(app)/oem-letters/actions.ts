@@ -155,9 +155,18 @@ export async function deleteOemLetter(id: string): Promise<{ error: string | nul
     .eq("id", id)
     .single();
 
-  // RLS restricts DELETE to admins; a non-admin call is rejected here.
-  const { error } = await supabase.from("oem_letters").delete().eq("id", id);
+  // Counted, not assumed. A delete RLS filters out returns zero rows and NO
+  // error, and falling through would remove the letter from storage with the
+  // service-role client while the record survives pointing at nothing.
+  const { data: deleted, error } = await supabase
+    .from("oem_letters")
+    .delete()
+    .eq("id", id)
+    .select("id");
   if (error) return { error: error.message };
+  if (!deleted || deleted.length === 0) {
+    return { error: "Only admins can delete an OEM letter." };
+  }
 
   await purgeActivity("oem_letter", id);
 

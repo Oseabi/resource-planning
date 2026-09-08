@@ -253,9 +253,19 @@ export async function deleteCandidate(
     .eq("id", candidateId)
     .single();
 
-  // RLS restricts DELETE to admins; a non-admin call is rejected here.
-  const { error } = await supabase.from("candidates").delete().eq("id", candidateId);
+  // RLS restricts DELETE to admins, and a filtered-out delete comes back with
+  // zero rows and NO error. Without counting them this would fall through and
+  // remove the CV from storage with the service-role client, which bypasses
+  // RLS, leaving the record intact and pointing at a file that is gone.
+  const { data: deleted, error } = await supabase
+    .from("candidates")
+    .delete()
+    .eq("id", candidateId)
+    .select("id");
   if (error) return { error: error.message };
+  if (!deleted || deleted.length === 0) {
+    return { error: "Only admins can delete a candidate." };
+  }
 
   await purgeActivity("candidate", candidateId);
 

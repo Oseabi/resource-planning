@@ -71,16 +71,28 @@ export async function updateRequirement(
   fields: RequirementFormFields,
 ): Promise<SaveRequirementResult> {
   const supabase = await createClient();
+  // This action had no auth call at all. Harmless while every authenticated
+  // user could edit every requirement, and a hole the moment they cannot.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated." };
+
   if (!fields.title?.trim()) return { error: "Title is required." };
 
   const { positions, ...requirementColumns } = fields;
 
-  const { error } = await supabase
+  // Counted, not assumed, for the same reason as updateTender.
+  const { data: updated, error } = await supabase
     .from("job_requirements")
     .update({ ...requirementColumns, title: fields.title.trim() })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id");
 
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "That requirement no longer exists, or you do not have permission to edit it." };
+  }
 
   const positionsResult = await replacePositions(supabase, "job_requirement", id, positions ?? []);
   if (positionsResult.error) return { error: positionsResult.error };

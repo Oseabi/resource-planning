@@ -188,9 +188,19 @@ export async function deleteReferenceLetter(id: string): Promise<{ error: string
     .eq("id", id)
     .single();
 
-  // RLS restricts DELETE to admins; a non-admin call is rejected here.
-  const { error } = await supabase.from("reference_letters").delete().eq("id", id);
+  // Counted, not assumed. A delete RLS filters out returns zero rows and NO
+  // error, and falling through would remove the signed letter from storage
+  // with the service-role client while the record survives pointing at
+  // nothing, which is the one state a bid pack cannot recover from.
+  const { data: deleted, error } = await supabase
+    .from("reference_letters")
+    .delete()
+    .eq("id", id)
+    .select("id");
   if (error) return { error: error.message };
+  if (!deleted || deleted.length === 0) {
+    return { error: "Only admins can delete a reference letter." };
+  }
 
   if (letter?.file_path) {
     await createAdminClient().storage.from(LETTER_BUCKET).remove([letter.file_path]);

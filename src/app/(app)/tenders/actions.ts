@@ -112,16 +112,30 @@ export async function createTender(formData: FormData): Promise<SaveTenderResult
 
 export async function updateTender(id: string, fields: TenderFormFields): Promise<SaveTenderResult> {
   const supabase = await createClient();
+  // This action had no auth call at all. Harmless while every authenticated
+  // user could edit every tender, and a hole the moment they cannot.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated." };
+
   if (!fields.title?.trim()) return { error: "Title is required." };
 
   const { positions, ...tenderColumns } = fields;
 
-  const { error } = await supabase
+  // Counted, not assumed. An update RLS filters out returns zero rows and no
+  // error, so without this the action would report success on a tender the
+  // caller cannot see, and then go on to rewrite its seats.
+  const { data: updated, error } = await supabase
     .from("tenders")
     .update({ ...tenderColumns, title: fields.title.trim() })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id");
 
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "That tender no longer exists, or you do not have permission to edit it." };
+  }
 
   const positionsResult = await replacePositions(supabase, "tender", id, positions ?? []);
   if (positionsResult.error) return { error: positionsResult.error };
@@ -373,6 +387,17 @@ export async function getTenderDocUrl(path: string): Promise<{ url: string | nul
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { url: null };
+
+  // The signed URL is minted with the service-role client, which bypasses RLS,
+  // so being signed in cannot be the whole check: any path handed to this
+  // action would be honoured. Resolve the path back to its tender through the
+  // ordinary client first, so RLS decides whether the caller may see it.
+  const { data: owner } = await supabase
+    .from("tenders")
+    .select("id")
+    .eq("source_document_path", path)
+    .maybeSingle();
+  if (!owner) return { url: null };
 
   const { data } = await createAdminClient().storage.from(DOC_BUCKET).createSignedUrl(path, 120);
   return { url: data?.signedUrl ?? null };
