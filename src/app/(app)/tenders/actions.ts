@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile, isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { resolveTenderDepartment } from "@/lib/departments";
 import { purgeActivity, recordEvent } from "@/app/(app)/activity-actions";
+import { recordAudit } from "@/app/(app)/audit-actions";
 import { validateExtension, placementsAlignedTo } from "@/lib/delivery";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { TenderStatus, Json } from "@/lib/supabase/database.types";
@@ -128,6 +129,14 @@ export async function createTender(formData: FormData): Promise<SaveTenderResult
   const positionsResult = await replacePositions(supabase, "tender", data.id, positions ?? []);
   if (positionsResult.error) return { error: positionsResult.error };
 
+  await recordAudit({
+    action: "created",
+    entityType: "tender",
+    entityId: data.id,
+    entityLabel: fields.title.trim(),
+    detail: { department_id: resolved.departmentId, status: fields.status },
+  });
+
   revalidatePath("/tenders");
   return { id: data.id };
 }
@@ -197,7 +206,7 @@ export async function deleteTender(id: string): Promise<{ error: string | null }
   }
 
   const [{ data: tender }, { data: positions }, { data: placements }] = await Promise.all([
-    supabase.from("tenders").select("source_document_path").eq("id", id).single(),
+    supabase.from("tenders").select("source_document_path, title").eq("id", id).single(),
     supabase.from("positions").select("id").eq("parent_type", "tender").eq("parent_id", id),
     supabase
       .from("placements")
@@ -247,6 +256,17 @@ export async function deleteTender(id: string): Promise<{ error: string | null }
 
   const { error } = await supabase.from("tenders").delete().eq("id", id);
   if (error) return { error: error.message };
+
+  // Written before purgeActivity, and to a table purgeActivity does not touch.
+  // The timeline is about to be destroyed along with the tender, which is
+  // exactly why the audit trail cannot live in it.
+  await recordAudit({
+    action: "deleted",
+    entityType: "tender",
+    entityId: id,
+    entityLabel: tender?.title ?? null,
+    detail: { seats: positions?.length ?? 0, placements: placements?.length ?? 0 },
+  });
 
   await purgeActivity("tender", id);
 

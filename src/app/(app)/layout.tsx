@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentProfile } from "@/lib/auth/current-user";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { Topbar } from "@/components/layout/topbar";
+import { SessionHeartbeat } from "@/app/(app)/session-heartbeat";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Cached for the whole render, so pages that also need the user or their role
@@ -27,6 +28,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen">
+      {/* Renders nothing. In the layout so it survives navigation. */}
+      <SessionHeartbeat />
       <SidebarNav fullName={fullName} roleLabel={roleLabel} isAdmin={profile.isAdmin} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar fullName={fullName} roleLabel={roleLabel} isAdmin={profile.isAdmin} />

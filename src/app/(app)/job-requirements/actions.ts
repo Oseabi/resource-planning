@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveTenderDepartment } from "@/lib/departments";
 import { getCurrentProfile, isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { purgeActivity } from "@/app/(app)/activity-actions";
+import { recordAudit } from "@/app/(app)/audit-actions";
 import type { JobRequirementStatus, Json } from "@/lib/supabase/database.types";
 import {
   scoreCandidateForPosition,
@@ -80,6 +81,14 @@ export async function createRequirement(
   );
   if (positionsResult.error) return { error: positionsResult.error };
 
+  await recordAudit({
+    action: "created",
+    entityType: "job_requirement",
+    entityId: data.id,
+    entityLabel: fields.title.trim(),
+    detail: { department_id: resolved.departmentId },
+  });
+
   revalidatePath("/job-requirements");
   return { id: data.id };
 }
@@ -138,7 +147,8 @@ export async function deleteRequirement(id: string): Promise<{ error: string | n
 
   // Placements reference a requirement by a plain source_id, so the database
   // cannot cascade them, they are removed here along with the requirement.
-  const [{ data: positions }, { data: placements }] = await Promise.all([
+  const [{ data: requirement }, { data: positions }, { data: placements }] = await Promise.all([
+    supabase.from("job_requirements").select("title").eq("id", id).single(),
     supabase.from("positions").select("id").eq("parent_type", "job_requirement").eq("parent_id", id),
     supabase
       .from("placements")
@@ -181,6 +191,14 @@ export async function deleteRequirement(id: string): Promise<{ error: string | n
 
   const { error } = await supabase.from("job_requirements").delete().eq("id", id);
   if (error) return { error: error.message };
+
+  await recordAudit({
+    action: "deleted",
+    entityType: "job_requirement",
+    entityId: id,
+    entityLabel: requirement?.title ?? null,
+    detail: { seats: positions?.length ?? 0, placements: placements?.length ?? 0 },
+  });
 
   await purgeActivity("job_requirement", id);
 

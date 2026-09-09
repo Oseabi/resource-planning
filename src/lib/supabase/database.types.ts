@@ -40,6 +40,48 @@ export interface Education {
 export interface Database {
   public: {
     Tables: {
+      audit_log: {
+        Row: {
+          id: string;
+          /** Null once the person has been removed; the record of what they did stays. */
+          actor_id: string | null;
+          /** Copied at write time, so the row still names somebody after that. */
+          actor_email: string | null;
+          actor_name: string | null;
+          action: string;
+          entity_type: string;
+          entity_id: string | null;
+          /** The name it had when it happened, so a deleted record still reads. */
+          entity_label: string | null;
+          detail: Json;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["audit_log"]["Row"]> & {
+          action: string;
+          entity_type: string;
+        };
+        /** Append only. No update or delete policy exists, deliberately. */
+        Update: never;
+        Relationships: [];
+      };
+      user_sessions: {
+        Row: {
+          id: string;
+          user_id: string;
+          started_at: string;
+          /** Moved forward by the heartbeat; the moment a session really ended. */
+          last_seen_at: string;
+          /** Set only on a deliberate sign-out. Most sessions just stop beating. */
+          ended_at: string | null;
+          user_agent: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["user_sessions"]["Row"]> & {
+          user_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["user_sessions"]["Insert"]>;
+        Relationships: [];
+      };
       departments: {
         Row: {
           id: string;

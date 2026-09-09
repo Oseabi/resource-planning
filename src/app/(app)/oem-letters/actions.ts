@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { purgeActivity } from "@/app/(app)/activity-actions";
+import { recordAudit } from "@/app/(app)/audit-actions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -151,7 +152,7 @@ export async function deleteOemLetter(id: string): Promise<{ error: string | nul
 
   const { data: letter } = await supabase
     .from("oem_letters")
-    .select("file_path")
+    .select("file_path, title")
     .eq("id", id)
     .single();
 
@@ -167,6 +168,13 @@ export async function deleteOemLetter(id: string): Promise<{ error: string | nul
   if (!deleted || deleted.length === 0) {
     return { error: "Only admins can delete an OEM letter." };
   }
+
+  await recordAudit({
+    action: "deleted",
+    entityType: "oem_letter",
+    entityId: id,
+    entityLabel: letter?.title ?? null,
+  });
 
   await purgeActivity("oem_letter", id);
 

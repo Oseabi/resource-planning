@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { recordAudit } from "@/app/(app)/audit-actions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -184,7 +185,7 @@ export async function deleteReferenceLetter(id: string): Promise<{ error: string
 
   const { data: letter } = await supabase
     .from("reference_letters")
-    .select("file_path")
+    .select("file_path, project_title, client")
     .eq("id", id)
     .single();
 
@@ -201,6 +202,13 @@ export async function deleteReferenceLetter(id: string): Promise<{ error: string
   if (!deleted || deleted.length === 0) {
     return { error: "Only admins can delete a reference letter." };
   }
+
+  await recordAudit({
+    action: "deleted",
+    entityType: "reference_letter",
+    entityId: id,
+    entityLabel: letter ? `${letter.client}: ${letter.project_title}` : null,
+  });
 
   if (letter?.file_path) {
     await createAdminClient().storage.from(LETTER_BUCKET).remove([letter.file_path]);
