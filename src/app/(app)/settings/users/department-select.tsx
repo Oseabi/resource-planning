@@ -47,7 +47,11 @@ export function DepartmentSelect({
       }}
     >
       <SelectTrigger size="sm" className="w-44">
-        <SelectValue />
+        {/* Without a render function the trigger shows the stored value, which
+            here is a uuid or the literal "none". */}
+        <SelectValue>
+          {(v) => departments.find((d) => d.id === String(v))?.name ?? "No department"}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {/* Correct for an admin, who works across all four. For anybody else it

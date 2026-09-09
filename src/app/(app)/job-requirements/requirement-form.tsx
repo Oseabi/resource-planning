@@ -142,7 +142,9 @@ export function RequirementForm({
                 onValueChange={(v) => set("department_id", v || null)}
               >
                 <SelectTrigger id="rq-department" className="w-full">
-                  <SelectValue placeholder="Pick a department" />
+                  <SelectValue placeholder="Pick a department">
+                    {(v) => departments.find((d) => d.id === String(v))?.name ?? "Pick a department"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {departments.map((d) => (
