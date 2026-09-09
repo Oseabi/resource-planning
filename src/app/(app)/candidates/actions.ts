@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { purgeActivity } from "@/app/(app)/activity-actions";
+import { recordAudit } from "@/app/(app)/audit-actions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   CandidateAvailability,
@@ -189,6 +190,14 @@ export async function saveCandidate(formData: FormData): Promise<SaveCandidateSt
     return { status: "error", message: error?.message ?? "Could not save candidate." };
   }
 
+  await recordAudit({
+    action: "created",
+    entityType: "candidate",
+    entityId: data.id,
+    entityLabel: fields.full_name,
+    detail: { from_cv: Boolean(cvPath) },
+  });
+
   revalidatePath("/candidates");
   return { status: "success", candidateId: data.id };
 }
@@ -249,13 +258,31 @@ export async function deleteCandidate(
   // Fetch the CV path before deleting so we can clean up storage.
   const { data: candidate } = await supabase
     .from("candidates")
-    .select("cv_file_path")
+    .select("cv_file_path, full_name")
     .eq("id", candidateId)
     .single();
 
-  // RLS restricts DELETE to admins; a non-admin call is rejected here.
-  const { error } = await supabase.from("candidates").delete().eq("id", candidateId);
+  // RLS restricts DELETE to admins, and a filtered-out delete comes back with
+  // zero rows and NO error. Without counting them this would fall through and
+  // remove the CV from storage with the service-role client, which bypasses
+  // RLS, leaving the record intact and pointing at a file that is gone.
+  const { data: deleted, error } = await supabase
+    .from("candidates")
+    .delete()
+    .eq("id", candidateId)
+    .select("id");
   if (error) return { error: error.message };
+  if (!deleted || deleted.length === 0) {
+    return { error: "Only admins can delete a candidate." };
+  }
+
+  await recordAudit({
+    action: "deleted",
+    entityType: "candidate",
+    entityId: candidateId,
+    entityLabel: candidate?.full_name ?? null,
+    detail: { had_cv: Boolean(candidate?.cv_file_path) },
+  });
 
   await purgeActivity("candidate", candidateId);
 

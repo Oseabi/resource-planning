@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { purgeActivity } from "@/app/(app)/activity-actions";
+import { recordAudit } from "@/app/(app)/audit-actions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -151,13 +152,29 @@ export async function deleteOemLetter(id: string): Promise<{ error: string | nul
 
   const { data: letter } = await supabase
     .from("oem_letters")
-    .select("file_path")
+    .select("file_path, title")
     .eq("id", id)
     .single();
 
-  // RLS restricts DELETE to admins; a non-admin call is rejected here.
-  const { error } = await supabase.from("oem_letters").delete().eq("id", id);
+  // Counted, not assumed. A delete RLS filters out returns zero rows and NO
+  // error, and falling through would remove the letter from storage with the
+  // service-role client while the record survives pointing at nothing.
+  const { data: deleted, error } = await supabase
+    .from("oem_letters")
+    .delete()
+    .eq("id", id)
+    .select("id");
   if (error) return { error: error.message };
+  if (!deleted || deleted.length === 0) {
+    return { error: "Only admins can delete an OEM letter." };
+  }
+
+  await recordAudit({
+    action: "deleted",
+    entityType: "oem_letter",
+    entityId: id,
+    entityLabel: letter?.title ?? null,
+  });
 
   await purgeActivity("oem_letter", id);
 

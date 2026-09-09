@@ -61,7 +61,9 @@ export default async function CandidatesPage({
   // free by then and exclude those ids in SQL.
   const freeBy = /^\d{4}-\d{2}-\d{2}$/.test(sp.freeBy ?? "") ? sp.freeBy! : null;
   if (freeBy) {
-    const { data: windows } = await supabase.from("placements").select("candidate_id, end_date");
+    // Company wide, through the rpc: the pool is shared, so somebody committed
+    // on another department's contract is not free by this date either.
+    const { data: windows } = await supabase.rpc("candidate_commitments");
     const stillCommitted = [
       ...new Set(
         (windows ?? [])
@@ -78,6 +80,10 @@ export default async function CandidatesPage({
 
   const { data: candidates, count } = await query.range(from, from + PAGE_SIZE - 1);
 
+  // Company wide on purpose, and unchanged by department scoping: the pool is
+  // shared, so any department can bid anybody. These two tiles are the only
+  // numbers on a manager's screen that still count the whole business, which is
+  // why the labels say so.
   const [{ count: totalCount }, { count: availableCount }] = await Promise.all([
     supabase.from("candidates").select("id", { count: "exact", head: true }),
     supabase
@@ -113,8 +119,8 @@ export default async function CandidatesPage({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <StatCard label="Total candidates" value={totalCount ?? 0} />
-          <StatCard label="Available now" value={availableCount ?? 0} accent />
+          <StatCard label="Total candidates (all departments)" value={totalCount ?? 0} />
+          <StatCard label="Available now (all departments)" value={availableCount ?? 0} accent />
           <Button render={<Link href="/candidates/new" />} nativeButton={false}>
             <Plus className="size-4" />
             Add Candidate

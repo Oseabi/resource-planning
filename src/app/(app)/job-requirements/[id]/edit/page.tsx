@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { RequirementForm } from "@/app/(app)/job-requirements/requirement-form";
+import { loadDepartmentContext } from "@/lib/departments-repo";
 import type { RequirementFormFields } from "@/app/(app)/job-requirements/actions";
 import { loadPositions, toPositionInputs } from "@/lib/positions-repo";
 
@@ -13,13 +14,15 @@ export default async function EditRequirementPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const [{ data: req }, positionRows] = await Promise.all([
+  const [{ data: req }, positionRows, departments] = await Promise.all([
     supabase.from("job_requirements").select("*").eq("id", id).single(),
     loadPositions(supabase, "job_requirement", id),
+    loadDepartmentContext(),
   ]);
   if (!req) notFound();
 
   const initial: RequirementFormFields = {
+    department_id: req.department_id,
     title: req.title,
     positions: toPositionInputs(positionRows),
     client: req.client,
@@ -44,7 +47,13 @@ export default async function EditRequirementPage({
       <div>
         <h1 className="text-display font-semibold text-foreground">Edit job requirement</h1>
       </div>
-      <RequirementForm mode="edit" requirementId={id} initial={initial} />
+      <RequirementForm
+        mode="edit"
+        requirementId={id}
+        initial={initial}
+        departments={departments.options}
+        ownDepartmentName={departments.ownDepartmentName}
+      />
     </div>
   );
 }

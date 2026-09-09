@@ -12,9 +12,11 @@ import { cn } from "@/lib/utils";
 export function MobileNav({
   fullName,
   roleLabel,
+  isAdmin,
 }: {
   fullName: string;
   roleLabel: string;
+  isAdmin?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const close = React.useCallback(() => setOpen(false), []);
@@ -78,7 +80,7 @@ export function MobileNav({
           >
             <X className="size-4" />
           </button>
-          <SidebarContent fullName={fullName} roleLabel={roleLabel} onNavigate={close} />
+          <SidebarContent isAdmin={isAdmin} fullName={fullName} roleLabel={roleLabel} onNavigate={close} />
         </div>
       </div>
     </div>

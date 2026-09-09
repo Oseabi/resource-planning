@@ -8,13 +8,15 @@ import { GlobalSearch } from "@/components/layout/global-search";
 export function Topbar({
   fullName,
   roleLabel,
+  isAdmin,
 }: {
   fullName: string;
   roleLabel: string;
+  isAdmin?: boolean;
 }) {
   return (
     <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border bg-card px-4 shadow-[0_1px_2px_0_oklch(0.28_0.06_262/0.04)] sm:gap-4 sm:px-6">
-      <MobileNav fullName={fullName} roleLabel={roleLabel} />
+      <MobileNav fullName={fullName} roleLabel={roleLabel} isAdmin={isAdmin} />
       <GlobalSearch />
       <div className="flex items-center gap-2">
         <Button

@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/layout/empty-state";
 import { TenderStatusBadge, DeliveryStateBadge, StrengthBar } from "@/app/(app)/tenders/tender-badges";
 import { deliveryState } from "@/lib/delivery";
 import { RfqUploadZone } from "@/app/(app)/tenders/rfq-upload-zone";
+import { loadDepartmentContext } from "@/lib/departments-repo";
 import { poolStrength } from "@/lib/matching";
 
 function formatValue(value: number | null): string {
@@ -32,10 +33,15 @@ function formatDate(iso: string | null): string {
 export default async function TendersPage() {
   const supabase = await createClient();
 
-  const { data: tenders } = await supabase
-    .from("tenders")
-    .select("id, title, client, value, submission_deadline, status, contract_start_date, contract_end_date")
-    .order("created_at", { ascending: false });
+  // Scoped by RLS to the caller's department, so the list and the four stat
+  // tiles derived from it are all this department's numbers. Admins see all.
+  const [{ data: tenders }, departments] = await Promise.all([
+    supabase
+      .from("tenders")
+      .select("id, title, client, value, submission_deadline, status, contract_start_date, contract_end_date")
+      .order("created_at", { ascending: false }),
+    loadDepartmentContext(),
+  ]);
 
   const rows = tenders ?? [];
 
@@ -215,7 +221,10 @@ export default async function TendersPage() {
         )}
       </div>
 
-      <RfqUploadZone />
+      <RfqUploadZone
+        departments={departments.options}
+        ownDepartmentName={departments.ownDepartmentName}
+      />
     </div>
   );
 }

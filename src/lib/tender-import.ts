@@ -32,6 +32,7 @@ export const IMPORT_COLUMNS = [
   "sectors",
   "min_experience_years",
   "reference_letters_required",
+  "department",
 ] as const;
 
 const REQUIRED_COLUMNS = ["title"] as const;
@@ -70,6 +71,12 @@ export interface ParsedTender {
   min_experience_years: number | null;
   /** Client reference letters the tender asks for. A compliance requirement, not a staffing one. */
   reference_letters_required: number | null;
+  /**
+   * The department named in the register, as written. Resolved to an id by the
+   * script, which is where the list of real departments lives. Blank falls back
+   * to the importing operator's own department.
+   */
+  department: string | null;
   status: TenderStatus;
   seats: SeatSpec[];
   /** Columns this row left blank. These are never written over an existing value. */
@@ -442,6 +449,7 @@ export function readRows(
       sectors: parseList(cell("sectors")),
       min_experience_years: years.count,
       reference_letters_required: referenceLetters,
+      department: cell("department").trim() || null,
       status: status!,
       seats: seatResult.seats,
       blankColumns,
@@ -724,6 +732,8 @@ export function rolesFromSeats(seats: SeatSpec[]): string[] {
 
 export interface ReportMeta {
   file: string;
+  /** Where a row with a blank department cell will land. */
+  defaultDepartment?: string;
   delimiter: string;
   headers: string[];
   rowCount: number;
@@ -758,6 +768,9 @@ export function formatPlan(plan: ImportPlan, meta: ReportMeta): string {
   out.push(`${pad("headers")}${meta.headers.join(", ")}`);
   out.push(`${pad("rows")}${meta.rowCount} data row${meta.rowCount === 1 ? "" : "s"}`);
   out.push(`${pad("operator")}${meta.operator}`);
+  if (meta.defaultDepartment) {
+    out.push(`${pad("department")}${meta.defaultDepartment} (where the column is blank)`);
+  }
   out.push(
     `${pad("mode")}${meta.apply ? "APPLY, changes will be written" : "DRY RUN, nothing will be written"}`,
   );
@@ -781,6 +794,10 @@ export function formatPlan(plan: ImportPlan, meta: ReportMeta): string {
 
     if (p.kind === "create") {
       out.push(`row ${p.row.line}  CREATE  "${p.row.title}"${ref}`);
+      // Printed on every created row. The importer runs on the service-role
+      // key, which bypasses RLS, so nothing underneath catches a bid filed into
+      // the wrong department. This line is the review step for that.
+      if (p.row.department) out.push(`        department ${p.row.department}`);
       if (p.row.client) out.push(`        client     ${p.row.client}`);
       if (p.row.contract_start_date) {
         out.push(

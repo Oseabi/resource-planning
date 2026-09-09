@@ -4,6 +4,7 @@
  *   npx tsx scripts/import-tenders.ts <file.csv> [--as <email>] [--apply]
  *                                     [--only <ref,ref>] [--skip-invalid]
  *                                     [--accept-roles "Actuary,Town Planner"]
+ *                                     [--department "Tipp Consulting"]
  *   npx tsx scripts/import-tenders.ts --template
  *
  * Dry run is the default and prints a report saying exactly what it would do.
@@ -18,6 +19,10 @@
  * never touches candidates, placements, assignments, matches or storage, never
  * runs matching, and never deletes a tender: a row missing from the CSV is not
  * a deletion instruction, because the register may be a partial extract.
+ *
+ * It sets a department on create and never on update. A spreadsheet is not the
+ * authority on which department owns a bid that already exists, and a re-run
+ * must not silently move one out from under the people working it.
  *
  * All the decisions live in src/lib/tender-import.ts and are unit-tested. This
  * file is only the I/O around them, which is also why it builds its own
@@ -39,6 +44,7 @@ import {
   type RowPlan,
 } from "@/lib/tender-import";
 import { ALL_ROLES } from "@/lib/vocabulary";
+import { resolveImportDepartment, type DepartmentOption } from "@/lib/departments";
 
 function readEnv(): Record<string, string> {
   const file = path.resolve(".env.local");
@@ -95,8 +101,12 @@ async function main() {
   });
 
   let operatorId: string | null = null;
+  let operatorDepartmentId: string | null = null;
   if (operatorEmail) {
-    const { data: profiles } = await db.from("profiles").select("id, email").eq("email", operatorEmail);
+    const { data: profiles } = await db
+      .from("profiles")
+      .select("id, email, department_id")
+      .eq("email", operatorEmail);
     if (!profiles || profiles.length !== 1) {
       console.error(
         `--as ${operatorEmail} matched ${profiles?.length ?? 0} profiles. It has to match exactly one.`,
@@ -104,16 +114,29 @@ async function main() {
       process.exit(1);
     }
     operatorId = profiles[0].id;
+    operatorDepartmentId = profiles[0].department_id ?? null;
   }
 
   // What is already stored, so the plan can tell a create from an update.
-  const [{ data: tenders }, { data: positions }, { data: assignments }, { data: candidates }] =
-    await Promise.all([
-      db.from("tenders").select("*"),
-      db.from("positions").select("id, role, quantity, min_experience_years, parent_type, parent_id"),
-      db.from("assignments").select("position_id"),
-      db.from("candidates").select("current_role, additional_roles"),
-    ]);
+  const [
+    { data: tenders },
+    { data: positions },
+    { data: assignments },
+    { data: candidates },
+    { data: departmentRows },
+  ] = await Promise.all([
+    db.from("tenders").select("*"),
+    db.from("positions").select("id, role, quantity, min_experience_years, parent_type, parent_id"),
+    db.from("assignments").select("position_id"),
+    db.from("candidates").select("current_role, additional_roles"),
+    db.from("departments").select("id, name, slug").order("sort_order"),
+  ]);
+
+  const departments: DepartmentOption[] = departmentRows ?? [];
+  if (departments.length === 0) {
+    console.error("No departments exist yet. Run supabase/migrations/0018_departments.sql first.");
+    process.exit(1);
+  }
 
   const seatFill = new Map<string, number>();
   for (const a of assignments ?? []) {
@@ -166,7 +189,41 @@ async function main() {
     ? parsed.filter((p) => p.reference_number && only.includes(p.reference_number.toUpperCase()))
     : parsed;
 
-  const plan = buildPlan(selected, existing);
+  // Where every row is going, resolved before anything is planned.
+  //
+  // This script runs on the service-role key, which bypasses RLS completely, so
+  // there is no net under a bid filed into the wrong department: it simply
+  // becomes invisible to the people who own it, with nothing on screen saying
+  // why. An unrecognised name is refused rather than guessed at, and a blank
+  // cell with nothing to fall back on is refused rather than defaulted.
+  const flagDepartment = flag("department");
+  const departmentByLine = new Map<number, string>();
+  const departmentProblems: RowPlan[] = [];
+  for (const row of selected) {
+    const resolved = resolveImportDepartment(
+      row.department ?? flagDepartment,
+      operatorDepartmentId,
+      departments,
+    );
+    if (resolved.error) {
+      departmentProblems.push({
+        kind: "reject" as const,
+        line: row.line,
+        title: row.title,
+        reasons: [`department: ${resolved.error}`],
+      });
+      continue;
+    }
+    departmentByLine.set(row.line, resolved.departmentId!);
+  }
+  const placeable = selected.filter((r) => departmentByLine.has(r.line));
+
+  const fallback = resolveImportDepartment(flagDepartment, operatorDepartmentId, departments);
+  const fallbackName = fallback.departmentId
+    ? (departments.find((d) => d.id === fallback.departmentId)?.name ?? "unknown")
+    : "none, so every row has to name one";
+
+  const plan = buildPlan(placeable, existing);
   // Rows that failed to read at all are rejections too, and belong in the same
   // report rather than a separate stream nobody reads.
   const rejects: RowPlan[] = problems.map((p) => ({
@@ -175,10 +232,10 @@ async function main() {
     title: p.title,
     reasons: p.reasons,
   }));
-  plan.plans = [...rejects, ...plan.plans].sort(
+  plan.plans = [...rejects, ...departmentProblems, ...plan.plans].sort(
     (a, b) => (a.kind === "reject" ? a.line : a.row.line) - (b.kind === "reject" ? b.line : b.row.line),
   );
-  plan.summary.reject += rejects.length;
+  plan.summary.reject += rejects.length + departmentProblems.length;
 
   const report = formatPlan(plan, {
     file,
@@ -186,6 +243,7 @@ async function main() {
     headers: table.headers,
     rowCount: table.rows.length,
     operator: operatorEmail ?? "not set, dry run only",
+    defaultDepartment: fallbackName,
     apply,
     unknownRoles,
   });
@@ -236,7 +294,11 @@ async function main() {
     if (p.kind === "create") {
       const { data, error } = await db
         .from("tenders")
-        .insert({ ...columns, created_by: operatorId })
+        .insert({
+          ...columns,
+          department_id: departmentByLine.get(p.row.line)!,
+          created_by: operatorId,
+        })
         .select("id")
         .single();
       if (error || !data) {

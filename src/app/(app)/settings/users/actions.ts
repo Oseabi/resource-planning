@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { recordAudit } from "@/app/(app)/audit-actions";
 import type { ProfileRole } from "@/lib/supabase/database.types";
 
 export type CreateUserState = {
@@ -20,6 +21,9 @@ export async function createEmployeeAccount(
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const role = (formData.get("role") as ProfileRole) ?? "user";
+  // "none" is the select's stand-in for null, since it cannot hold one.
+  const departmentRaw = String(formData.get("department_id") ?? "none");
+  const departmentId = departmentRaw === "none" ? null : departmentRaw;
 
   if (!fullName || !email || password.length < 8) {
     return { error: "Name, email, and an 8+ character password are required." };
@@ -41,12 +45,21 @@ export async function createEmployeeAccount(
     full_name: fullName,
     email,
     role,
+    department_id: departmentId,
     must_change_password: true,
   });
 
   if (profileError) {
     return { error: "Account created but profile setup failed. Please contact support." };
   }
+
+  await recordAudit({
+    action: "created",
+    entityType: "profile",
+    entityId: created.user.id,
+    entityLabel: `${fullName} (${email})`,
+    detail: { role, department_id: departmentId },
+  });
 
   revalidatePath("/settings/users");
 
@@ -133,8 +146,26 @@ export async function deleteUser(userId: string): Promise<{ error: string | null
     }
   }
 
+  const { data: doomed } = await admin
+    .from("profiles")
+    .select("full_name, email, role, department_id")
+    .eq("id", userId)
+    .single();
+
   const { error } = await admin.auth.admin.deleteUser(userId);
   if (error) return { error: error.message };
+
+  // profiles.id cascades from auth.users, so the row is already gone and
+  // audit_log.actor_id on anything they did has been set to null. Their name
+  // and address were copied into each of those rows at write time, which is
+  // what keeps the trail readable after this.
+  await recordAudit({
+    action: "deleted",
+    entityType: "profile",
+    entityId: userId,
+    entityLabel: doomed ? `${doomed.full_name} (${doomed.email})` : null,
+    detail: { role: doomed?.role ?? null, department_id: doomed?.department_id ?? null },
+  });
 
   revalidatePath("/settings/users");
   return { error: null };
@@ -144,11 +175,83 @@ export async function updateUserRole(userId: string, role: ProfileRole) {
   await requireAdmin();
 
   const admin = createAdminClient();
+
+  // Demoting the last admin locks everybody out of this screen, and out of
+  // every delete in the system. deleteUser already refuses it; so does this.
+  if (role !== "admin") {
+    const { data: target } = await admin.from("profiles").select("role").eq("id", userId).single();
+    if (target?.role === "admin") {
+      const { count } = await admin
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("role", "admin");
+      if ((count ?? 0) <= 1) {
+        throw new Error("This is the only admin. Promote another admin before changing this one.");
+      }
+    }
+  }
+
+  const { data: before } = await admin
+    .from("profiles")
+    .select("role, full_name, email")
+    .eq("id", userId)
+    .single();
+
   const { error } = await admin.from("profiles").update({ role }).eq("id", userId);
 
   if (error) {
     throw new Error(error.message);
   }
 
+  await recordAudit({
+    action: "role_changed",
+    entityType: "profile",
+    entityId: userId,
+    entityLabel: before ? `${before.full_name} (${before.email})` : null,
+    detail: { from: before?.role ?? null, to: role },
+  });
+
   revalidatePath("/settings/users");
+}
+
+/**
+ * Move somebody to another business unit, which is what decides the tenders
+ * they can see.
+ *
+ * As much a privilege grant as the role is, so it goes through the same door:
+ * requireAdmin here, and the prevent_role_self_escalation trigger in the
+ * database, which 0018 extended to cover this column. Without that trigger
+ * change a manager could reassign themselves, because profiles_update_self lets
+ * anybody write their own row.
+ */
+export async function updateUserDepartment(userId: string, departmentId: string | null) {
+  await requireAdmin();
+
+  const admin = createAdminClient();
+  const { data: before } = await admin
+    .from("profiles")
+    .select("department_id, full_name, email")
+    .eq("id", userId)
+    .single();
+
+  const { error } = await admin
+    .from("profiles")
+    .update({ department_id: departmentId })
+    .eq("id", userId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  await recordAudit({
+    action: "department_changed",
+    entityType: "profile",
+    entityId: userId,
+    entityLabel: before ? `${before.full_name} (${before.email})` : null,
+    detail: { from: before?.department_id ?? null, to: departmentId },
+  });
+
+  revalidatePath("/settings/users");
+  // Every scoped list changes for that person, so nothing cached survives.
+  revalidatePath("/", "layout");
 }

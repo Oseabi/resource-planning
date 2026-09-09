@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { isCurrentUserAdmin } from "@/lib/auth/current-user";
+import { getCurrentProfile, isCurrentUserAdmin } from "@/lib/auth/current-user";
+import { resolveTenderDepartment } from "@/lib/departments";
 import { purgeActivity, recordEvent } from "@/app/(app)/activity-actions";
+import { recordAudit } from "@/app/(app)/audit-actions";
 import { validateExtension, placementsAlignedTo } from "@/lib/delivery";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { TenderStatus, Json } from "@/lib/supabase/database.types";
@@ -15,6 +17,14 @@ const DOC_BUCKET = "cvs"; // shared private bucket; tender docs live under tende
 
 export interface TenderFormFields {
   title: string;
+  /**
+   * The business unit that owns this bid, and therefore who can see it.
+   *
+   * Set from the creator for anybody who is not an admin: the form does not ask,
+   * and a submitted value is ignored rather than validated, because the thing
+   * that decides visibility is never taken from the client.
+   */
+  department_id: string | null;
   /** Roles this bid must staff; persisted to the positions table, not here. */
   positions: PositionInput[];
   reference_number: string | null;
@@ -77,6 +87,18 @@ export async function createTender(formData: FormData): Promise<SaveTenderResult
   }
   if (!fields.title?.trim()) return { error: "Title is required." };
 
+  const profile = await getCurrentProfile();
+  const { data: departments } = await supabase.from("departments").select("id, name, slug");
+  const resolved = resolveTenderDepartment({
+    isAdmin: profile?.isAdmin ?? false,
+    creatorDepartmentId: profile?.departmentId ?? null,
+    submittedDepartmentId: fields.department_id,
+    departments: departments ?? [],
+  });
+  // Said in a sentence here rather than left to the policy, which would refuse
+  // the insert with a message about row-level security.
+  if (resolved.error) return { error: resolved.error };
+
   let docPath: string | null = null;
   const file = formData.get("file");
   if (file instanceof File && file.size > 0) {
@@ -95,6 +117,7 @@ export async function createTender(formData: FormData): Promise<SaveTenderResult
     .insert({
       ...tenderColumns,
       title: fields.title.trim(),
+      department_id: resolved.departmentId!,
       source_document_path: docPath,
       created_by: user.id,
     })
@@ -106,22 +129,51 @@ export async function createTender(formData: FormData): Promise<SaveTenderResult
   const positionsResult = await replacePositions(supabase, "tender", data.id, positions ?? []);
   if (positionsResult.error) return { error: positionsResult.error };
 
+  await recordAudit({
+    action: "created",
+    entityType: "tender",
+    entityId: data.id,
+    entityLabel: fields.title.trim(),
+    detail: { department_id: resolved.departmentId, status: fields.status },
+  });
+
   revalidatePath("/tenders");
   return { id: data.id };
 }
 
 export async function updateTender(id: string, fields: TenderFormFields): Promise<SaveTenderResult> {
   const supabase = await createClient();
+  // This action had no auth call at all. Harmless while every authenticated
+  // user could edit every tender, and a hole the moment they cannot.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated." };
+
   if (!fields.title?.trim()) return { error: "Title is required." };
 
-  const { positions, ...tenderColumns } = fields;
+  const { positions, department_id, ...tenderColumns } = fields;
 
-  const { error } = await supabase
+  // Only an admin can move a bid between departments, and only to a real one.
+  // For anybody else the column is left out of the update entirely, so their
+  // save is a clean no-op on it rather than an opaque policy rejection that
+  // takes the whole row down with it.
+  const profile = await getCurrentProfile();
+  const departmentChange = profile?.isAdmin && department_id ? { department_id } : {};
+
+  // Counted, not assumed. An update RLS filters out returns zero rows and no
+  // error, so without this the action would report success on a tender the
+  // caller cannot see, and then go on to rewrite its seats.
+  const { data: updated, error } = await supabase
     .from("tenders")
-    .update({ ...tenderColumns, title: fields.title.trim() })
-    .eq("id", id);
+    .update({ ...tenderColumns, ...departmentChange, title: fields.title.trim() })
+    .eq("id", id)
+    .select("id");
 
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "That tender no longer exists, or you do not have permission to edit it." };
+  }
 
   const positionsResult = await replacePositions(supabase, "tender", id, positions ?? []);
   if (positionsResult.error) return { error: positionsResult.error };
@@ -154,7 +206,7 @@ export async function deleteTender(id: string): Promise<{ error: string | null }
   }
 
   const [{ data: tender }, { data: positions }, { data: placements }] = await Promise.all([
-    supabase.from("tenders").select("source_document_path").eq("id", id).single(),
+    supabase.from("tenders").select("source_document_path, title").eq("id", id).single(),
     supabase.from("positions").select("id").eq("parent_type", "tender").eq("parent_id", id),
     supabase
       .from("placements")
@@ -204,6 +256,17 @@ export async function deleteTender(id: string): Promise<{ error: string | null }
 
   const { error } = await supabase.from("tenders").delete().eq("id", id);
   if (error) return { error: error.message };
+
+  // Written before purgeActivity, and to a table purgeActivity does not touch.
+  // The timeline is about to be destroyed along with the tender, which is
+  // exactly why the audit trail cannot live in it.
+  await recordAudit({
+    action: "deleted",
+    entityType: "tender",
+    entityId: id,
+    entityLabel: tender?.title ?? null,
+    detail: { seats: positions?.length ?? 0, placements: placements?.length ?? 0 },
+  });
 
   await purgeActivity("tender", id);
 
@@ -373,6 +436,17 @@ export async function getTenderDocUrl(path: string): Promise<{ url: string | nul
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { url: null };
+
+  // The signed URL is minted with the service-role client, which bypasses RLS,
+  // so being signed in cannot be the whole check: any path handed to this
+  // action would be honoured. Resolve the path back to its tender through the
+  // ordinary client first, so RLS decides whether the caller may see it.
+  const { data: owner } = await supabase
+    .from("tenders")
+    .select("id")
+    .eq("source_document_path", path)
+    .maybeSingle();
+  if (!owner) return { url: null };
 
   const { data } = await createAdminClient().storage.from(DOC_BUCKET).createSignedUrl(path, 120);
   return { url: data?.signedUrl ?? null };

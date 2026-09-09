@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { isCurrentUserAdmin } from "@/lib/auth/current-user";
+import { resolveTenderDepartment } from "@/lib/departments";
+import { getCurrentProfile, isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { purgeActivity } from "@/app/(app)/activity-actions";
+import { recordAudit } from "@/app/(app)/audit-actions";
 import type { JobRequirementStatus, Json } from "@/lib/supabase/database.types";
 import {
   scoreCandidateForPosition,
@@ -16,6 +18,8 @@ import { sendMatchAlert, isEmailConfigured } from "@/lib/email/resend";
 
 export interface RequirementFormFields {
   title: string;
+  /** The business unit that owns this vacancy, and therefore who can see it. */
+  department_id: string | null;
   /** Roles this requirement must staff; persisted to the positions table. */
   positions: PositionInput[];
   client: string | null;
@@ -43,12 +47,27 @@ export async function createRequirement(
   if (!user) return { error: "Not authenticated." };
   if (!fields.title?.trim()) return { error: "Title is required." };
 
+  const profile = await getCurrentProfile();
+  const { data: departments } = await supabase.from("departments").select("id, name, slug");
+  const resolved = resolveTenderDepartment({
+    isAdmin: profile?.isAdmin ?? false,
+    creatorDepartmentId: profile?.departmentId ?? null,
+    submittedDepartmentId: fields.department_id,
+    departments: departments ?? [],
+  });
+  if (resolved.error) return { error: resolved.error };
+
   // Positions live in their own table, so they must not reach this insert.
   const { positions, ...requirementColumns } = fields;
 
   const { data, error } = await supabase
     .from("job_requirements")
-    .insert({ ...requirementColumns, title: fields.title.trim(), created_by: user.id })
+    .insert({
+      ...requirementColumns,
+      title: fields.title.trim(),
+      department_id: resolved.departmentId!,
+      created_by: user.id,
+    })
     .select("id")
     .single();
 
@@ -62,6 +81,14 @@ export async function createRequirement(
   );
   if (positionsResult.error) return { error: positionsResult.error };
 
+  await recordAudit({
+    action: "created",
+    entityType: "job_requirement",
+    entityId: data.id,
+    entityLabel: fields.title.trim(),
+    detail: { department_id: resolved.departmentId },
+  });
+
   revalidatePath("/job-requirements");
   return { id: data.id };
 }
@@ -71,16 +98,32 @@ export async function updateRequirement(
   fields: RequirementFormFields,
 ): Promise<SaveRequirementResult> {
   const supabase = await createClient();
+  // This action had no auth call at all. Harmless while every authenticated
+  // user could edit every requirement, and a hole the moment they cannot.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated." };
+
   if (!fields.title?.trim()) return { error: "Title is required." };
 
-  const { positions, ...requirementColumns } = fields;
+  const { positions, department_id, ...requirementColumns } = fields;
 
-  const { error } = await supabase
+  // Only an admin moves a vacancy between departments, and only to a real one.
+  const profile = await getCurrentProfile();
+  const departmentChange = profile?.isAdmin && department_id ? { department_id } : {};
+
+  // Counted, not assumed, for the same reason as updateTender.
+  const { data: updated, error } = await supabase
     .from("job_requirements")
-    .update({ ...requirementColumns, title: fields.title.trim() })
-    .eq("id", id);
+    .update({ ...requirementColumns, ...departmentChange, title: fields.title.trim() })
+    .eq("id", id)
+    .select("id");
 
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "That requirement no longer exists, or you do not have permission to edit it." };
+  }
 
   const positionsResult = await replacePositions(supabase, "job_requirement", id, positions ?? []);
   if (positionsResult.error) return { error: positionsResult.error };
@@ -104,7 +147,8 @@ export async function deleteRequirement(id: string): Promise<{ error: string | n
 
   // Placements reference a requirement by a plain source_id, so the database
   // cannot cascade them, they are removed here along with the requirement.
-  const [{ data: positions }, { data: placements }] = await Promise.all([
+  const [{ data: requirement }, { data: positions }, { data: placements }] = await Promise.all([
+    supabase.from("job_requirements").select("title").eq("id", id).single(),
     supabase.from("positions").select("id").eq("parent_type", "job_requirement").eq("parent_id", id),
     supabase
       .from("placements")
@@ -147,6 +191,14 @@ export async function deleteRequirement(id: string): Promise<{ error: string | n
 
   const { error } = await supabase.from("job_requirements").delete().eq("id", id);
   if (error) return { error: error.message };
+
+  await recordAudit({
+    action: "deleted",
+    entityType: "job_requirement",
+    entityId: id,
+    entityLabel: requirement?.title ?? null,
+    detail: { seats: positions?.length ?? 0, placements: placements?.length ?? 0 },
+  });
 
   await purgeActivity("job_requirement", id);
 

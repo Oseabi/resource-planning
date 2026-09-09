@@ -1,6 +1,7 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
-export type ProfileRole = "admin" | "user";
+/** Mirrors the profiles_role_check constraint. Change both or they disagree. */
+export type ProfileRole = "admin" | "manager" | "user";
 export type CandidateAvailability = "available" | "notice_period" | "unavailable";
 export type CandidateStatus = "active" | "inactive" | "placed";
 export type JobRequirementStatus = "open" | "closed" | "on_hold";
@@ -39,12 +40,73 @@ export interface Education {
 export interface Database {
   public: {
     Tables: {
+      audit_log: {
+        Row: {
+          id: string;
+          /** Null once the person has been removed; the record of what they did stays. */
+          actor_id: string | null;
+          /** Copied at write time, so the row still names somebody after that. */
+          actor_email: string | null;
+          actor_name: string | null;
+          action: string;
+          entity_type: string;
+          entity_id: string | null;
+          /** The name it had when it happened, so a deleted record still reads. */
+          entity_label: string | null;
+          detail: Json;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["audit_log"]["Row"]> & {
+          action: string;
+          entity_type: string;
+        };
+        /** Append only. No update or delete policy exists, deliberately. */
+        Update: never;
+        Relationships: [];
+      };
+      user_sessions: {
+        Row: {
+          id: string;
+          user_id: string;
+          started_at: string;
+          /** Moved forward by the heartbeat; the moment a session really ended. */
+          last_seen_at: string;
+          /** Set only on a deliberate sign-out. Most sessions just stop beating. */
+          ended_at: string | null;
+          user_agent: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["user_sessions"]["Row"]> & {
+          user_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["user_sessions"]["Insert"]>;
+        Relationships: [];
+      };
+      departments: {
+        Row: {
+          id: string;
+          /** Renameable, and shown everywhere. */
+          name: string;
+          /** Immutable handle. Imports key off this, so a rename breaks nothing. */
+          slug: string;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["departments"]["Row"]> & {
+          name: string;
+          slug: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["departments"]["Insert"]>;
+        Relationships: [];
+      };
       profiles: {
         Row: {
           id: string;
           full_name: string;
           email: string;
           role: ProfileRole;
+          /** The business unit this person belongs to. Null for admins, who see all four. */
+          department_id: string | null;
           must_change_password: boolean;
           created_at: string;
         };
@@ -53,11 +115,23 @@ export interface Database {
           full_name: string;
           email: string;
           role?: ProfileRole;
+          department_id?: string | null;
           must_change_password?: boolean;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
-        Relationships: [];
+        // Declared so getCurrentProfile can embed departments(name) in the
+        // query it already makes, rather than paying a second round-trip on
+        // every request just to put a department on the sidebar.
+        Relationships: [
+          {
+            foreignKeyName: "profiles_department_id_fkey";
+            columns: ["department_id"];
+            isOneToOne: false;
+            referencedRelation: "departments";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       candidates: {
         Row: {
@@ -204,6 +278,8 @@ export interface Database {
         Row: {
           id: string;
           title: string;
+          /** The business unit that owns this vacancy. Decides who can see it. */
+          department_id: string;
           client: string | null;
           required_role: string | null;
           required_skills: string[];
@@ -229,6 +305,8 @@ export interface Database {
         Row: {
           id: string;
           title: string;
+          /** The business unit that owns this bid. Decides who can see it. */
+          department_id: string;
           /** Bid/reference number from the issuing authority. */
           reference_number: string | null;
           client: string | null;
@@ -346,6 +424,22 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      /**
+       * Every candidate's commitment dates, company wide, regardless of which
+       * department owns the placement.
+       *
+       * placements is department scoped because it names a project and a
+       * client. "Is this person free on the start date" has to be answerable
+       * across the whole business, or seat coverage reports somebody already
+       * contracted to another department as available and invites a double
+       * booking. This returns the three columns that answer it and nothing
+       * else.
+       */
+      candidate_commitments: {
+        Args: Record<string, never>;
+        Returns: { candidate_id: string; start_date: string; end_date: string | null }[];
+      };
+    };
   };
 }

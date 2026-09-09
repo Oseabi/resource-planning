@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { TenderFields } from "@/app/(app)/tenders/tender-fields";
+import type { DepartmentOption } from "@/lib/departments";
 import {
   createTender,
   updateTender,
@@ -15,10 +16,14 @@ export function TenderForm({
   mode,
   tenderId,
   initial,
+  departments = [],
+  ownDepartmentName = null,
 }: {
   mode: "create" | "edit";
   tenderId?: string;
   initial: TenderFormFields;
+  departments?: DepartmentOption[];
+  ownDepartmentName?: string | null;
 }) {
   const router = useRouter();
   const [fields, setFields] = useState<TenderFormFields>(initial);
@@ -51,7 +56,12 @@ export function TenderForm({
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-border bg-card shadow-card p-5">
-        <TenderFields value={fields} onChange={setFields} />
+        <TenderFields
+          value={fields}
+          onChange={setFields}
+          departments={departments}
+          ownDepartmentName={ownDepartmentName}
+        />
       </div>
       {error && <p className="text-body-sm text-destructive">{error}</p>}
       <div className="flex justify-end gap-2">

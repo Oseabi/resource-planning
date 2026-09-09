@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { TagInput } from "@/components/ui/tag-input";
 import { ComboboxInput } from "@/components/ui/combobox-input";
 import { PositionsEditor } from "@/app/(app)/positions-editor";
+import type { DepartmentOption } from "@/lib/departments";
 import {
   Select,
   SelectContent,
@@ -37,6 +38,7 @@ const AVAILABILITY_LABELS: Record<string, string> = {
 
 export const EMPTY_REQUIREMENT: RequirementFormFields = {
   title: "",
+  department_id: null,
   positions: [],
   client: null,
   required_role: null,
@@ -55,10 +57,15 @@ export function RequirementForm({
   mode,
   requirementId,
   initial,
+  departments = [],
+  ownDepartmentName = null,
 }: {
   mode: "create" | "edit";
   requirementId?: string;
   initial: RequirementFormFields;
+  /** Only non-empty for an admin, who works across all four. */
+  departments?: DepartmentOption[];
+  ownDepartmentName?: string | null;
 }) {
   const router = useRouter();
   const [fields, setFields] = useState<RequirementFormFields>(initial);
@@ -126,6 +133,33 @@ export function RequirementForm({
               </SelectContent>
             </Select>
           </Field>
+          {/* An admin chooses; anybody else's vacancy lands in their own
+              department without the form asking. */}
+          {departments.length > 0 ? (
+            <Field label="Department" htmlFor="rq-department">
+              <Select
+                value={fields.department_id ?? ""}
+                onValueChange={(v) => set("department_id", v || null)}
+              >
+                <SelectTrigger id="rq-department" className="w-full">
+                  <SelectValue placeholder="Pick a department">
+                    {(v) => departments.find((d) => d.id === String(v))?.name ?? "Pick a department"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {departments.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          ) : (
+            <Field label="Department" htmlFor="rq-department-static">
+              <Input id="rq-department-static" value={ownDepartmentName ?? "Not assigned"} readOnly disabled />
+            </Field>
+          )}
           <Field label="Status" htmlFor="rq-status">
             <Select value={fields.status} onValueChange={(v) => set("status", v as RequirementFormFields["status"])}>
               <SelectTrigger id="rq-status" className="w-full">

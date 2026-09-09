@@ -22,8 +22,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createEmployeeAccount } from "@/app/(app)/settings/users/actions";
+import type { DepartmentOption } from "@/lib/departments";
 
-export function CreateUserDialog() {
+const ROLE_LABELS: Record<string, string> = {
+  user: "User",
+  manager: "Manager",
+  admin: "Admin",
+};
+
+export function CreateUserDialog({ departments = [] }: { departments?: DepartmentOption[] }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [state, formAction, isPending] = useActionState(createEmployeeAccount, { error: null });
@@ -104,13 +111,43 @@ export function CreateUserDialog() {
                 <Label htmlFor="role">Role</Label>
                 <Select name="role" defaultValue="user">
                   <SelectTrigger id="role" className="w-full">
-                    <SelectValue />
+                    <SelectValue>
+                      {(v) => ROLE_LABELS[String(v)] ?? "User"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="manager">Manager</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              {/* Set at creation rather than as a second step afterwards. A
+                  manager with no department sees no tenders at all, so leaving
+                  it out made every new account look broken on first sign-in. */}
+              <div className="space-y-1.5">
+                <Label htmlFor="department_id">Department</Label>
+                <Select name="department_id" defaultValue="none">
+                  <SelectTrigger id="department_id" className="w-full">
+                    <SelectValue>
+                      {(v) =>
+                        departments.find((d) => d.id === String(v))?.name ?? "No department"
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No department</SelectItem>
+                    {departments.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-label-sm text-muted-foreground">
+                  Admins see all four. Anybody else sees only their own, so a manager left
+                  without one sees no tenders at all.
+                </p>
               </div>
               {state.error && <p className="text-body-sm text-destructive">{state.error}</p>}
             </div>
