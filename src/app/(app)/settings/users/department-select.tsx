@@ -28,19 +28,23 @@ export function DepartmentSelect({
   departments: DepartmentOption[];
 }) {
   const [value, setValue] = useState(departmentId ?? "none");
+  const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   return (
+    <div className="space-y-1">
     <Select
       value={value}
       disabled={isPending}
       onValueChange={(next) => {
         const chosen = next ?? "none";
+        setError(null);
         setValue(chosen);
         startTransition(async () => {
           try {
             await updateUserDepartment(userId, chosen === "none" ? null : chosen);
-          } catch {
+          } catch (e) {
+            setError(e instanceof Error ? e.message : "Could not change the department.");
             setValue(departmentId ?? "none");
           }
         });
@@ -65,5 +69,7 @@ export function DepartmentSelect({
         ))}
       </SelectContent>
     </Select>
+    {error && <p className="text-label-sm text-destructive">{error}</p>}
+    </div>
   );
 }

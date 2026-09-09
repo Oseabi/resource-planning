@@ -20,6 +20,9 @@ export async function createEmployeeAccount(
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const role = (formData.get("role") as ProfileRole) ?? "user";
+  // "none" is the select's stand-in for null, since it cannot hold one.
+  const departmentRaw = String(formData.get("department_id") ?? "none");
+  const departmentId = departmentRaw === "none" ? null : departmentRaw;
 
   if (!fullName || !email || password.length < 8) {
     return { error: "Name, email, and an 8+ character password are required." };
@@ -41,6 +44,7 @@ export async function createEmployeeAccount(
     full_name: fullName,
     email,
     role,
+    department_id: departmentId,
     must_change_password: true,
   });
 

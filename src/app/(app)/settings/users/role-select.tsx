@@ -21,19 +21,28 @@ export function RoleSelect({
   disabled?: boolean;
 }) {
   const [value, setValue] = useState(role);
+  const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   return (
+    <div className="space-y-1">
     <Select
       value={value}
       disabled={disabled || isPending}
       onValueChange={(next) => {
+        // Base UI can hand back null, and casting that to a role sent null to a
+        // column with a check constraint, which failed in a catch nobody saw.
+        if (!next) return;
         const nextRole = next as ProfileRole;
+        setError(null);
         setValue(nextRole);
         startTransition(async () => {
           try {
             await updateUserRole(userId, nextRole);
-          } catch {
+          } catch (e) {
+            // Said out loud. Reverting in silence left somebody clicking the
+            // same dropdown over and over with nothing to go on.
+            setError(e instanceof Error ? e.message : "Could not change the role.");
             setValue(role);
           }
         });
@@ -50,5 +59,7 @@ export function RoleSelect({
         <SelectItem value="admin">Admin</SelectItem>
       </SelectContent>
     </Select>
+    {error && <p className="text-label-sm text-destructive">{error}</p>}
+    </div>
   );
 }

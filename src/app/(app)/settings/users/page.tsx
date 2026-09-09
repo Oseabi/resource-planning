@@ -56,7 +56,7 @@ export default async function UsersSettingsPage() {
             decides which tenders they can see; admins see all four.
           </p>
         </div>
-        <CreateUserDialog />
+        <CreateUserDialog departments={allDepartments} />
       </div>
 
       <div className="mt-6 rounded-lg border border-border bg-card shadow-card">
