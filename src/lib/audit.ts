@@ -171,3 +171,89 @@ export function auditCounts(rows: AuditRow[]): AuditCounts {
   }
   return counts;
 }
+
+/** One person's usage, or null if they have never opened the app. */
+export function usageForUser(
+  sessions: SessionRow[],
+  userId: string,
+  now: number = Date.now(),
+): UserUsage | null {
+  return usageByUser(sessions.filter((s) => s.user_id === userId), now)[0] ?? null;
+}
+
+/** Their sessions, newest first, for a page that lists them one by one. */
+export function sessionsForUser(sessions: SessionRow[], userId: string): SessionRow[] {
+  return sessions
+    .filter((s) => s.user_id === userId)
+    .sort((a, b) => b.started_at.localeCompare(a.started_at));
+}
+
+/**
+ * What somebody actually spends their time doing, most frequent first.
+ *
+ * The counts a person is judged on should be legible without reading two
+ * hundred lines, and "deleted 14" is the kind of thing worth seeing at the top
+ * of a page rather than discovering by scrolling.
+ */
+export function actionBreakdown(rows: AuditRow[]): { action: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const r of rows) counts.set(r.action, (counts.get(r.action) ?? 0) + 1);
+  return [...counts.entries()]
+    .map(([action, count]) => ({ action, count }))
+    .sort((a, b) => b.count - a.count || a.action.localeCompare(b.action));
+}
+
+/** Everything one person did, newest first. */
+export function trailForUser(rows: AuditRow[], userId: string): AuditRow[] {
+  return rows
+    .filter((r) => r.actor_id === userId)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+/**
+ * The trail as a table, ready for toCsv.
+ *
+ * Deliberately flat and self-describing: somebody opening this in Excel a year
+ * from now has no access to the ids, so the columns that matter are the names,
+ * and they are the ones copied into each row at write time.
+ */
+export const AUDIT_CSV_HEADERS = [
+  "when",
+  "who",
+  "email",
+  "action",
+  "what",
+  "name",
+  "entity_id",
+] as const;
+
+export function auditCsvRows(rows: AuditRow[]): (string | null)[][] {
+  return rows.map((r) => [
+    r.created_at,
+    r.actor_name,
+    r.actor_email,
+    r.action,
+    r.entity_type,
+    r.entity_label,
+    r.entity_id,
+  ]);
+}
+
+export const SESSION_CSV_HEADERS = ["user", "email", "started", "last_seen", "ended", "minutes"] as const;
+
+export function sessionCsvRows(
+  sessions: SessionRow[],
+  who: Map<string, { full_name: string; email: string }>,
+): (string | number | null)[][] {
+  return sessions.map((s) => {
+    const person = who.get(s.user_id);
+    return [
+      person?.full_name ?? "Removed user",
+      person?.email ?? null,
+      s.started_at,
+      s.last_seen_at,
+      s.ended_at,
+      Math.round(sessionDuration(s) / 60_000),
+    ];
+  });
+}

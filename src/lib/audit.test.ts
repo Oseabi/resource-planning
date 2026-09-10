@@ -7,6 +7,14 @@ import {
   auditTone,
   auditSentence,
   auditCounts,
+  usageForUser,
+  sessionsForUser,
+  actionBreakdown,
+  trailForUser,
+  auditCsvRows,
+  sessionCsvRows,
+  AUDIT_CSV_HEADERS,
+  SESSION_CSV_HEADERS,
   SESSION_STALE_MS,
   type SessionRow,
   type AuditRow,
@@ -212,5 +220,111 @@ describe("auditCounts", () => {
       audit({ action: "signed_in" }),
     ];
     expect(auditCounts(rows)).toEqual({ created: 2, deleted: 1, updated: 1, other: 1 });
+  });
+});
+
+describe("usageForUser", () => {
+  it("picks out one person's usage", () => {
+    const rows = [
+      session({ id: "a", user_id: "u1", last_seen_at: "2026-09-09T10:30:00Z" }),
+      session({ id: "b", user_id: "u2", last_seen_at: "2026-09-09T14:00:00Z" }),
+    ];
+    expect(usageForUser(rows, "u1", NOW)?.totalMs).toBe(30 * 60 * 1000);
+  });
+
+  it("has nothing to say about somebody who has never opened the app", () => {
+    expect(usageForUser([session({ user_id: "u1" })], "never", NOW)).toBeNull();
+  });
+});
+
+describe("sessionsForUser", () => {
+  it("returns only theirs, newest first", () => {
+    const rows = [
+      session({ id: "old", user_id: "u1", started_at: "2026-09-01T08:00:00Z" }),
+      session({ id: "new", user_id: "u1", started_at: "2026-09-09T08:00:00Z" }),
+      session({ id: "other", user_id: "u2" }),
+    ];
+    expect(sessionsForUser(rows, "u1").map((s) => s.id)).toEqual(["new", "old"]);
+  });
+});
+
+describe("actionBreakdown", () => {
+  it("counts by action, most frequent first", () => {
+    const rows = [
+      audit({ action: "created" }),
+      audit({ action: "deleted" }),
+      audit({ action: "created" }),
+      audit({ action: "created" }),
+    ];
+    expect(actionBreakdown(rows)).toEqual([
+      { action: "created", count: 3 },
+      { action: "deleted", count: 1 },
+    ]);
+  });
+
+  it("breaks a tie by name, so the order does not wander between renders", () => {
+    const rows = [audit({ action: "zebra" }), audit({ action: "alpha" })];
+    expect(actionBreakdown(rows).map((a) => a.action)).toEqual(["alpha", "zebra"]);
+  });
+
+  it("has nothing to say about nothing", () => {
+    expect(actionBreakdown([])).toEqual([]);
+  });
+});
+
+describe("trailForUser", () => {
+  it("returns only what they did, newest first", () => {
+    const rows = [
+      audit({ id: "1", actor_id: "u1", created_at: "2026-09-01T08:00:00Z" }),
+      audit({ id: "2", actor_id: "u2", created_at: "2026-09-02T08:00:00Z" }),
+      audit({ id: "3", actor_id: "u1", created_at: "2026-09-03T08:00:00Z" }),
+    ];
+    expect(trailForUser(rows, "u1").map((r) => r.id)).toEqual(["3", "1"]);
+  });
+
+  it("leaves out rows whose actor has been removed", () => {
+    // actor_id goes null when an account is deleted. Those rows still belong on
+    // the main trail, where the copied name still reads, but they cannot be
+    // attributed to a person who no longer has a page.
+    const rows = [audit({ actor_id: null })];
+    expect(trailForUser(rows, "u1")).toEqual([]);
+  });
+});
+
+describe("auditCsvRows", () => {
+  it("writes the names rather than the ids, since a reader has neither", () => {
+    const [row] = auditCsvRows([audit()]);
+    expect(row).toEqual([
+      "2026-09-09T11:00:00Z",
+      "Nomsa Khumalo",
+      "n.khumalo@tippfocus.co.za",
+      "created",
+      "tender",
+      "ERP support and maintenance",
+      "t1",
+    ]);
+  });
+
+  it("has a column for every header", () => {
+    expect(auditCsvRows([audit()])[0]).toHaveLength(AUDIT_CSV_HEADERS.length);
+  });
+});
+
+describe("sessionCsvRows", () => {
+  const who = new Map([["u1", { full_name: "Nomsa Khumalo", email: "n@tippfocus.co.za" }]]);
+
+  it("writes minutes rather than milliseconds", () => {
+    const [row] = sessionCsvRows([session({ user_id: "u1" })], who);
+    expect(row[0]).toBe("Nomsa Khumalo");
+    expect(row[5]).toBe(60);
+  });
+
+  it("still names a session whose account has gone", () => {
+    const [row] = sessionCsvRows([session({ user_id: "removed" })], who);
+    expect(row[0]).toBe("Removed user");
+  });
+
+  it("has a column for every header", () => {
+    expect(sessionCsvRows([session()], who)[0]).toHaveLength(SESSION_CSV_HEADERS.length);
   });
 });

@@ -185,3 +185,30 @@ export function parseCsv(text: string): CsvTable {
 export function delimiterName(delimiter: Delimiter): string {
   return delimiter === "," ? "comma" : delimiter === ";" ? "semicolon" : "tab";
 }
+
+/**
+ * The other direction: rows out to a file somebody opens in Excel.
+ *
+ * Lives beside the parser so the two agree on what a quoted field is. Two
+ * components hand-rolled this before and each got a slightly different answer,
+ * which is fine until a client name contains a comma.
+ *
+ * RFC 4180: a field is quoted when it contains the delimiter, a quote, or a
+ * line break; a quote inside becomes two. Rows end with CRLF, which is what
+ * Excel expects and what every other reader tolerates.
+ *
+ * No byte order mark. That belongs at the point of download, not in a string
+ * that might be compared, hashed, or written somewhere else.
+ */
+export function toCsv(
+  headers: string[],
+  rows: readonly (readonly (string | number | null | undefined)[])[],
+): string {
+  const field = (value: string | number | null | undefined): string => {
+    if (value === null || value === undefined) return "";
+    const text = String(value);
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+
+  return [headers, ...rows].map((row) => row.map(field).join(",")).join("\r\n");
+}
