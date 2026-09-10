@@ -1,15 +1,21 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Clock, ShieldAlert, Users, Activity as ActivityIcon } from "lucide-react";
+import { Clock, ShieldAlert, Users, Activity as ActivityIcon, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth/current-user";
 import { cn } from "@/lib/utils";
+import { ExportButton } from "@/app/(app)/settings/audit/export-button";
 import {
-  usageByUser,
+  usageForUser,
   formatDuration,
   auditSentence,
   auditTone,
   auditCounts,
   isSessionLive,
+  auditCsvRows,
+  sessionCsvRows,
+  AUDIT_CSV_HEADERS,
+  SESSION_CSV_HEADERS,
   type SessionRow,
   type AuditRow,
 } from "@/lib/audit";
@@ -58,15 +64,30 @@ export default async function AuditPage() {
       .order("created_at", { ascending: false })
       .limit(TRAIL_LIMIT),
     supabase.from("user_sessions").select("id, user_id, started_at, last_seen_at, ended_at"),
-    supabase.from("profiles").select("id, full_name, email, role"),
+    supabase
+      .from("profiles")
+      .select("id, full_name, email, role, departments(name)")
+      .order("role")
+      .order("full_name"),
   ]);
 
   const rows = (trail ?? []) as AuditRow[];
   const allSessions = (sessions ?? []) as SessionRow[];
   const counts = auditCounts(rows);
-  const usage = usageByUser(allSessions);
-  const byId = new Map((profiles ?? []).map((p) => [p.id, p]));
   const liveNow = allSessions.filter((s) => isSessionLive(s)).length;
+
+  // Built from the roster rather than from the sessions. Deriving it from
+  // sessions listed only people who had signed in, so an account that has
+  // never been opened, which is exactly the thing worth noticing, was the one
+  // account missing from the page.
+  const people = (profiles ?? []).map((p) => ({
+    profile: p,
+    usage: usageForUser(allSessions, p.id),
+  }));
+
+  const who = new Map(
+    (profiles ?? []).map((p) => [p.id, { full_name: p.full_name, email: p.email }]),
+  );
 
   return (
     <div className="space-y-6">
@@ -91,70 +112,101 @@ export default async function AuditPage() {
           value={String(counts.deleted)}
           accent={counts.deleted > 0}
         />
-        <Stat icon={<Clock className="size-4" />} label="People tracked" value={String(usage.length)} />
+        <Stat icon={<Clock className="size-4" />} label="Accounts" value={String(people.length)} />
       </div>
 
       {/* ------------------------------------------------------- usage ---- */}
       <section className="rounded-lg border border-border bg-card shadow-card">
-        <div className="border-b border-border px-4 py-3">
-          <h2 className="text-headline-sm font-semibold text-foreground">Time in the system</h2>
-          {/* Said plainly rather than implied. A heartbeat cannot tell a tab
-              left open from somebody working, and a precise looking number
-              next to a question it cannot answer is worse than no number. */}
-          <p className="mt-1 text-body-sm text-muted-foreground">
-            Measured while the app is open and the tab is in front, which is not the same as time
-            spent working. Treat it as a usage signal, not a timesheet.
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <div>
+            <h2 className="text-headline-sm font-semibold text-foreground">Everyone on the system</h2>
+            {/* Said plainly rather than implied. A heartbeat cannot tell a tab
+                left open from somebody working, and a precise looking number
+                next to a question it cannot answer is worse than no number. */}
+            <p className="mt-1 text-body-sm text-muted-foreground">
+              Time is measured while the app is open and the tab is in front, which is not the same
+              as time spent working. Treat it as a usage signal, not a timesheet. Open anybody to
+              see their full record.
+            </p>
+          </div>
+          <ExportButton
+            headers={[...SESSION_CSV_HEADERS]}
+            rows={sessionCsvRows(allSessions, who)}
+            filename="sessions.csv"
+            label="Export visits"
+          />
         </div>
-        {usage.length === 0 ? (
+        {people.length === 0 ? (
           <EmptyState
             icon={Clock}
-            title="Nothing recorded yet"
-            description="Sessions start being counted the next time somebody opens the app."
+            title="Nobody on the system yet"
+            description="Accounts appear here as soon as they are created, whether or not they have signed in."
           />
         ) : (
           <ul className="divide-y divide-border">
-            {usage.map((u) => {
-              const person = byId.get(u.userId);
-              return (
-                <li key={u.userId} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            {people.map(({ profile, usage }) => (
+              <li key={profile.id}>
+                <Link
+                  href={`/settings/audit/${profile.id}`}
+                  className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-muted/50"
+                >
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="truncate font-medium text-foreground">
-                        {person?.full_name ?? "Removed user"}
+                        {profile.full_name}
                       </span>
-                      {u.live && (
+                      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-label-sm text-muted-foreground">
+                        {profile.role}
+                      </span>
+                      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-label-sm text-muted-foreground">
+                        {profile.departments?.name ?? "no department"}
+                      </span>
+                      {usage?.live && (
                         <span className="shrink-0 rounded-lg bg-success/10 px-2 py-0.5 text-label-sm font-medium text-success">
                           Online
                         </span>
                       )}
                     </div>
                     <div className="truncate text-body-sm text-muted-foreground">
-                      {person?.email ?? "account deleted"}
-                      {u.lastSeenAt && ` · last seen ${when(u.lastSeenAt)}`}
+                      {profile.email}
+                      {usage?.lastSeenAt
+                        ? ` · last seen ${when(usage.lastSeenAt)}`
+                        : " · never signed in"}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="font-medium text-foreground">{formatDuration(u.totalMs)}</div>
-                    <div className="text-body-sm text-muted-foreground">
-                      {u.sessions} session{u.sessions === 1 ? "" : "s"}
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="font-medium text-foreground">
+                        {usage ? formatDuration(usage.totalMs) : "-"}
+                      </div>
+                      <div className="text-body-sm text-muted-foreground">
+                        {usage ? `${usage.sessions} session${usage.sessions === 1 ? "" : "s"}` : "no visits"}
+                      </div>
                     </div>
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                   </div>
-                </li>
-              );
-            })}
+                </Link>
+              </li>
+            ))}
           </ul>
         )}
       </section>
 
       {/* ------------------------------------------------------- trail ---- */}
       <section className="rounded-lg border border-border bg-card shadow-card">
-        <div className="border-b border-border px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <div>
           <h2 className="text-headline-sm font-semibold text-foreground">What happened</h2>
           <p className="mt-1 text-body-sm text-muted-foreground">
             The {TRAIL_LIMIT} most recent entries, newest first. A deleted record still reads by
             the name it had, because that name is copied in when the entry is written.
           </p>
+          </div>
+          <ExportButton
+            headers={[...AUDIT_CSV_HEADERS]}
+            rows={auditCsvRows(rows)}
+            filename="audit-trail.csv"
+          />
         </div>
         {rows.length === 0 ? (
           <EmptyState
