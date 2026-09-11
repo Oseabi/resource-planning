@@ -10,6 +10,7 @@ import {
   buildPrompt,
   coerceAiFields,
   mergeExtraction,
+  canonicalise,
 } from "@/lib/extraction/ai-fields";
 import { emptyExtractedFields, type ExtractedCandidateFields } from "@/lib/extraction/types";
 import { isTippCv } from "@/lib/extraction/local-parser";
@@ -317,7 +318,8 @@ describe("mergeExtraction", () => {
     const out = mergeExtraction(local, ai);
     expect(out.current_role).toBe("Business Analyst");
     expect(out.years_experience).toBe(7);
-    expect(out.skills).toEqual(["Stakeholder management"]);
+    // In the vocabulary's spelling, not the model's: canonicalise ran on the way in.
+    expect(out.skills).toEqual(["Stakeholder Management"]);
     expect(out.work_experience).toHaveLength(1);
     expect(out.availability).toBe("available");
   });
@@ -366,5 +368,33 @@ describe("isTippCv, the gate on what leaves the building", () => {
 
   it("does not recognise nothing", () => {
     expect(isTippCv("")).toBe(false);
+  });
+});
+
+describe("canonicalise, so the model's casing yields to the system's spelling", () => {
+  const vocab = ["English", "Afrikaans", "isiZulu", "Power BI"];
+
+  it("fixes a shouted language, which is what the first real run returned", () => {
+    expect(canonicalise(["ENGLISH", "AFRIKAANS"], vocab)).toEqual(["English", "Afrikaans"]);
+  });
+
+  it("keeps the vocabulary's own odd casing rather than title-casing", () => {
+    // Title-casing would give "Isizulu", which is wrong.
+    expect(canonicalise(["isizulu", "ISIZULU"], vocab)).toEqual(["isiZulu", "isiZulu"]);
+  });
+
+  it("ignores whitespace differences", () => {
+    expect(canonicalise(["power  bi", "Power BI "], vocab)).toEqual(["Power BI", "Power BI"]);
+  });
+
+  it("passes through what the vocabulary does not know, as the model wrote it", () => {
+    // The model knowing a skill the vocabulary does not is the point.
+    expect(canonicalise(["Sesotho sa Leboa"], vocab)).toEqual(["Sesotho sa Leboa"]);
+  });
+
+  it("is applied to the model's answer", () => {
+    const out = coerceAiFields({ languages: ["ENGLISH"], current_role: "business analyst" });
+    expect(out.languages).toEqual(["English"]);
+    expect(out.current_role).toBe("Business Analyst");
   });
 });

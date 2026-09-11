@@ -17,7 +17,14 @@
 
 import type { ExtractedCandidateFields } from "@/lib/extraction/types";
 import type { WorkExperience, Education, CandidateAvailability } from "@/lib/supabase/database.types";
-import { ALL_ROLES } from "@/lib/vocabulary";
+import {
+  ALL_ROLES,
+  ALL_TECHNICAL_SKILLS,
+  ALL_SKILLS,
+  ALL_CERTIFICATIONS,
+  ALL_SECTORS,
+  SEED_LANGUAGES,
+} from "@/lib/vocabulary";
 
 // -------------------------------------------------------------------------
 // What leaves the building
@@ -286,6 +293,24 @@ export function buildRequestBody(rawText: string): {
 
 const AVAILABILITY: CandidateAvailability[] = ["available", "notice_period", "unavailable"];
 
+const fold = (v: string) => v.trim().toLowerCase().replace(/\s+/g, " ");
+
+/**
+ * The system's spelling wherever there is one, the model's otherwise.
+ *
+ * The first real run returned "ENGLISH" and "AFRIKAANS", faithfully copied
+ * from a capitalised block on the CV, over a local result that had them in
+ * ordinary case. Scoring folds case so nothing broke, but a screen full of
+ * shouted languages is wrong, and the same thing would happen to "javascript"
+ * or "power bi". Matching is on case and whitespace only: a value the
+ * vocabulary does not know passes through as the model wrote it, because
+ * the model knowing a skill the vocabulary does not is the point.
+ */
+export function canonicalise(values: string[], vocabulary: readonly string[]): string[] {
+  const known = new Map(vocabulary.map((v) => [fold(v), v]));
+  return values.map((v) => known.get(fold(v)) ?? v);
+}
+
 const asString = (v: unknown): string | null => {
   if (typeof v !== "string") return null;
   const t = v.trim();
@@ -373,17 +398,19 @@ export type AiFields = Omit<
 export function coerceAiFields(json: unknown): AiFields {
   const r = (json && typeof json === "object" ? json : {}) as Record<string, unknown>;
   const availability = asString(r.availability);
+  const role = asString(r.current_role);
   return {
-    current_role: asString(r.current_role),
-    additional_roles: asStringList(r.additional_roles),
+    current_role: role ? canonicalise([role], ALL_ROLES)[0] : null,
+    additional_roles: canonicalise(asStringList(r.additional_roles), ALL_ROLES),
     years_experience: asYears(r.years_experience),
     professional_summary: asString(r.professional_summary),
-    skills: asStringList(r.skills),
-    technical_skills: asStringList(r.technical_skills),
-    certifications: asStringList(r.certifications),
+    skills: canonicalise(asStringList(r.skills), ALL_SKILLS),
+    technical_skills: canonicalise(asStringList(r.technical_skills), ALL_TECHNICAL_SKILLS),
+    certifications: canonicalise(asStringList(r.certifications), ALL_CERTIFICATIONS),
+    // No vocabulary for qualifications: a degree name is the CV's to spell.
     qualifications: asStringList(r.qualifications),
-    sectors: asStringList(r.sectors),
-    languages: asStringList(r.languages),
+    sectors: canonicalise(asStringList(r.sectors), ALL_SECTORS),
+    languages: canonicalise(asStringList(r.languages), SEED_LANGUAGES),
     designated_group: asString(r.designated_group),
     ...(availability && (AVAILABILITY as string[]).includes(availability)
       ? { availability: availability as CandidateAvailability }
