@@ -9,6 +9,16 @@ const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 /**
+ * pdf.js hands the bytes it is given to its worker by transfer, which
+ * detaches them from the caller. The text and the tables of one upload are
+ * read from the same buffer at the same time, so each reader gets its own
+ * copy, or the second one finds an empty buffer and reads nothing.
+ */
+function copyOf(buffer: ArrayBuffer): Uint8Array {
+  return new Uint8Array(buffer.slice(0));
+}
+
+/**
  * Read plain text from a supported document buffer.
  *  - PDF (text-based) via unpdf
  *  - Word .docx via mammoth
@@ -24,7 +34,7 @@ export async function extractDocumentText(
   const isDocx = mimeType === DOCX_MIME || filename?.toLowerCase().endsWith(".docx");
 
   if (isPdf) {
-    const pdf = await getDocumentProxy(new Uint8Array(buffer));
+    const pdf = await getDocumentProxy(copyOf(buffer));
 
     // Preferred: rebuild real lines from text-item positions. `mergePages` flattens
     // the whole document into one line, which defeats all line-based parsing.
@@ -85,7 +95,7 @@ export async function extractDocumentTablesWithMeta(
       return { tables: tablesFromHtml(value), coverAsOf: null };
     }
     if (isPdf) {
-      const pdf = await getDocumentProxy(new Uint8Array(buffer));
+      const pdf = await getDocumentProxy(copyOf(buffer));
       const pages: PdfPageItems[] = [];
       for (let n = 1; n <= pdf.numPages; n++) {
         const page = await pdf.getPage(n);
@@ -95,8 +105,14 @@ export async function extractDocumentTablesWithMeta(
       const result = tablesFromPdfPages(pages);
       return { tables: result.tables, coverAsOf: result.coverAsOf };
     }
-  } catch {
-    // A document that cannot be read as tables still parses from its text.
+  } catch (e) {
+    // A document that cannot be read as tables still parses from its text,
+    // but said out loud: a reader that fails silently is indistinguishable
+    // from a document with no tables, and the template parser then reads
+    // the header and nothing else.
+    console.warn(
+      `[extraction] could not read the tables of ${filename ?? "document"}: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
   return { tables: [], coverAsOf: null };
 }

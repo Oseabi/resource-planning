@@ -4,7 +4,19 @@
     {
       "name": "resource-planning-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "resource-planning-dev-no-ai",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "-e",
+        "process.env.GROQ_API_KEY='';require('child_process').spawn(process.execPath,['--dns-result-order=ipv4first','node_modules/next/dist/bin/next','dev'],{stdio:'inherit'})"
+      ],
       "port": 3000
     }
   ]
