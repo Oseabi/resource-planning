@@ -21,7 +21,7 @@ import {
 } from "@/lib/extraction/heuristics";
 import { splitSections } from "@/lib/extraction/sections";
 import { emptyExtractedFields, type ExtractedCandidateFields } from "@/lib/extraction/types";
-import { parseTippTemplate } from "@/lib/extraction/tipp-template";
+import { parseTippTemplate, looksLikeTippTemplate } from "@/lib/extraction/tipp-template";
 import { parseTippTables } from "@/lib/extraction/tipp-tables";
 import type { DocumentTables } from "@/lib/extraction/docx-tables";
 
@@ -140,6 +140,20 @@ function headlineRoles(preamble: string): string[] {
  * section-aware heuristics + the seeded vocabulary. No AI, no network. Every
  * value is editable on the review form before saving.
  */
+/**
+ * Is this the TiPP Focus template?
+ *
+ * The same two checks parseTextToFields makes before it falls back to the
+ * generic heuristics, exposed so the orchestrator can decide whether a CV
+ * should go to the AI at all. A template CV never should: the deterministic
+ * parser reads it exactly, sends nothing anywhere, and costs nothing. Both
+ * checks are pure and cheap, so asking twice is fine.
+ */
+export function isTippCv(text: string, tables: DocumentTables = []): boolean {
+  if (tables.length > 0 && parseTippTables(tables) !== null) return true;
+  return looksLikeTippTemplate(text);
+}
+
 export function parseTextToFields(
   text: string,
   filename?: string,

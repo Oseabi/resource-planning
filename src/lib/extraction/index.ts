@@ -1,36 +1,76 @@
 import "server-only";
 import { extractDocumentText, extractDocumentTables } from "@/lib/extraction/text";
-import { parseTextToFields } from "@/lib/extraction/local-parser";
+import { parseTextToFields, isTippCv } from "@/lib/extraction/local-parser";
 import { emptyExtractedFields, type ExtractionResult } from "@/lib/extraction/types";
+import { isAiExtractionConfigured, extractWithAi } from "@/lib/extraction/ai-extractor";
+import { mergeExtraction } from "@/lib/extraction/ai-fields";
 
-/** Whether the paid Claude extraction path is enabled (plan Decision 10). */
-export function isAiExtractionEnabled(): boolean {
-  return process.env.AI_EXTRACTION_ENABLED === "true";
+export { isAiExtractionConfigured } from "@/lib/extraction/ai-extractor";
+
+/**
+ * What the orchestrator decided about a document before doing anything with
+ * it, so the route can record that a CV is about to leave.
+ */
+export interface ExtractionPlan {
+  rawText: string;
+  tables: Awaited<ReturnType<typeof extractDocumentTables>>;
+  isTipp: boolean;
+  /** True when the AI will actually be called for this document. */
+  willUseAi: boolean;
 }
 
 /**
- * Extract candidate/RFQ fields from an uploaded document.
+ * Read the document and decide the engine, without calling anything yet.
  *
- * Default engine is the free local parser (unpdf/mammoth + heuristics). When
- * AI_EXTRACTION_ENABLED=true, the AI engine takes over, not yet implemented, so
- * we currently always use local. The interface is stable so the AI path can slot
- * in without touching callers.
+ * Split from the extraction so the route can write an audit entry between
+ * the decision and the call. The question that entry answers is "did this
+ * document leave", and it left the moment the request was sent, so the
+ * record has to exist before then, not after.
+ */
+export async function planExtraction(
+  buffer: ArrayBuffer,
+  mimeType: string,
+  filename?: string,
+): Promise<ExtractionPlan> {
+  const [rawText, tables] = await Promise.all([
+    extractDocumentText(buffer, mimeType, filename),
+    extractDocumentTables(buffer, mimeType, filename),
+  ]);
+  const isTipp = rawText.trim().length > 0 && isTippCv(rawText, tables);
+  // The template parser reads a TiPP CV exactly, sends nothing anywhere and
+  // costs nothing. The AI can only be worse there, so it is never asked.
+  const willUseAi = isAiExtractionConfigured() && !isTipp && rawText.trim().length > 0;
+  return { rawText, tables, isTipp, willUseAi };
+}
+
+/**
+ * Extract candidate fields from an uploaded document.
+ *
+ * The local parser always runs first and is always the fallback. When the
+ * document is not the TiPP template and GROQ_API_KEY is set, the model reads
+ * it too and its answer is merged over the local result: identity and contact
+ * stay local, everything semantic comes from the model. Any failure on the
+ * AI side, from a timeout to a rate limit to an odd answer, falls back to the
+ * local result with a note saying why, and the upload carries on. The
+ * interface has been stable since before the AI existed, so nothing calling
+ * this had to change.
  */
 export async function extractFromDocument(
   buffer: ArrayBuffer,
   mimeType: string,
   filename?: string,
 ): Promise<ExtractionResult> {
-  // AI path intentionally not wired yet (no budget); falls through to local.
-  // if (isAiExtractionEnabled()) return extractWithAi(buffer, mimeType, filename);
+  const plan = await planExtraction(buffer, mimeType, filename);
+  return extractFromPlan(plan, filename);
+}
 
-  const [rawText, tables] = await Promise.all([
-    extractDocumentText(buffer, mimeType, filename),
-    extractDocumentTables(buffer, mimeType, filename),
-  ]);
-  const trimmed = rawText.trim();
+export async function extractFromPlan(
+  plan: ExtractionPlan,
+  filename?: string,
+): Promise<ExtractionResult> {
+  const { rawText, tables, willUseAi } = plan;
 
-  if (trimmed.length === 0) {
+  if (rawText.trim().length === 0) {
     const fields = emptyExtractedFields();
     fields.full_name = filename ? filenameFallbackName(filename) : null;
     return {
@@ -41,11 +81,35 @@ export async function extractFromDocument(
     };
   }
 
+  const local = parseTextToFields(rawText, filename, tables);
+
+  if (!willUseAi) {
+    return { fields: local, raw_text: rawText, engine: "local", no_text_found: false };
+  }
+
+  const ai = await extractWithAi(rawText);
+
+  if (!ai.ok) {
+    // Said out loud in the log and in the result. A network call that
+    // quietly degrades is the kind of thing that stays broken for a month.
+    console.warn(`[extraction] AI unavailable for ${filename ?? "document"}: ${ai.reason}`);
+    return {
+      fields: local,
+      raw_text: rawText,
+      engine: "local",
+      no_text_found: false,
+      ai_note: `AI unavailable, local parser used: ${ai.reason}`,
+    };
+  }
+
   return {
-    fields: parseTextToFields(rawText, filename, tables),
+    fields: mergeExtraction(local, ai.fields),
     raw_text: rawText,
-    engine: "local",
+    engine: "ai",
     no_text_found: false,
+    ...(ai.truncated
+      ? { ai_note: "The CV was longer than the AI could read in one go, so only the first part went to it. The local parser read all of it." }
+      : {}),
   };
 }
 

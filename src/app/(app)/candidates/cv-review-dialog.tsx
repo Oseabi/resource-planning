@@ -38,7 +38,10 @@ function toFields(r: ExtractionResult): CandidateFormFields {
     additional_roles: f.additional_roles,
     years_experience: f.years_experience,
     professional_summary: f.professional_summary,
-    availability: "available",
+    // What the document said, when it said anything. The TiPP template
+    // states it outright and the AI reads it off other CVs; this used to
+    // discard both and write "available" over the top.
+    availability: f.availability ?? "available",
     // A CV in another format rarely states this; the TiPP template does.
     designated_group: f.designated_group,
     // A CV never states this; it is set by hand when someone knows a date.
@@ -177,6 +180,11 @@ export function CvReviewDialog({
             Fields were pre-filled from the document. Review and correct anything before saving -
             nothing is saved until you confirm.
           </DialogDescription>
+          {/* Why the AI did not run, or what it had to do to. Said rather than
+              left for somebody to notice that a field is thinner than usual. */}
+          {extraction.ai_note && (
+            <p className="text-body-sm text-muted-foreground">{extraction.ai_note}</p>
+          )}
         </DialogHeader>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden md:grid-cols-[280px_1fr]">

@@ -134,6 +134,7 @@ const ENTITY_LABELS: Record<string, string> = {
   profile: "user",
   session: "session",
   department: "department",
+  cv_upload: "CV",
 };
 
 /**
@@ -150,6 +151,13 @@ export function auditSentence(row: AuditRow): string {
 
   if (row.action === "signed_in") return `${who} signed in`;
   if (row.action === "signed_out") return `${who} signed out`;
+  // The one entry that records personal data leaving the country. Said in
+  // full, because that is the line somebody will be looking for.
+  if (row.action === "sent_for_ai_extraction") {
+    return `${who} sent a CV${named} to Groq in the United States for AI extraction`;
+  }
+  if (row.action === "role_changed") return `${who} changed the role of user${named}`;
+  if (row.action === "department_changed") return `${who} moved user${named} to another department`;
   return `${who} ${row.action} a ${what}${named}`;
 }
 

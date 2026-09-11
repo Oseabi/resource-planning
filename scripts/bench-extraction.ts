@@ -4,6 +4,16 @@
  *   npx tsx scripts/bench-extraction.ts tender "<folder>" [--files list.txt]
  *   npx tsx scripts/bench-extraction.ts cv     "<folder>" [--files list.txt]
  *
+ * With a real key, to read what the AI changes before trusting it:
+ *
+ *   npx tsx --conditions=react-server --env-file=.env.local  *     scripts/bench-extraction.ts cv "<folder>" --ai
+ *
+ * The react-server condition makes the server-only guard resolve to nothing,
+ * which is how the AI extractor can be loaded outside Next. Prints the local
+ * result and the merged result side by side for every generic CV, skips every
+ * TiPP one, and waits a minute between calls because the free tier allows
+ * 8,000 tokens a minute and one CV is most of that.
+ *
  * Exists because "improve the parser" has failed twice by tuning rules to
  * whichever documents happened to be open. Heuristics look excellent on the
  * documents they were written against and fall over on the next one, so the
@@ -22,8 +32,29 @@ import mammoth from "mammoth";
 import { extractText as extractPdfText, getDocumentProxy } from "unpdf";
 import { extractPdfTextWithLines, type PdfDocumentLike } from "@/lib/extraction/pdf-lines";
 import { parseRfqText } from "@/lib/extraction/rfq-parser";
-import { parseTextToFields } from "@/lib/extraction/local-parser";
+import { parseTextToFields, isTippCv } from "@/lib/extraction/local-parser";
 import { tablesFromHtml } from "@/lib/extraction/docx-tables";
+import { mergeExtraction } from "@/lib/extraction/ai-fields";
+import type { ExtractedCandidateFields } from "@/lib/extraction/types";
+
+const WITH_AI = process.argv.includes("--ai");
+/** A minute, plus a little, between calls. The budget is per minute. */
+const AI_PAUSE_MS = 65_000;
+
+function cvLines(f: ExtractedCandidateFields): string[] {
+  return [
+    `  name     ${show(f.full_name)}`,
+    `  role     ${show(f.current_role)}`,
+    `  years    ${show(f.years_experience)}`,
+    `  avail    ${show(f.availability)}`,
+    `  langs    ${show(f.languages)}`,
+    `  summary  ${show(f.professional_summary, 60)}`,
+    `  skills   ${f.skills.length} | tech ${f.technical_skills.length} | certs ${f.certifications.length}`,
+    `  work     ${f.work_experience.length} | education ${f.education.length}`,
+    `  quals    ${show(f.qualifications)}`,
+    `  work[0]  ${show(f.work_experience[0] ? `${f.work_experience[0].title} @ ${f.work_experience[0].company}` : null)}`,
+  ];
+}
 
 async function readDocument(file: string): Promise<string> {
   const buf = fs.readFileSync(file);
@@ -81,19 +112,29 @@ async function benchCv(file: string) {
     tables = tablesFromHtml(value);
   }
   const f = parseTextToFields(text, path.basename(file), tables);
-  return [
-    `  chars    ${text.length}`,
-    `  name     ${show(f.full_name)}`,
-    `  role     ${show(f.current_role)}`,
-    `  years    ${show(f.years_experience)}`,
-    `  avail    ${show(f.availability)}`,
-    `  langs    ${show(f.languages)}`,
-    `  summary  ${show(f.professional_summary, 60)}`,
-    `  skills   ${f.skills.length} | tech ${f.technical_skills.length} | certs ${f.certifications.length}`,
-    `  work     ${f.work_experience.length} | education ${f.education.length}`,
-    `  quals    ${show(f.qualifications)}`,
-    `  work[0]  ${show(f.work_experience[0] ? `${f.work_experience[0].title} @ ${f.work_experience[0].company}` : null)}`,
-  ];
+  const tipp = isTippCv(text, tables);
+  const lines = [`  chars    ${text.length}`, `  source   ${tipp ? "tipp" : "generic"}`, ...cvLines(f)];
+
+  if (!WITH_AI) return lines;
+  if (tipp) return [...lines, "  ai       skipped, TiPP template never goes to the AI"];
+
+  // Loaded here rather than at the top so the plain run never touches a
+  // server-only module and never needs the react-server condition.
+  const { extractWithAi, isAiExtractionConfigured } = await import("@/lib/extraction/ai-extractor");
+  if (!isAiExtractionConfigured()) return [...lines, "  ai       GROQ_API_KEY not set"];
+
+  const started = Date.now();
+  const ai = await extractWithAi(text);
+  const took = ((Date.now() - started) / 1000).toFixed(1);
+  if (!ai.ok) return [...lines, `  ai       FAILED after ${took}s: ${ai.reason}`];
+
+  const merged = mergeExtraction(f, ai.fields);
+  lines.push(`  ai       ok in ${took}s${ai.truncated ? ", text was truncated" : ""}`);
+  lines.push("  --- merged (local + ai) ---");
+  lines.push(...cvLines(merged));
+
+  await new Promise((r) => setTimeout(r, AI_PAUSE_MS));
+  return lines;
 }
 
 const [mode, folder] = process.argv.slice(2);

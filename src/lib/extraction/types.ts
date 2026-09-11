@@ -48,6 +48,12 @@ export interface ExtractionResult {
   /** Which engine produced this result. */
   engine: "local" | "ai";
   /**
+   * Why the AI did not run, or what it had to do to run, when either is worth
+   * telling the reviewer. Absent in the ordinary case. Optional so the three
+   * callers and the tender route did not have to change.
+   */
+  ai_note?: string;
+  /**
    * True when no document text could be read (e.g. a scanned/image PDF with no
    * embedded text). The form then falls back to fully manual entry.
    */
