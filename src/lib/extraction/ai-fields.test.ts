@@ -117,6 +117,7 @@ describe("CV_SCHEMA", () => {
       [
         "title",
         "company",
+        "client",
         "location",
         "employment_type",
         "start_date",
@@ -396,5 +397,65 @@ describe("canonicalise, so the model's casing yields to the system's spelling", 
     const out = coerceAiFields({ languages: ["ENGLISH"], current_role: "business analyst" });
     expect(out.languages).toEqual(["English"]);
     expect(out.current_role).toBe("Business Analyst");
+  });
+});
+
+describe("the fields the issued template carries", () => {
+  it("keeps the schema strict with them in", () => {
+    expect(isStrictSchema(CV_SCHEMA)).toEqual([]);
+    expect(Object.keys(CV_SCHEMA.properties)).toEqual(
+      expect.arrayContaining(["skill_matrix", "certificates", "projects", "achievements"]),
+    );
+  });
+
+  it("never asks the model for the date of birth or the cover date", () => {
+    // Both are stripped or never sent, so asking would invite an invention.
+    expect(Object.keys(CV_SCHEMA.properties)).not.toContain("date_of_birth");
+    expect(Object.keys(CV_SCHEMA.properties)).not.toContain("cv_as_of");
+  });
+
+  it("reads a skills matrix, dropping a category with nothing in it", () => {
+    const out = coerceAiFields({
+      skill_matrix: [
+        { category: "Languages", skills: [{ name: "SQL", years: "10 years" }, { name: "", years: null }] },
+        { category: "Empty", skills: [] },
+        { category: null, skills: [{ name: "Visio", years: null }] },
+      ],
+    });
+    expect(out.skill_matrix).toEqual([
+      { category: "Languages", skills: [{ name: "SQL", years: "10 years" }] },
+      { category: "General", skills: [{ name: "Visio", years: null }] },
+    ]);
+  });
+
+  it("reads certificates, projects, achievements and a job's client", () => {
+    const out = coerceAiFields({
+      certificates: [{ name: "PMP", institution: "PMI", year: "2020" }, { name: "" }],
+      projects: [{ company: "Eskom", projects: ["Historian", ""] }, { company: "", projects: [] }],
+      achievements: "  Member of AOGEA  ",
+      work_experience: [{ title: "BA", company: "X", client: "Standard Bank" }],
+    });
+    expect(out.certificates).toEqual([{ name: "PMP", institution: "PMI", year: "2020" }]);
+    expect(out.projects).toEqual([{ company: "Eskom", projects: ["Historian"] }]);
+    expect(out.achievements).toBe("Member of AOGEA");
+    expect(out.work_experience[0].client).toBe("Standard Bank");
+  });
+
+  it("merges them like the other lists: the model wins unless it returned nothing", () => {
+    const local = {
+      ...emptyExtractedFields(),
+      skill_matrix: [{ category: "Local", skills: [{ name: "Excel", years: null }] }],
+      achievements: "local text",
+    };
+    const quiet = coerceAiFields({});
+    expect(mergeExtraction(local, quiet).skill_matrix).toEqual(local.skill_matrix);
+    expect(mergeExtraction(local, quiet).achievements).toBe("local text");
+
+    const loud = coerceAiFields({
+      skill_matrix: [{ category: "AI", skills: [{ name: "SQL", years: null }] }],
+      achievements: "ai text",
+    });
+    expect(mergeExtraction(local, loud).skill_matrix?.[0]?.category).toBe("AI");
+    expect(mergeExtraction(local, loud).achievements).toBe("ai text");
   });
 });

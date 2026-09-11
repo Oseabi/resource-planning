@@ -41,6 +41,14 @@ export default async function EditCandidatePage({
     portfolio_url: candidate.portfolio_url,
     work_experience: candidate.work_experience,
     education: candidate.education,
+    // Rows saved before these columns existed come back as null from the
+    // spread of "*", so each has a default.
+    date_of_birth: candidate.date_of_birth ?? null,
+    cv_as_of: candidate.cv_as_of ?? null,
+    skill_matrix: candidate.skill_matrix ?? [],
+    certificates: candidate.certificates ?? [],
+    projects: candidate.projects ?? [],
+    achievements: candidate.achievements ?? null,
   };
 
   return (

@@ -11,7 +11,17 @@ import type {
   Database,
   WorkExperience,
   Education,
+  SkillCategory,
+  Certificate,
+  ProjectGroup,
 } from "@/lib/supabase/database.types";
+import { parseLongDate } from "@/lib/dates";
+import {
+  deriveTechnicalSkills,
+  deriveCertifications,
+  cleanSkillMatrix,
+  cleanCertificates,
+} from "@/lib/cv-record";
 
 type CandidateUpdate = Database["public"]["Tables"]["candidates"]["Update"];
 
@@ -44,6 +54,14 @@ export interface CandidateFormFields {
   portfolio_url: string | null;
   work_experience: WorkExperience[];
   education: Education[];
+  /** ISO date, or the template's "05 February 1989", which is converted on save. */
+  date_of_birth: string | null;
+  /** ISO date, or the cover page's "07 September 2026", converted on save. */
+  cv_as_of: string | null;
+  skill_matrix: SkillCategory[];
+  certificates: Certificate[];
+  projects: ProjectGroup[];
+  achievements: string | null;
 }
 
 export interface DuplicateMatch {
@@ -110,6 +128,11 @@ function parsePayload(formData: FormData): { fields: CandidateFormFields; force:
 
 /** Map the form contract to candidate table columns (shared by insert + update). */
 function toCandidateColumns(fields: CandidateFormFields): CandidateUpdate & { full_name: string } {
+  // The structured tables are what the template prints; the flat lists are
+  // what matching scores. The lists are derived from the tables on every
+  // save, as a union, so neither has to be typed twice.
+  const matrix = cleanSkillMatrix(fields.skill_matrix ?? []);
+  const certificates = cleanCertificates(fields.certificates ?? []);
   return {
     full_name: fields.full_name.trim(),
     email: fields.email,
@@ -125,8 +148,8 @@ function toCandidateColumns(fields: CandidateFormFields): CandidateUpdate & { fu
     location: fields.location,
     notes: fields.notes,
     skills: fields.skills,
-    technical_skills: fields.technical_skills,
-    certifications: fields.certifications,
+    technical_skills: deriveTechnicalSkills(matrix, fields.technical_skills),
+    certifications: deriveCertifications(certificates, fields.certifications),
     qualifications: fields.qualifications,
     sectors: fields.sectors,
     languages: fields.languages,
@@ -135,6 +158,14 @@ function toCandidateColumns(fields: CandidateFormFields): CandidateUpdate & { fu
     portfolio_url: fields.portfolio_url,
     work_experience: fields.work_experience,
     education: fields.education,
+    date_of_birth: parseLongDate(fields.date_of_birth),
+    cv_as_of: parseLongDate(fields.cv_as_of),
+    skill_matrix: matrix,
+    certificates,
+    projects: (fields.projects ?? [])
+      .map((p) => ({ company: p.company.trim(), projects: p.projects.map((n) => n.trim()).filter(Boolean) }))
+      .filter((p) => p.company || p.projects.length),
+    achievements: fields.achievements?.trim() || null,
   };
 }
 

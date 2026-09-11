@@ -97,8 +97,22 @@ export interface PdfDocumentLike {
 }
 
 /**
+ * Is this page the boilerplate cover an issued TiPP Focus CV opens with?
+ *
+ * It carries the agency's own email and phone, and every regex downstream
+ * that looks for a contact detail would find those first. Dropping the page
+ * is what keeps the resourcing manager out of every candidate record. The
+ * "As of date" it also carries is read by the tables reader, which sees the
+ * same page before this drops it.
+ */
+export function isCoverPageText(lines: string[]): boolean {
+  return /^candidate resume$/i.test((lines[0] ?? "").trim());
+}
+
+/**
  * Extract a PDF's text with line structure preserved. Pages are separated by a
- * blank line so section detection can't bleed across page boundaries.
+ * blank line so section detection can't bleed across page boundaries. A
+ * recognised cover page is left out entirely.
  */
 export async function extractPdfTextWithLines(pdf: PdfDocumentLike): Promise<string> {
   const pages: string[] = [];
@@ -111,6 +125,7 @@ export async function extractPdfTextWithLines(pdf: PdfDocumentLike): Promise<str
         typeof item === "object" && item !== null && "str" in item && "transform" in item,
     );
     const lines = groupItemsIntoLines(items);
+    if (pageNumber === 1 && pdf.numPages > 1 && isCoverPageText(lines)) continue;
     if (lines.length) pages.push(lines.join("\n"));
   }
 

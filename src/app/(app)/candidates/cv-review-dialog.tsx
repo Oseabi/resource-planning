@@ -60,6 +60,12 @@ function toFields(r: ExtractionResult): CandidateFormFields {
     portfolio_url: f.portfolio_url,
     work_experience: f.work_experience,
     education: f.education,
+    date_of_birth: f.date_of_birth ?? null,
+    cv_as_of: f.cv_as_of ?? null,
+    skill_matrix: f.skill_matrix ?? [],
+    certificates: f.certificates ?? [],
+    projects: f.projects ?? [],
+    achievements: f.achievements ?? null,
   };
 }
 
@@ -84,6 +90,14 @@ function toFlags(r: ExtractionResult): ExtractedFlags {
     portfolio_url: !!f.portfolio_url,
     work_experience: f.work_experience.length > 0,
     education: f.education.length > 0,
+    designated_group: !!f.designated_group,
+    availability: f.availability !== undefined,
+    date_of_birth: !!f.date_of_birth,
+    cv_as_of: !!f.cv_as_of,
+    skill_matrix: (f.skill_matrix?.length ?? 0) > 0,
+    certificates: (f.certificates?.length ?? 0) > 0,
+    projects: (f.projects?.length ?? 0) > 0,
+    achievements: !!f.achievements,
   };
 }
 

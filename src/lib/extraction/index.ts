@@ -1,5 +1,6 @@
 import "server-only";
-import { extractDocumentText, extractDocumentTables } from "@/lib/extraction/text";
+import { extractDocumentText, extractDocumentTablesWithMeta } from "@/lib/extraction/text";
+import type { DocumentTables } from "@/lib/extraction/docx-tables";
 import { parseTextToFields, isTippCv, tippParsedFully } from "@/lib/extraction/local-parser";
 import {
   emptyExtractedFields,
@@ -17,7 +18,7 @@ export { isAiExtractionConfigured } from "@/lib/extraction/ai-extractor";
  */
 export interface ExtractionPlan {
   rawText: string;
-  tables: Awaited<ReturnType<typeof extractDocumentTables>>;
+  tables: DocumentTables;
   /** The local parser's result. Always computed; it is the fallback and the base of any merge. */
   local: ExtractedCandidateFields;
   isTipp: boolean;
@@ -38,12 +39,15 @@ export async function planExtraction(
   mimeType: string,
   filename?: string,
 ): Promise<ExtractionPlan> {
-  const [rawText, tables] = await Promise.all([
+  const [rawText, { tables, coverAsOf }] = await Promise.all([
     extractDocumentText(buffer, mimeType, filename),
-    extractDocumentTables(buffer, mimeType, filename),
+    extractDocumentTablesWithMeta(buffer, mimeType, filename),
   ]);
   const hasText = rawText.trim().length > 0;
   const local = hasText ? parseTextToFields(rawText, filename, tables) : emptyExtractedFields();
+  // The cover page's date belongs to the document, not to any table on it,
+  // and it is the one thing read off that page before it is dropped.
+  if (coverAsOf) local.cv_as_of = coverAsOf;
   const isTipp = hasText && isTippCv(rawText, tables);
   // A TiPP CV the template parser has read in full is sent nowhere: the
   // parser is exact and free and the AI could only be worse. One it has only

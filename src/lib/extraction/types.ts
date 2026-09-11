@@ -2,6 +2,9 @@ import type {
   WorkExperience,
   Education,
   CandidateAvailability,
+  SkillCategory,
+  Certificate,
+  ProjectGroup,
 } from "@/lib/supabase/database.types";
 
 /**
@@ -39,6 +42,23 @@ export interface ExtractedCandidateFields {
    * the same as saying the candidate is available.
    */
   availability?: CandidateAvailability;
+
+  // The rest is what the issued TiPP Focus template carries beyond the fields
+  // above. Optional here because only the template parser fills them; the
+  // generic heuristics and the AI leave them undefined.
+
+  /** As written on the template, e.g. "05 February 1989". */
+  date_of_birth?: string | null;
+  /** The cover page's "As of date", as written. */
+  cv_as_of?: string | null;
+  /** The SKILLSET table, category by category. The flat lists above are derived from it. */
+  skill_matrix?: SkillCategory[];
+  /** CERTIFICATES AND COURSES with institution and year, where the flat list has names only. */
+  certificates?: Certificate[];
+  /** The PROJECTS table. */
+  projects?: ProjectGroup[];
+  /** The ACHIEVEMENTS section, verbatim, sub-headings kept. */
+  achievements?: string | null;
 }
 
 export interface ExtractionResult {

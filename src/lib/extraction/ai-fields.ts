@@ -16,7 +16,14 @@
  */
 
 import type { ExtractedCandidateFields } from "@/lib/extraction/types";
-import type { WorkExperience, Education, CandidateAvailability } from "@/lib/supabase/database.types";
+import type {
+  WorkExperience,
+  Education,
+  CandidateAvailability,
+  SkillCategory,
+  Certificate,
+  ProjectGroup,
+} from "@/lib/supabase/database.types";
 import {
   ALL_ROLES,
   ALL_TECHNICAL_SKILLS,
@@ -119,6 +126,10 @@ export const CV_SCHEMA = {
     "availability",
     "work_experience",
     "education",
+    "skill_matrix",
+    "certificates",
+    "projects",
+    "achievements",
   ],
   properties: {
     current_role: nullableString,
@@ -141,6 +152,7 @@ export const CV_SCHEMA = {
         required: [
           "title",
           "company",
+          "client",
           "location",
           "employment_type",
           "start_date",
@@ -152,6 +164,7 @@ export const CV_SCHEMA = {
         properties: {
           title: { type: "string" },
           company: { type: "string" },
+          client: nullableString,
           location: nullableString,
           employment_type: nullableString,
           start_date: nullableString,
@@ -176,6 +189,45 @@ export const CV_SCHEMA = {
         },
       },
     },
+    skill_matrix: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["category", "skills"],
+        properties: {
+          category: { type: "string" },
+          skills: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["name", "years"],
+              properties: { name: { type: "string" }, years: nullableString },
+            },
+          },
+        },
+      },
+    },
+    certificates: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["name", "institution", "year"],
+        properties: { name: { type: "string" }, institution: nullableString, year: nullableString },
+      },
+    },
+    projects: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["company", "projects"],
+        properties: { company: { type: "string" }, projects: stringList },
+      },
+    },
+    achievements: nullableString,
   },
 } as const;
 
@@ -243,7 +295,11 @@ export function buildPrompt(cvText: string): string {
     "- years_experience is total professional years as a number, or null if it cannot be read off the CV.",
     "- designated_group is only for South African employment equity wording stated outright on the CV (for example African, Coloured, Indian, White, person with a disability). Otherwise null.",
     "- availability is only for an explicit statement: available, notice_period, or unavailable. Otherwise null.",
-    "- work_experience: one entry per job, most recent first. Dates as written on the CV. is_current true only if the CV says so.",
+    "- work_experience: one entry per job, most recent first. Dates as written on the CV. is_current true only if the CV says so. client is the end client when the employer placed them somewhere else, otherwise null.",
+    "- skill_matrix: skills grouped by category as the CV groups them, with years beside a skill only when the CV gives them. Leave empty if the CV has no such grouping.",
+    "- certificates: each certificate or course with its institution and year where given. Every name here should also appear in certifications.",
+    "- projects: named projects grouped by the company they were done for, only if the CV lists them that way.",
+    "- achievements: the CV's achievements or memberships section as written, or null.",
     "- Contact details have been removed from the text and are not wanted.",
     "",
     "CV:",
@@ -351,6 +407,7 @@ function asWorkExperience(v: unknown): WorkExperience[] {
     out.push({
       title: title ?? "",
       company: company ?? "",
+      client: asString(r.client),
       location: asString(r.location),
       employment_type: asString(r.employment_type),
       start_date: asString(r.start_date),
@@ -381,10 +438,59 @@ function asEducation(v: unknown): Education[] {
   return out;
 }
 
+function asSkillMatrix(v: unknown): SkillCategory[] {
+  if (!Array.isArray(v)) return [];
+  const out: SkillCategory[] = [];
+  for (const raw of v) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const skills = Array.isArray(r.skills)
+      ? r.skills
+          .map((s) => {
+            if (!s || typeof s !== "object") return null;
+            const e = s as Record<string, unknown>;
+            const name = asString(e.name);
+            return name ? { name, years: asString(e.years) } : null;
+          })
+          .filter((s): s is { name: string; years: string | null } => s !== null)
+      : [];
+    if (skills.length === 0) continue;
+    out.push({ category: asString(r.category) ?? "General", skills });
+  }
+  return out;
+}
+
+function asCertificates(v: unknown): Certificate[] {
+  if (!Array.isArray(v)) return [];
+  const out: Certificate[] = [];
+  for (const raw of v) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const name = asString(r.name);
+    if (!name) continue;
+    out.push({ name, institution: asString(r.institution), year: asString(r.year) });
+  }
+  return out;
+}
+
+function asProjects(v: unknown): ProjectGroup[] {
+  if (!Array.isArray(v)) return [];
+  const out: ProjectGroup[] = [];
+  for (const raw of v) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const company = asString(r.company);
+    const projects = asStringList(r.projects);
+    if (!company && projects.length === 0) continue;
+    out.push({ company: company ?? "", projects });
+  }
+  return out;
+}
+
 /** The fields the model is allowed to fill. Everything else is the local parser's. */
 export type AiFields = Omit<
   ExtractedCandidateFields,
-  "full_name" | "email" | "phone" | "linkedin_url" | "portfolio_url"
+  "full_name" | "email" | "phone" | "linkedin_url" | "portfolio_url" | "date_of_birth" | "cv_as_of"
 >;
 
 /**
@@ -417,6 +523,10 @@ export function coerceAiFields(json: unknown): AiFields {
       : {}),
     work_experience: asWorkExperience(r.work_experience),
     education: asEducation(r.education),
+    skill_matrix: asSkillMatrix(r.skill_matrix),
+    certificates: asCertificates(r.certificates),
+    projects: asProjects(r.projects),
+    achievements: asString(r.achievements),
   };
 }
 
@@ -434,6 +544,9 @@ const LIST_FIELDS = [
   "languages",
   "work_experience",
   "education",
+  "skill_matrix",
+  "certificates",
+  "projects",
 ] as const;
 
 /**
@@ -455,11 +568,12 @@ export function mergeExtraction(
     years_experience: ai.years_experience ?? local.years_experience,
     professional_summary: ai.professional_summary ?? local.professional_summary,
     designated_group: ai.designated_group ?? local.designated_group,
+    achievements: ai.achievements ?? local.achievements ?? null,
     ...(ai.availability ? { availability: ai.availability } : {}),
   };
 
   for (const field of LIST_FIELDS) {
-    const theirs = ai[field] as unknown[];
+    const theirs = (ai[field] ?? []) as unknown[];
     if (theirs.length > 0) {
       (merged as unknown as Record<string, unknown>)[field] = theirs;
     }

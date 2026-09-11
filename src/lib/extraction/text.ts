@@ -3,6 +3,7 @@ import mammoth from "mammoth";
 import { extractText as extractPdfText, getDocumentProxy } from "unpdf";
 import { extractPdfTextWithLines, type PdfDocumentLike } from "@/lib/extraction/pdf-lines";
 import { tablesFromHtml, type DocumentTables } from "@/lib/extraction/docx-tables";
+import { tablesFromPdfPages, pdfItemsFrom, type PdfPageItems } from "@/lib/extraction/pdf-tables";
 
 const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -46,26 +47,56 @@ export async function extractDocumentText(
   throw new Error(`Unsupported document type: ${mimeType || filename || "unknown"}`);
 }
 
+/** What a document's tables came with, beyond the tables themselves. */
+export interface DocumentTablesResult {
+  tables: DocumentTables;
+  /** The cover page's "As of date", when the document had one. */
+  coverAsOf: string | null;
+}
+
 /**
- * A Word document's tables, or an empty list for anything else.
+ * A document's tables, or an empty list for anything else.
  *
  * The TiPP Focus CV is entirely tables, and reading them directly avoids
  * reconstructing rows from flattened text, which is where that parser's worst
- * failures come from. PDFs carry no table structure, so they keep the text path.
+ * failures come from. A .docx yields them through mammoth. A PDF yields them
+ * from the position of every run of text, which is the only place a PDF keeps
+ * its columns, and which the plain text reader throws away.
  */
 export async function extractDocumentTables(
   buffer: ArrayBuffer,
   mimeType: string,
   filename?: string,
 ): Promise<DocumentTables> {
+  return (await extractDocumentTablesWithMeta(buffer, mimeType, filename)).tables;
+}
+
+export async function extractDocumentTablesWithMeta(
+  buffer: ArrayBuffer,
+  mimeType: string,
+  filename?: string,
+): Promise<DocumentTablesResult> {
+  const isPdf = mimeType === "application/pdf" || filename?.toLowerCase().endsWith(".pdf");
   const isDocx = mimeType === DOCX_MIME || filename?.toLowerCase().endsWith(".docx");
-  if (!isDocx) return [];
 
   try {
-    const { value } = await mammoth.convertToHtml({ buffer: Buffer.from(buffer) });
-    return tablesFromHtml(value);
+    if (isDocx) {
+      const { value } = await mammoth.convertToHtml({ buffer: Buffer.from(buffer) });
+      return { tables: tablesFromHtml(value), coverAsOf: null };
+    }
+    if (isPdf) {
+      const pdf = await getDocumentProxy(new Uint8Array(buffer));
+      const pages: PdfPageItems[] = [];
+      for (let n = 1; n <= pdf.numPages; n++) {
+        const page = await pdf.getPage(n);
+        const { items } = await page.getTextContent();
+        pages.push({ items: pdfItemsFrom(items as unknown[]) });
+      }
+      const result = tablesFromPdfPages(pages);
+      return { tables: result.tables, coverAsOf: result.coverAsOf };
+    }
   } catch {
-    // A document mammoth cannot convert still parses from its text.
-    return [];
+    // A document that cannot be read as tables still parses from its text.
   }
+  return { tables: [], coverAsOf: null };
 }

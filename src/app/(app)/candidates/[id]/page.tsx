@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil, Link2, Globe, Mail, Phone, MapPin, Briefcase, GraduationCap, CalendarClock } from "lucide-react";
+import { ArrowLeft, Pencil, Link2, Globe, Mail, Phone, MapPin, Briefcase, GraduationCap, CalendarClock, Cake, FileClock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { loadDeployments } from "@/lib/deployments-repo";
 import { DeploymentsPanel } from "@/app/(app)/candidates/[id]/deployments-panel";
 import { TippCvButton } from "@/app/(app)/candidates/[id]/tipp-cv-button";
 import { missingTemplateFields, type CvSource } from "@/lib/cv-export/build-tipp-cv";
+import { formatLongDate } from "@/lib/dates";
 import { CvDownloadButton } from "@/app/(app)/candidates/[id]/cv-download-button";
 import { DeleteCandidateButton } from "@/app/(app)/candidates/[id]/delete-candidate-button";
 
@@ -141,6 +142,13 @@ export default async function CandidateProfilePage({
               <IconLine icon={<MapPin className="size-4" />} value={candidate.location} />
               <IconLine icon={<Link2 className="size-4" />} value={candidate.linkedin_url} href={candidate.linkedin_url} />
               <IconLine icon={<Globe className="size-4" />} value={candidate.portfolio_url} href={candidate.portfolio_url} />
+              {/* Printed on the TiPP CV, so it is shown here as the template prints it. */}
+              <IconLine icon={<Cake className="size-4" />} value={formatLongDate(candidate.date_of_birth)} />
+              {/* When the CV this was read from was last confirmed. Shown, not policed. */}
+              <IconLine
+                icon={<FileClock className="size-4" />}
+                value={candidate.cv_as_of ? `CV as of ${formatLongDate(candidate.cv_as_of)}` : null}
+              />
             </div>
           </Card>
           <TagCard title="Sectors" tags={candidate.sectors} />
@@ -170,6 +178,9 @@ export default async function CandidateProfilePage({
                       <p className="text-body-sm text-muted-foreground">
                         {[exp.company, exp.location, exp.employment_type].filter(Boolean).join(" · ")}
                       </p>
+                    )}
+                    {exp.client && (
+                      <p className="text-body-sm text-muted-foreground">Client: {exp.client}</p>
                     )}
                     {exp.description && (
                       <p className="mt-1.5 whitespace-pre-wrap text-body-sm text-foreground">{exp.description}</p>
@@ -210,7 +221,27 @@ export default async function CandidateProfilePage({
               </div>
             </Card>
           )}
-          <TagCard title="Certifications" tags={candidate.certifications} />
+          {(candidate.certificates ?? []).length > 0 ? (
+            <Card title="Certificates and courses">
+              <div className="space-y-3">
+                {candidate.certificates.map((c, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-accent text-primary">
+                      <GraduationCap className="size-4" />
+                    </div>
+                    <div>
+                      <div className="text-body-md font-medium text-foreground">{c.name}</div>
+                      <div className="text-body-sm text-muted-foreground">
+                        {[c.institution, c.year].filter(Boolean).join(" · ") || "-"}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ) : (
+            <TagCard title="Certifications" tags={candidate.certifications} />
+          )}
           <TagCard title="Qualifications" tags={candidate.qualifications} />
           {candidate.education.length === 0 &&
             candidate.certifications.length === 0 &&
@@ -219,9 +250,59 @@ export default async function CandidateProfilePage({
 
         {/* Skills & Documents */}
         <TabsContent value="skills" className="space-y-4">
+          {(candidate.skill_matrix ?? []).length > 0 && (
+            <Card title="Skills table">
+              <div className="overflow-x-auto">
+                <table className="w-full text-body-sm">
+                  <tbody>
+                    {candidate.skill_matrix.map((cat, i) => (
+                      <tr key={i} className="border-t border-border first:border-t-0">
+                        <td className="w-48 py-2 pr-3 align-top font-medium text-foreground">{cat.category}</td>
+                        <td className="py-2 align-top">
+                          <ul className="space-y-0.5">
+                            {cat.skills.map((s, j) => (
+                              <li key={j} className="flex flex-wrap justify-between gap-x-4">
+                                <span className="text-foreground">{s.name}</span>
+                                {(s.years || s.note) && (
+                                  <span className="text-muted-foreground">
+                                    {[s.years, s.note].filter(Boolean).join(", ")}
+                                  </span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
           <TagCard title="Technical skills" tags={candidate.technical_skills} />
           <TagCard title="Professional skills" tags={candidate.skills} />
           <TagCard title="Languages" tags={candidate.languages} />
+          {(candidate.projects ?? []).length > 0 && (
+            <Card title="Projects">
+              <div className="space-y-3">
+                {candidate.projects.map((g, i) => (
+                  <div key={i}>
+                    <div className="text-body-md font-medium text-foreground">{g.company}</div>
+                    <ul className="mt-0.5 list-disc pl-5 text-body-sm text-muted-foreground">
+                      {g.projects.map((p, j) => (
+                        <li key={j}>{p}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+          {candidate.achievements && (
+            <Card title="Achievements">
+              <p className="whitespace-pre-wrap text-body-sm text-foreground">{candidate.achievements}</p>
+            </Card>
+          )}
           <Card title="Documents">
             {candidate.cv_file_path ? (
               <CvDownloadButton path={candidate.cv_file_path} filename={candidate.cv_original_filename} />
