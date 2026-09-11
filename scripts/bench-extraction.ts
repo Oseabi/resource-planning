@@ -170,7 +170,7 @@ async function benchCv(file: string) {
   if (!ai.ok) return [...lines, `  ai       FAILED after ${took}s: ${ai.reason}`];
 
   const merged = mergeExtraction(f, ai.fields);
-  lines.push(`  ai       ok in ${took}s${ai.truncated ? ", text was truncated" : ""}`);
+  lines.push(`  ai       ok in ${took}s${ai.truncated ? ", text was truncated" : ""}${ai.note ? `, ${ai.note}` : ""}`);
   lines.push("  --- merged (local + ai) ---");
   lines.push(...cvLines(merged));
 
