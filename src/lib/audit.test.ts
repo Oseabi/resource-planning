@@ -328,3 +328,26 @@ describe("sessionCsvRows", () => {
     expect(sessionCsvRows([session()], who)[0]).toHaveLength(SESSION_CSV_HEADERS.length);
   });
 });
+
+describe("auditSentence, the entries that need their own wording", () => {
+  it("says in full that a CV left the country", () => {
+    const row = audit({
+      action: "sent_for_ai_extraction",
+      entity_type: "cv_upload",
+      entity_label: "j-mokoena-cv.pdf",
+    });
+    expect(auditSentence(row)).toBe(
+      'Nomsa Khumalo sent a CV "j-mokoena-cv.pdf" to Groq in the United States for AI extraction',
+    );
+  });
+
+  it("reads a role change as a sentence rather than a slug", () => {
+    const row = audit({ action: "role_changed", entity_type: "profile", entity_label: "Sipho (s@x.co.za)" });
+    expect(auditSentence(row)).toBe('Nomsa Khumalo changed the role of user "Sipho (s@x.co.za)"');
+  });
+
+  it("reads a department move as a sentence", () => {
+    const row = audit({ action: "department_changed", entity_type: "profile", entity_label: "Sipho (s@x.co.za)" });
+    expect(auditSentence(row)).toMatch(/moved user "Sipho \(s@x\.co\.za\)" to another department/);
+  });
+});
