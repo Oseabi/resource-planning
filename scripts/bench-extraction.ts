@@ -34,6 +34,7 @@ import { extractPdfTextWithLines, type PdfDocumentLike } from "@/lib/extraction/
 import { parseRfqText } from "@/lib/extraction/rfq-parser";
 import { parseTextToFields, isTippCv, tippParsedFully } from "@/lib/extraction/local-parser";
 import { tablesFromHtml } from "@/lib/extraction/docx-tables";
+import { tablesFromPdfPages, pdfItemsFrom, type PdfPageItems } from "@/lib/extraction/pdf-tables";
 import { mergeExtraction } from "@/lib/extraction/ai-fields";
 import type { ExtractedCandidateFields } from "@/lib/extraction/types";
 
@@ -53,6 +54,11 @@ function cvLines(f: ExtractedCandidateFields): string[] {
     `  work     ${f.work_experience.length} | education ${f.education.length}`,
     `  quals    ${show(f.qualifications)}`,
     `  work[0]  ${show(f.work_experience[0] ? `${f.work_experience[0].title} @ ${f.work_experience[0].company}` : null)}`,
+    `  email    ${f.email ? "SET" : "-"} | phone ${f.phone ? "SET" : "-"}`,
+    `  dob      ${f.date_of_birth ? "set" : "-"} | group ${show(f.designated_group)}`,
+    `  matrix   ${(f.skill_matrix ?? []).length} categories, ${(f.skill_matrix ?? []).reduce((n, c) => n + c.skills.length, 0)} skills`,
+    `  certs+   ${(f.certificates ?? []).length} with detail | projects ${(f.projects ?? []).length} | achievements ${f.achievements ? f.achievements.length + " chars" : "-"}`,
+    `  clients  ${f.work_experience.filter((w) => w.client).length} of ${f.work_experience.length} jobs`,
   ];
 }
 
@@ -105,18 +111,37 @@ async function benchTender(file: string) {
 
 async function benchCv(file: string) {
   const text = await readDocument(file);
-  // Mirrors the app: a .docx also yields its tables, which the parser prefers.
+  // Mirrors the app: a .docx yields its tables through mammoth and a PDF
+  // through the positions of its runs, and the parser prefers either to text.
   let tables: string[][][] = [];
+  let coverAsOf: string | null = null;
   if (/.docx$/i.test(file)) {
     const { value } = await mammoth.convertToHtml({ path: file });
     tables = tablesFromHtml(value);
+  } else if (/.pdf$/i.test(file)) {
+    const buf = fs.readFileSync(file);
+    const pdf = await getDocumentProxy(new Uint8Array(buf));
+    const pages: PdfPageItems[] = [];
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const page = await pdf.getPage(n);
+      const { items } = await page.getTextContent();
+      pages.push({ items: pdfItemsFrom(items as unknown[]) });
+    }
+    const result = tablesFromPdfPages(pages);
+    tables = result.tables;
+    coverAsOf = result.coverAsOf;
   }
   const f = parseTextToFields(text, path.basename(file), tables);
   const tipp = isTippCv(text, tables);
   // Recognised and read is the only case that stays local. A PDF of the
   // template is recognised, gets its header read, and loses its tables.
   const source = tipp ? (tippParsedFully(f) ? "tipp" : "tipp, header only") : "generic";
-  const lines = [`  chars    ${text.length}`, `  source   ${source}`, ...cvLines(f)];
+  const lines = [
+    `  chars    ${text.length}`,
+    `  source   ${source}${tables.length > 0 ? ` (${tables.length} tables)` : ""}`,
+    ...(coverAsOf ? [`  as of    ${coverAsOf}`] : []),
+    ...cvLines(f),
+  ];
 
   if (!WITH_AI) return lines;
   if (source === "tipp") return [...lines, "  ai       skipped, a TiPP CV read in full never goes to the AI"];

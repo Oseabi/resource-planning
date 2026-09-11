@@ -151,7 +151,9 @@ describe("parseTippTables", () => {
     expect(job.company).toBe("Altron Karabina");
     expect(job.title).toBe("Consultant");
     expect(job.is_current).toBe(true);
-    expect(job.description).toBe("Client: Old Mutual\nBuilt the integration\nRan the migration");
+    // The client is a field of its own now, not a line smuggled into the duties.
+    expect(job.client).toBe("Old Mutual");
+    expect(job.description).toBe("Built the integration\nRan the migration");
   });
 
   it("recovers a summary written under CAREER SUMMARY", () => {
@@ -210,5 +212,204 @@ describe("isCertificationEntry", () => {
     expect(isCertificationEntry("Microsoft Dynamics 365")).toBe(false);
     expect(isCertificationEntry("Data Modelling")).toBe(false);
     expect(isCertificationEntry("SQL")).toBe(false);
+  });
+});
+
+describe("parseTippTables on the issued template", () => {
+  const HEADER = [
+    ["FULL NAME (S)", "Thandi Example"],
+    ["DATE OF BIRTH", "05 February 1989"],
+    ["POSITON", "Lead Enterprise Architect"],
+    ["DESIGNATED GROUP", "African Female"],
+    ["YEARS OF EXPERIENCE", "14+ years"],
+    ["AVAILABILITY", "Immediately"],
+  ];
+
+  it("reads POSITON, which is how every issued copy spells it", () => {
+    const r = parseTippTables([HEADER]);
+    expect(r?.current_role).toBe("Lead Enterprise Architect");
+  });
+
+  it("prefers the stated years to a sum of overlapping contracts", () => {
+    const r = parseTippTables([
+      HEADER,
+      [["CAREER SUMMARY"]],
+      [
+        ["COMPANY", "POSITION", "DURATION"],
+        ["A", "Architect", "January 2000 - December 2024"],
+        ["B", "Architect", "January 2000 - December 2024"],
+      ],
+    ]);
+    expect(r?.years_experience).toBe(14);
+  });
+
+  it("reads the date of birth", () => {
+    expect(parseTippTables([HEADER])?.date_of_birth).toBe("05 February 1989");
+  });
+
+  it("reads the SKILLSET table into categories, and derives the flat lists from it", () => {
+    const r = parseTippTables([
+      HEADER,
+      [["SKILLS"]],
+      [
+        ["SKILLS", "PROFICIENCY", "YEARS OF EXPERIENCE"],
+        ["Programming Languages", "SQL / Transact-SQL", "10+ years"],
+        ["Technologies", "Business Architecture\nBusiness Analysis", "10+ years\n15+ years"],
+        ["Frameworks", "TOGAF, ArchiMate", "8+ years"],
+      ],
+    ]);
+    expect(r?.skill_matrix).toEqual([
+      { category: "Programming Languages", skills: [{ name: "SQL / Transact-SQL", years: "10+ years" }] },
+      {
+        category: "Technologies",
+        skills: [
+          { name: "Business Architecture", years: "10+ years" },
+          { name: "Business Analysis", years: "15+ years" },
+        ],
+      },
+      // One years value for the row applies to every skill in it.
+      {
+        category: "Frameworks",
+        skills: [
+          { name: "TOGAF", years: "8+ years" },
+          { name: "ArchiMate", years: "8+ years" },
+        ],
+      },
+    ]);
+    const flat = [...(r?.skills ?? []), ...(r?.technical_skills ?? [])];
+    expect(flat).toContain("SQL / Transact-SQL");
+    expect(flat).toContain("Business Analysis");
+  });
+
+  it("reads the older SKILLS MATRIX with its self-rating and months", () => {
+    const r = parseTippTables([
+      HEADER,
+      [["SKILLS"]],
+      [
+        ["", "MATRIX"],
+        ["Skill Self - Rating", "Experience", "Last Used"],
+        ["ADA 3", "12 Months", "November 1992"],
+        ["COBOL 8", "36 Months", "April 1999"],
+        ["Databases"],
+        ["Oracle 7", "48 Months", "June 2004"],
+      ],
+    ]);
+    expect(r?.skill_matrix).toEqual([
+      {
+        category: "General",
+        skills: [
+          { name: "ADA", years: "1 year", note: "self-rated 3/10, last used November 1992" },
+          { name: "COBOL", years: "3 years", note: "self-rated 8/10, last used April 1999" },
+        ],
+      },
+      { category: "Databases", skills: [{ name: "Oracle", years: "4 years", note: "self-rated 7/10, last used June 2004" }] },
+    ]);
+  });
+
+  it("reads a single-column certificates table without taking its header for the section", () => {
+    const r = parseTippTables([
+      HEADER,
+      [["CERTIFICATES AND COURSES"]],
+      [["QUALIFICATION"], ["TOGAF 9.1 Certified"], ["DAMA training through AFSUG"]],
+    ]);
+    expect(r?.certificates).toEqual([
+      { name: "TOGAF 9.1 Certified", institution: null, year: null },
+      { name: "DAMA training through AFSUG", institution: null, year: null },
+    ]);
+    expect(r?.certifications).toContain("TOGAF 9.1 Certified");
+  });
+
+  it("keeps a certificate's institution and year", () => {
+    const r = parseTippTables([
+      HEADER,
+      [["CERTIFICATES AND COURSES"]],
+      [
+        ["QUALIFICATION", "INSTITUTION", "YEAR"],
+        ["TOGAF 9.2 Certified", "The Open Group", "2022"],
+      ],
+    ]);
+    expect(r?.certificates).toEqual([{ name: "TOGAF 9.2 Certified", institution: "The Open Group", year: "2022" }]);
+  });
+
+  it("reads the PROJECTS table", () => {
+    const r = parseTippTables([
+      HEADER,
+      [["PROJECTS"]],
+      [
+        ["COMPANY NAME", "PROJECT NAME"],
+        ["Eskom", "Enterprise Historian\nVoice interception"],
+      ],
+    ]);
+    expect(r?.projects).toEqual([{ company: "Eskom", projects: ["Enterprise Historian", "Voice interception"] }]);
+  });
+
+  it("keeps ACHIEVEMENTS as written", () => {
+    const r = parseTippTables([HEADER, [["ACHIEVEMENTS"]], [["Expertise\nStrategic Planning\nTechnology Courses\nAgile for Teams"]]]);
+    expect(r?.achievements).toBe("Expertise\nStrategic Planning\nTechnology Courses\nAgile for Teams");
+  });
+
+  it("flattens titled sub-roles inside one employer into one job each", () => {
+    const r = parseTippTables([
+      HEADER,
+      [["EMPLOYMENT RECORD"]],
+      [
+        ["Company", "CA ANZ"],
+        ["Client", "The Institute"],
+        ["Role", "Business Architect / Practice Principal"],
+        ["Duration", "June 2012 – March 2018"],
+        [
+          "Duties:\nBusiness Architect (CA ANZ) (June 2016 – March 2018)\nIntroduced capability planning\nBusiness Analysis Practice Principal | (January 2015 – June 2016)\nRan the practice",
+        ],
+      ],
+    ]);
+    const jobs = r?.work_experience ?? [];
+    expect(jobs.map((j) => j.title)).toEqual([
+      "Business Architect (CA ANZ)",
+      "Business Analysis Practice Principal",
+    ]);
+    expect(jobs.every((j) => j.company === "CA ANZ" && j.client === "The Institute")).toBe(true);
+    expect(jobs[0].start_date).toMatch(/2016/);
+    expect(jobs[0].description).toBe("Introduced capability planning");
+    expect(jobs[1].description).toBe("Ran the practice");
+  });
+
+  it("keeps the block itself when it has duties before the first sub-role", () => {
+    const r = parseTippTables([
+      HEADER,
+      [["EMPLOYMENT RECORD"]],
+      [
+        ["Company", "iMas"],
+        ["Role", "Consultant"],
+        ["Duration", "2019 – 2026"],
+        ["Duties:\nAn intro paragraph about the engagement\nHead of Architecture (July 2025 – June 2026)\nLed the team"],
+      ],
+    ]);
+    const jobs = r?.work_experience ?? [];
+    expect(jobs).toHaveLength(2);
+    expect(jobs[0].title).toBe("Consultant");
+    expect(jobs[0].description).toBe("An intro paragraph about the engagement");
+    expect(jobs[1].title).toBe("Head of Architecture");
+  });
+
+  it("reads a block with no sub-roles as one job, as before", () => {
+    const r = parseTippTables([
+      HEADER,
+      [["EMPLOYMENT RECORD"]],
+      [
+        ["Company", "Tower Group"],
+        ["Client", "MWEB"],
+        ["Role", "IT Technical Consultant"],
+        ["Duration", "August 2007 – April 2008"],
+        ["Duties:\nProviding support\nProcessing reports"],
+      ],
+    ]);
+    expect(r?.work_experience).toEqual([
+      expect.objectContaining({
+        title: "IT Technical Consultant",
+        company: "Tower Group",
+        client: "MWEB",
+        description: "Providing support\nProcessing reports",
+      }),
+    ]);
   });
 });

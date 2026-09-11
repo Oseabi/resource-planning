@@ -90,7 +90,9 @@ export function toTemplateData(source: CvSource) {
     // template has a single SKILLS block.
     skills: [...source.skills, ...source.technical_skills],
     employment: source.work_experience.map((entry) => {
-      const client = clientOf(entry.description);
+      // The field, when the record has it; the line inside the duties for
+      // records saved before the client had a field of its own.
+      const client = entry.client?.trim() || clientOf(entry.description);
       return {
         company: entry.company ?? "",
         role: entry.title ?? "",

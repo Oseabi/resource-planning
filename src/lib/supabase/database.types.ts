@@ -21,6 +21,8 @@ export type ActivityKind = "note" | "event";
 export interface WorkExperience {
   title: string;
   company: string;
+  /** The end client, when the employer placed them somewhere else. */
+  client?: string | null;
   location?: string | null;
   employment_type?: string | null;
   start_date?: string | null;
@@ -35,6 +37,34 @@ export interface Education {
   field?: string | null;
   institution?: string | null;
   year?: string | null;
+}
+
+/** One skill on the template's SKILLSET table. */
+export interface SkillEntry {
+  name: string;
+  /** As written: "10+ years", "5 years". Null when the row gave none. */
+  years?: string | null;
+  /** Anything else the row said, such as a self-rating or last-used date. */
+  note?: string | null;
+}
+
+/** One row of the SKILLSET table: a category and the skills under it. */
+export interface SkillCategory {
+  category: string;
+  skills: SkillEntry[];
+}
+
+/** One row of CERTIFICATES AND COURSES, which has the same shape as a qualification. */
+export interface Certificate {
+  name: string;
+  institution?: string | null;
+  year?: string | null;
+}
+
+/** One row of the PROJECTS table: a company and the projects done there. */
+export interface ProjectGroup {
+  company: string;
+  projects: string[];
 }
 
 export interface Database {
