@@ -86,6 +86,26 @@ describe("tablesFromPdfPages", () => {
     ]);
   });
 
+  it("rejoins a compound word broken at its hyphen, and leaves a date range alone", () => {
+    const { tables } = tablesFromPdfPages([
+      page(
+        run("SKILLS", 78.3, 400, { h: HEADER }),
+        run("PROFICIENCY", 235.1, 400, { h: HEADER }),
+        run("YEARS OF EXPERIENCE", 410.3, 400, { h: HEADER }),
+        run("Programming Languages", 78.3, 380),
+        run("SQL; basic scripting and system-", 235.1, 380, { eol: true }),
+        run("integration concepts", 235.1, 369),
+        run("2014 -", 410.3, 380, { eol: true }),
+        run("Current", 410.3, 369),
+      ),
+    ]);
+    expect(tables[0][1]).toEqual([
+      "Programming Languages",
+      "SQL; basic scripting and system-integration concepts",
+      "2014 - Current",
+    ]);
+  });
+
   it("rejoins a row whose first column wraps too", () => {
     // "Accident Compensation" then "Corporation" on the next line at x 78:
     // a rule that reads an empty first column as the only continuation

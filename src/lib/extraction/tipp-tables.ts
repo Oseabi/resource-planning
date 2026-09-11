@@ -277,6 +277,23 @@ function matrixRows(rows: string[][]): SkillCategory[] {
 }
 
 /**
+ * The skills in one SKILLSET cell.
+ *
+ * One per line, or separated by semicolons, or by commas. A cell that uses
+ * semicolons is split on those alone, because on such a cell a comma is part
+ * of a name ("Microsoft Excel, Word and PowerPoint" is one item in a
+ * semicolon list). One CV wrote every category this way and came through as
+ * eight skills, each a whole sentence.
+ */
+function splitSkillCell(cell: string): string[] {
+  const separator = cell.includes(";") ? /\n|;/ : /\n|,(?![^(]*\))/;
+  return cell
+    .split(separator)
+    .map((n) => n.trim().replace(/[.;]$/, ""))
+    .filter(Boolean);
+}
+
+/**
  * Rows of the SKILLSET table. The category is the first cell, the skills the
  * second, one per line or comma separated, and the years the third with one
  * value per skill when the CV gives them and one for the row when it does
@@ -288,10 +305,7 @@ function skillRows(rows: string[][]): SkillCategory[] {
   for (const r of rows) {
     if (isEmptyRow(r) || isColumnHeader(r, ["SKILLS", "PROFICIENCY", "YEARS OF EXPERIENCE"])) continue;
     const category = (r[0] ?? "").trim();
-    const names = (r[1] ?? "")
-      .split(/\n|,(?![^(]*\))/)
-      .map((n) => n.trim())
-      .filter(Boolean);
+    const names = splitSkillCell(r[1] ?? "");
     const years = (r[2] ?? "").split("\n").map((y) => y.trim()).filter(Boolean);
 
     if (names.length === 0) continue;

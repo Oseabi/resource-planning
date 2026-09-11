@@ -312,3 +312,38 @@ National Diploma in IT
     expect(fields.qualifications).toContain("National Diploma in IT");
   });
 });
+
+describe("sectors on a template CV", () => {
+  const header = [
+    ["FULL NAME (S)", "Sipho Example"],
+    ["POSITON", "Business Analyst"],
+  ];
+  const career = [
+    [["CAREER SUMMARY"]],
+    [
+      ["COMPANY", "POSITION", "DURATION"],
+      ["SITA (State Information Technology Agency)", "Business Analyst", "March 2014 - March 2016"],
+    ],
+  ];
+
+  it("reads them from the summary and the domain skills, not from an employer's name", () => {
+    const fields = parseTextToFields("FULL NAME (S) Sipho Example", "sipho.pdf", [
+      header,
+      [["CANDIDATE SUMMARY"]],
+      [["Sipho has ten years across the public sector and consulting environments."]],
+      ...career,
+      [["SKILLS"]],
+      [
+        ["SKILLS", "PROFICIENCY", "YEARS OF EXPERIENCE"],
+        ["Domain Knowledge", "Higher education; finance; municipal services", "10+ years"],
+      ],
+    ]);
+    expect(fields.sectors).toEqual(expect.arrayContaining(["Public Sector", "Consulting", "Finance"]));
+    expect(fields.sectors).not.toContain("Agency");
+  });
+
+  it("reads none when the CV states none", () => {
+    const fields = parseTextToFields("FULL NAME (S) Sipho Example", "sipho.pdf", [header, ...career]);
+    expect(fields.sectors).toEqual([]);
+  });
+});

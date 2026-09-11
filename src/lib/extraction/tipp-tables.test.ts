@@ -281,6 +281,27 @@ describe("parseTippTables on the issued template", () => {
     expect(flat).toContain("Business Analysis");
   });
 
+  it("splits a semicolon list on the semicolons alone, commas included in the items", () => {
+    const r = parseTippTables([
+      HEADER,
+      [["SKILLS"]],
+      [
+        ["SKILLS", "PROFICIENCY", "YEARS OF EXPERIENCE"],
+        ["Tools", "Sparx Enterprise Architect; Jira; Microsoft Excel, Word and PowerPoint.", "8+ years"],
+      ],
+    ]);
+    expect(r?.skill_matrix).toEqual([
+      {
+        category: "Tools",
+        skills: [
+          { name: "Sparx Enterprise Architect", years: "8+ years" },
+          { name: "Jira", years: "8+ years" },
+          { name: "Microsoft Excel, Word and PowerPoint", years: "8+ years" },
+        ],
+      },
+    ]);
+  });
+
   it("reads the older SKILLS MATRIX with its self-rating and months", () => {
     const r = parseTippTables([
       HEADER,

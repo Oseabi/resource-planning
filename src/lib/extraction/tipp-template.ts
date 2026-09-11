@@ -328,6 +328,15 @@ const SKILL_PREAMBLE_RE =
  */
 export function expandSkillLine(line: string): string[] {
   const trimmed = line.trim();
+  // Semicolons are the stronger separator: a line that uses them keeps its
+  // commas inside the items.
+  if (trimmed.includes(";")) {
+    return trimmed
+      .replace(SKILL_PREAMBLE_RE, "")
+      .split(";")
+      .map((part) => part.replace(/\.$/, "").trim())
+      .filter((part) => part.length > 1);
+  }
   if (!trimmed.includes(",")) return [trimmed];
 
   const body = trimmed.replace(SKILL_PREAMBLE_RE, "");
