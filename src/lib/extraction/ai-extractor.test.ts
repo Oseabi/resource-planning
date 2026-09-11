@@ -122,6 +122,50 @@ describe("extractWithAi", () => {
     expect(out).toEqual({ ok: false, reason: "Groq 401: Invalid API Key" });
   });
 
+  it("uses the answer Groq refused when the model left a key out", async () => {
+    // Strict mode on this model checks after the fact, and one long CV came
+    // back 400 with the whole answer attached, minus one list.
+    const refused = {
+      error: {
+        message:
+          "Generated JSON does not match the expected schema. Please adjust your prompt. See 'failed_generation' for more details. Error: jsonschema: '' does not validate with /required: missing properties: 'sectors', 'projects'",
+        type: "invalid_request_error",
+        code: "json_validate_failed",
+        failed_generation: JSON.stringify({ current_role: "Senior Business Analyst", skills: ["SQL"] }),
+      },
+    };
+    stubFetch(() => answer(refused, 400));
+    const out = await extractWithAi(CV);
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.fields.current_role).toBe("Senior Business Analyst");
+      expect(out.fields.skills).toEqual(["SQL"]);
+      expect(out.note).toBe(
+        "The AI left out sectors, projects; the rest of its answer was used and the local parser filled the gaps.",
+      );
+    }
+  });
+
+  it("uses an answer Groq cut off at the token cap and closed itself", async () => {
+    const refused = {
+      error: {
+        message: "Generated JSON does not match the expected schema. Error: jsonschema: '' does not validate with /required: missing properties: 'education'",
+        failed_generation: '{"current_role": "Analyst", "work_experience": [{"title": "Analyst", "company": "SITA"}]}',
+      },
+    };
+    stubFetch(() => answer(refused, 400));
+    const out = await extractWithAi(CV);
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.fields.work_experience?.[0]?.company).toBe("SITA");
+  });
+
+  it("still reports a 400 whose failed generation is not JSON", async () => {
+    stubFetch(() => answer({ error: { message: "bad", failed_generation: '{"current_role": "Ana' } }, 400));
+    const out = await extractWithAi(CV);
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.reason).toMatch(/^Groq 400: /);
+  });
+
   it("reports an answer with no content", async () => {
     stubFetch(() => answer({ choices: [] }));
     const out = await extractWithAi(CV);

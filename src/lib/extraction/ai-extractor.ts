@@ -23,7 +23,7 @@ export function isAiExtractionConfigured(): boolean {
 }
 
 export type AiResult =
-  | { ok: true; fields: AiFields; truncated: boolean }
+  | { ok: true; fields: AiFields; truncated: boolean; note?: string }
   | { ok: false; reason: string };
 
 /**
@@ -68,6 +68,8 @@ export async function extractWithAi(rawText: string): Promise<AiResult> {
     }
     if (!res.ok) {
       const body = await res.text().catch(() => "");
+      const salvaged = salvageRefusedAnswer(body);
+      if (salvaged) return { ok: true, fields: coerceAiFields(salvaged.answer), truncated, note: salvaged.note };
       return { ok: false, reason: `Groq ${res.status}: ${body.slice(0, 200)}` };
     }
 
@@ -93,4 +95,37 @@ export async function extractWithAi(rawText: string): Promise<AiResult> {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * The answer Groq refused, when there is one worth having.
+ *
+ * Strict mode on this model is a check after the fact, not a constraint
+ * while it writes: the model can leave a key out, and Groq then answers 400
+ * with the whole generation attached and a message naming what is missing.
+ * The same happens when the answer is cut off at the token cap and Groq
+ * closes the JSON where it stopped. Either way the fields it did write are
+ * good, and the reader treats every field as optional anyway, so a refused
+ * answer that parses is used, and the review screen is told it was partial.
+ */
+export function salvageRefusedAnswer(body: string): { answer: unknown; note: string } | null {
+  let error: { message?: unknown; failed_generation?: unknown } | undefined;
+  try {
+    error = (JSON.parse(body) as { error?: typeof error }).error;
+  } catch {
+    return null;
+  }
+  if (typeof error?.failed_generation !== "string") return null;
+  let answer: unknown;
+  try {
+    answer = JSON.parse(error.failed_generation);
+  } catch {
+    return null;
+  }
+  if (!answer || typeof answer !== "object" || Array.isArray(answer)) return null;
+  const missing = /missing properties: (.+)$/.exec(typeof error.message === "string" ? error.message : "");
+  const note = missing
+    ? `The AI left out ${missing[1].replace(/'/g, "")}; the rest of its answer was used and the local parser filled the gaps.`
+    : "The AI's answer did not match the expected shape in full; what it did give was used and the local parser filled the gaps.";
+  return { answer, note };
 }

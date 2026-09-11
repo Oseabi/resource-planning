@@ -115,14 +115,18 @@ export async function extractFromPlan(
     };
   }
 
+  const notes = [
+    ai.truncated
+      ? "The CV was longer than the AI could read in one go, so only the first part went to it. The local parser read all of it."
+      : null,
+    ai.note ?? null,
+  ].filter((n): n is string => n !== null);
   return {
     fields: mergeExtraction(local, ai.fields),
     raw_text: rawText,
     engine: "ai",
     no_text_found: false,
-    ...(ai.truncated
-      ? { ai_note: "The CV was longer than the AI could read in one go, so only the first part went to it. The local parser read all of it." }
-      : {}),
+    ...(notes.length > 0 ? { ai_note: notes.join(" ") } : {}),
   };
 }
 

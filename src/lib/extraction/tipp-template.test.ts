@@ -349,6 +349,14 @@ describe("expandSkillLine", () => {
     expect(skills).toEqual(["Project Management", "Visual Basic", "corporate communications"]);
   });
 
+  it("splits on semicolons when the line uses them, keeping commas inside the items", () => {
+    expect(expandSkillLine("Sparx Enterprise Architect; Jira; Microsoft Excel, Word and PowerPoint.")).toEqual([
+      "Sparx Enterprise Architect",
+      "Jira",
+      "Microsoft Excel, Word and PowerPoint",
+    ]);
+  });
+
   it("does not split inside brackets", () => {
     expect(expandSkillLine("Microsoft Server Support, Cloud Services (Azure, Office 365)")).toEqual([
       "Microsoft Server Support",

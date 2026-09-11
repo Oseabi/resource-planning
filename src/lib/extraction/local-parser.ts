@@ -170,6 +170,22 @@ export function tippParsedFully(fields: ExtractedCandidateFields): boolean {
   return Boolean(fields.full_name && fields.current_role && fields.work_experience.length > 0);
 }
 
+/**
+ * Sectors for a template CV, which has no row for them.
+ *
+ * Read from where a person states them: the summary, and a skills category
+ * named for domains or industries. Not from the whole text, which on the
+ * first CV tried yielded "Agency" from an employer called the State
+ * Information Technology Agency.
+ */
+function tippSectors(fields: ExtractedCandidateFields, summary: string | null): string[] {
+  const domainSkills = (fields.skill_matrix ?? [])
+    .filter((c) => /domain|industr|sector/i.test(c.category))
+    .flatMap((c) => c.skills.map((s) => s.name));
+  const source = [summary ?? "", ...domainSkills].join("\n");
+  return matchDictionary(source, [...VOCABULARY.sectors]);
+}
+
 export function parseTextToFields(
   text: string,
   filename?: string,
@@ -186,12 +202,14 @@ export function parseTextToFields(
     // filled in behind the table result, which stays authoritative for
     // everything it did find.
     const fromText = parseTippTemplate(text);
+    const summary = fromTables.professional_summary ?? fromText?.professional_summary ?? null;
     return {
       ...fromTables,
       email: fromTables.email ?? extractEmail(text),
       phone: fromTables.phone ?? extractPhone(text),
       linkedin_url: fromTables.linkedin_url ?? extractLinks(text).linkedin_url,
-      professional_summary: fromTables.professional_summary ?? fromText?.professional_summary ?? null,
+      professional_summary: summary,
+      sectors: fromTables.sectors.length > 0 ? fromTables.sectors : tippSectors(fromTables, summary),
     };
   }
 

@@ -77,6 +77,12 @@ const LABEL_HEIGHT = 10.5;
 /** Section headings sit centred; nothing else starts this far right in the first column. */
 const HEADING_MIN_X = 150;
 
+/**
+ * A line that ended on the hyphen of a compound word. The hyphen has to be
+ * attached to the word: "October 2020 -" is a date range, not a wrap.
+ */
+const HYPHEN_WRAP_RE = /[A-Za-z]-$/;
+
 /** The bullet glyph Word writes from the Symbol font, and its sub-bullet. */
 const BULLET_RE = /^[•▪●]\s*/;
 
@@ -246,9 +252,14 @@ class RowBuilder {
       cell.text = str;
     } else if (cell.pendingBullet || hadBullet) {
       cell.text += "\n" + str;
-    } else if (Math.abs(cell.lastY - item.y) <= BASELINE_TOLERANCE || cell.openParagraph) {
-      // Same line, or the previous run wrapped: one paragraph.
+    } else if (Math.abs(cell.lastY - item.y) <= BASELINE_TOLERANCE) {
+      // Same line: one paragraph.
       cell.text += " " + str;
+    } else if (cell.openParagraph) {
+      // The previous run wrapped. A line that broke after the hyphen of a
+      // compound word ("system-" / "integration") rejoins without a space;
+      // anything else gets one.
+      cell.text += (HYPHEN_WRAP_RE.test(cell.text) && /^[a-z]/.test(str) ? "" : " ") + str;
     } else {
       cell.text += "\n" + str;
     }

@@ -333,7 +333,12 @@ export function buildRequestBody(rawText: string): {
       include_reasoning: false,
       // Extraction wants the same answer twice for the same CV.
       temperature: 0,
-      max_completion_tokens: 2000,
+      // Hidden reasoning counts against this too. Measured on a CV at the
+      // input cap: 2,967 tokens in, 658 of reasoning, 1,830 of JSON. At 2,000
+      // the answer was cut off after the work history, Groq closed the JSON
+      // where it stopped, and the schema check refused it. 4,000 leaves the
+      // whole request under the 8,000 a minute the free tier allows.
+      max_completion_tokens: 4000,
       messages: [{ role: "user", content: buildPrompt(text) }],
       response_format: {
         type: "json_schema",

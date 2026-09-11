@@ -2,7 +2,7 @@
  * Benchmark the extraction parsers against a folder of real documents.
  *
  *   npx tsx scripts/bench-extraction.ts tender "<folder>" [--files list.txt]
- *   npx tsx scripts/bench-extraction.ts cv     "<folder>" [--files list.txt]
+ *   npx tsx scripts/bench-extraction.ts cv     "<folder>" [--files list.txt] [--dump]
  *
  * With a real key, to read what the AI changes before trusting it:
  *
@@ -39,6 +39,12 @@ import { mergeExtraction } from "@/lib/extraction/ai-fields";
 import type { ExtractedCandidateFields } from "@/lib/extraction/types";
 
 const WITH_AI = process.argv.includes("--ai");
+/**
+ * Print every reconstructed table and the full parsed result too. For the
+ * CV that reads badly: the summary line says a field is short, the dump says
+ * which row the reader mangled or which cell the parser misread.
+ */
+const DUMP = process.argv.includes("--dump");
 /** A minute, plus a little, between calls. The budget is per minute. */
 const AI_PAUSE_MS = 65_000;
 
@@ -132,6 +138,13 @@ async function benchCv(file: string) {
     coverAsOf = result.coverAsOf;
   }
   const f = parseTextToFields(text, path.basename(file), tables);
+  if (DUMP) {
+    tables.forEach((t, i) => {
+      console.log(`--- table ${i} (${t.length} rows)`);
+      t.forEach((r, j) => console.log(`  [${j}] ` + r.map((c) => JSON.stringify(c)).join(" || ")));
+    });
+    console.log(JSON.stringify(f, null, 2));
+  }
   const tipp = isTippCv(text, tables);
   // Recognised and read is the only case that stays local. A PDF of the
   // template is recognised, gets its header read, and loses its tables.
@@ -157,7 +170,7 @@ async function benchCv(file: string) {
   if (!ai.ok) return [...lines, `  ai       FAILED after ${took}s: ${ai.reason}`];
 
   const merged = mergeExtraction(f, ai.fields);
-  lines.push(`  ai       ok in ${took}s${ai.truncated ? ", text was truncated" : ""}`);
+  lines.push(`  ai       ok in ${took}s${ai.truncated ? ", text was truncated" : ""}${ai.note ? `, ${ai.note}` : ""}`);
   lines.push("  --- merged (local + ai) ---");
   lines.push(...cvLines(merged));
 
