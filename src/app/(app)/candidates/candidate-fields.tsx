@@ -14,6 +14,9 @@ import { TagInput } from "@/components/ui/tag-input";
 import { ComboboxInput } from "@/components/ui/combobox-input";
 import { ExperienceEditor } from "@/app/(app)/candidates/experience-editor";
 import { EducationEditor } from "@/app/(app)/candidates/education-editor";
+import { SkillMatrixEditor } from "@/app/(app)/candidates/skill-matrix-editor";
+import { CertificatesEditor } from "@/app/(app)/candidates/certificates-editor";
+import { ProjectsEditor } from "@/app/(app)/candidates/projects-editor";
 import type { CandidateFormFields } from "@/app/(app)/candidates/actions";
 import type { CandidateAvailability, CandidateStatus } from "@/lib/supabase/database.types";
 import { CATEGORY_NAMES, deriveCategories } from "@/lib/resource-categories";
@@ -95,6 +98,17 @@ export function CandidateFields({
           </Field>
           <Field label="Portfolio / GitHub" htmlFor="cf-portfolio" highlight={extracted.portfolio_url}>
             <Input id="cf-portfolio" value={value.portfolio_url ?? ""} onChange={(e) => set("portfolio_url", e.target.value || null)} placeholder="github.com/..." />
+          </Field>
+          {/* Printed on the TiPP CV. Kept as the template writes it and
+              converted to a real date on save; anything unreadable is refused
+              rather than guessed at. */}
+          <Field label="Date of birth" htmlFor="cf-dob" highlight={extracted.date_of_birth}>
+            <Input id="cf-dob" value={value.date_of_birth ?? ""} onChange={(e) => set("date_of_birth", e.target.value || null)} placeholder="e.g. 05 February 1989" />
+          </Field>
+          {/* The cover page's "As of date": when this information was last
+              confirmed. Shown, not policed. */}
+          <Field label="CV as of" htmlFor="cf-asof" highlight={extracted.cv_as_of}>
+            <Input id="cf-asof" value={value.cv_as_of ?? ""} onChange={(e) => set("cv_as_of", e.target.value || null)} placeholder="e.g. 07 September 2026" />
           </Field>
         </div>
       </Section>
@@ -223,6 +237,30 @@ export function CandidateFields({
         <EducationEditor value={value.education} onChange={(v) => set("education", v)} highlight={extracted.education} />
       </Section>
 
+      {/* The rest of what the TiPP template prints. Each has a flat list
+          above it that matching scores on, derived from these on save. */}
+      <Section title="Skills table">
+        <p className="mb-3 text-body-sm text-muted-foreground">
+          As printed on the TiPP CV: skills grouped by category with years beside each. Everything
+          here also lands in the technical skills list above, so it need not be typed twice.
+        </p>
+        <SkillMatrixEditor value={value.skill_matrix} onChange={(v) => set("skill_matrix", v)} highlight={extracted.skill_matrix} />
+      </Section>
+
+      <Section title="Certificates and courses">
+        <CertificatesEditor value={value.certificates} onChange={(v) => set("certificates", v)} highlight={extracted.certificates} />
+      </Section>
+
+      <Section title="Projects">
+        <ProjectsEditor value={value.projects} onChange={(v) => set("projects", v)} highlight={extracted.projects} />
+      </Section>
+
+      <Section title="Achievements">
+        <Field label="As written on the CV, sub-headings included" htmlFor="cf-achievements" highlight={extracted.achievements}>
+          <Textarea id="cf-achievements" rows={6} value={value.achievements ?? ""} onChange={(e) => set("achievements", e.target.value || null)} placeholder="Professional memberships, courses, expertise, highlights..." />
+        </Field>
+      </Section>
+
       {/* Notes */}
       <Section title="Notes">
         <Textarea rows={3} value={value.notes ?? ""} onChange={(e) => set("notes", e.target.value || null)} placeholder="Internal notes about this candidate..." />
@@ -294,4 +332,10 @@ export const EMPTY_CANDIDATE: CandidateFormFields = {
   portfolio_url: null,
   work_experience: [],
   education: [],
+  date_of_birth: null,
+  cv_as_of: null,
+  skill_matrix: [],
+  certificates: [],
+  projects: [],
+  achievements: null,
 };

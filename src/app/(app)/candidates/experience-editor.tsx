@@ -17,6 +17,7 @@ import type { WorkExperience } from "@/lib/supabase/database.types";
 const EMPTY: WorkExperience = {
   title: "",
   company: "",
+  client: null,
   location: null,
   employment_type: null,
   start_date: null,
@@ -82,6 +83,16 @@ export function ExperienceEditor({
                 value={entry.company}
                 onChange={(e) => update(i, { company: e.target.value })}
                 placeholder="e.g. Tipp Focus Holdings"
+              />
+            </div>
+            {/* The end client, when the employer placed them somewhere else.
+                The TiPP CV prints it as its own row under the company. */}
+            <div className="space-y-1">
+              <Label className="text-label-sm">Client</Label>
+              <Input
+                value={entry.client ?? ""}
+                onChange={(e) => update(i, { client: e.target.value || null })}
+                placeholder="e.g. Standard Bank, if placed there"
               />
             </div>
             <div className="space-y-1">

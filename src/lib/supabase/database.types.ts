@@ -194,6 +194,17 @@ export interface Database {
           cv_file_path: string | null;
           cv_original_filename: string | null;
           notes: string | null;
+          /** ISO date. Personal information; stripped before any AI call. */
+          date_of_birth: string | null;
+          /** ISO date. The cover page's "As of date" on the CV this was read from. */
+          cv_as_of: string | null;
+          /** The SKILLSET table. technical_skills is derived from it. */
+          skill_matrix: SkillCategory[];
+          /** CERTIFICATES AND COURSES with detail. certifications is derived from it. */
+          certificates: Certificate[];
+          projects: ProjectGroup[];
+          /** The ACHIEVEMENTS section, verbatim. */
+          achievements: string | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
