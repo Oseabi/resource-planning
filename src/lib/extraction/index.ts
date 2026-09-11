@@ -1,7 +1,11 @@
 import "server-only";
 import { extractDocumentText, extractDocumentTables } from "@/lib/extraction/text";
-import { parseTextToFields, isTippCv } from "@/lib/extraction/local-parser";
-import { emptyExtractedFields, type ExtractionResult } from "@/lib/extraction/types";
+import { parseTextToFields, isTippCv, tippParsedFully } from "@/lib/extraction/local-parser";
+import {
+  emptyExtractedFields,
+  type ExtractionResult,
+  type ExtractedCandidateFields,
+} from "@/lib/extraction/types";
 import { isAiExtractionConfigured, extractWithAi } from "@/lib/extraction/ai-extractor";
 import { mergeExtraction } from "@/lib/extraction/ai-fields";
 
@@ -14,6 +18,8 @@ export { isAiExtractionConfigured } from "@/lib/extraction/ai-extractor";
 export interface ExtractionPlan {
   rawText: string;
   tables: Awaited<ReturnType<typeof extractDocumentTables>>;
+  /** The local parser's result. Always computed; it is the fallback and the base of any merge. */
+  local: ExtractedCandidateFields;
   isTipp: boolean;
   /** True when the AI will actually be called for this document. */
   willUseAi: boolean;
@@ -36,11 +42,16 @@ export async function planExtraction(
     extractDocumentText(buffer, mimeType, filename),
     extractDocumentTables(buffer, mimeType, filename),
   ]);
-  const isTipp = rawText.trim().length > 0 && isTippCv(rawText, tables);
-  // The template parser reads a TiPP CV exactly, sends nothing anywhere and
-  // costs nothing. The AI can only be worse there, so it is never asked.
-  const willUseAi = isAiExtractionConfigured() && !isTipp && rawText.trim().length > 0;
-  return { rawText, tables, isTipp, willUseAi };
+  const hasText = rawText.trim().length > 0;
+  const local = hasText ? parseTextToFields(rawText, filename, tables) : emptyExtractedFields();
+  const isTipp = hasText && isTippCv(rawText, tables);
+  // A TiPP CV the template parser has read in full is sent nowhere: the
+  // parser is exact and free and the AI could only be worse. One it has only
+  // recognised, which a PDF of the template can be, is generic from here on,
+  // and the header fields the parser did read still win the merge.
+  const readLocally = isTipp && tippParsedFully(local);
+  const willUseAi = isAiExtractionConfigured() && hasText && !readLocally;
+  return { rawText, tables, local, isTipp, willUseAi };
 }
 
 /**
@@ -68,7 +79,7 @@ export async function extractFromPlan(
   plan: ExtractionPlan,
   filename?: string,
 ): Promise<ExtractionResult> {
-  const { rawText, tables, willUseAi } = plan;
+  const { rawText, local, willUseAi } = plan;
 
   if (rawText.trim().length === 0) {
     const fields = emptyExtractedFields();
@@ -80,8 +91,6 @@ export async function extractFromPlan(
       no_text_found: true,
     };
   }
-
-  const local = parseTextToFields(rawText, filename, tables);
 
   if (!willUseAi) {
     return { fields: local, raw_text: rawText, engine: "local", no_text_found: false };

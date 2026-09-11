@@ -154,6 +154,22 @@ export function isTippCv(text: string, tables: DocumentTables = []): boolean {
   return looksLikeTippTemplate(text);
 }
 
+/**
+ * Did the template parser actually read it, or only recognise it?
+ *
+ * A PDF of the template keeps a whole table row on one line, so the parser
+ * finds the labels, reads the header, and cannot split the career table at
+ * all. Every real TiPP CV has a name, a role and at least one job, so a
+ * result missing any of those is a document the template parser recognised
+ * and could not read, and it should be treated as generic from here on:
+ * the AI gets it, and the header fields the parser did read still win the
+ * merge. Recognised but unread was the worst of both, kept from the AI by
+ * the gate and then handed to the reviewer nearly empty.
+ */
+export function tippParsedFully(fields: ExtractedCandidateFields): boolean {
+  return Boolean(fields.full_name && fields.current_role && fields.work_experience.length > 0);
+}
+
 export function parseTextToFields(
   text: string,
   filename?: string,

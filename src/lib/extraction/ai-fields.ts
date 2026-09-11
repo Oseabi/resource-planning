@@ -239,7 +239,7 @@ export function buildPrompt(cvText: string): string {
     "- current_role is their most recent or most senior job title. Spell roles exactly as they appear in this list where one fits, otherwise use the CV's own words:",
     ALL_ROLES.join(", "),
     "- skills are professional, domain and soft skills. technical_skills are tools, languages, frameworks and platforms. Do not put the same item in both.",
-    "- qualifications are degrees and diplomas. certifications are professional certifications like PMP or AWS. Keep them apart.",
+    "- qualifications are degrees and diplomas, the award name only: 'BTech Information Technology', not the institution or the year, which belong in education. certifications are professional certifications like PMP or AWS. Keep them apart.",
     "- years_experience is total professional years as a number, or null if it cannot be read off the CV.",
     "- designated_group is only for South African employment equity wording stated outright on the CV (for example African, Coloured, Indian, White, person with a disability). Otherwise null.",
     "- availability is only for an explicit statement: available, notice_period, or unavailable. Otherwise null.",
