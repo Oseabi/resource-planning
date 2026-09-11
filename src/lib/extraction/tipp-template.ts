@@ -33,11 +33,23 @@
 import type { WorkExperience, Education } from "@/lib/supabase/database.types";
 import type { ExtractedCandidateFields } from "@/lib/extraction/types";
 
+/**
+ * Spellings seen on issued copies of the template, mapped to the heading
+ * they mean. POSITON is a typo one version carries; CANDIDATE OVERVIEW is
+ * the summary under another name. Each came from a real CV.
+ */
+const HEADING_ALIASES: Record<string, string> = {
+  POSITON: "POSITION",
+  "CANDIDATE OVERVIEW": "CANDIDATE SUMMARY",
+  "CANDIDATE PROFILE": "CANDIDATE SUMMARY",
+};
+
 /** Headings that start a section, in the order the template lays them out. */
 const SECTION_HEADINGS = [
   "FULL NAME",
   "DATE OF BIRTH",
   "POSITION",
+  "YEARS OF EXPERIENCE",
   "DESIGNATED GROUP",
   "LANGUAGES",
   "AVAILABILITY",
@@ -113,7 +125,51 @@ function normaliseHeading(line: string): string {
 function headingAt(line: string): string | null {
   const norm = normaliseHeading(line);
   if (!norm) return null;
-  return SECTION_HEADINGS.find((h) => norm === h) ?? null;
+  const resolved = HEADING_ALIASES[norm] ?? norm;
+  return SECTION_HEADINGS.find((h) => resolved === h) ?? null;
+}
+
+/**
+ * The headings that are a label beside a single value on the template. Only
+ * these can carry their value on the same line; the rest introduce a table or
+ * a paragraph, and a line starting with one of those is a table header row.
+ */
+const LABEL_HEADINGS = new Set([
+  "FULL NAME",
+  "DATE OF BIRTH",
+  "POSITION",
+  "POSITON",
+  "YEARS OF EXPERIENCE",
+  "DESIGNATED GROUP",
+  "LANGUAGES",
+  "AVAILABILITY",
+]);
+
+/**
+ * A heading with its value on the same line, as a PDF lays a table row out.
+ *
+ * "FULL NAME (S) Sandile Mosima" is a heading and a value together. The label
+ * has to be upper case in the source, as the template prints it, so that an
+ * ordinary sentence starting with the same words is left alone.
+ */
+function headingWithValueAt(line: string): { heading: string; value: string } | null {
+  for (const raw of LABEL_HEADINGS) {
+    // Built as a source string rather than a literal, because the heading
+    // varies. Each backslash is doubled so the string carries it.
+    const words = raw.replace(/ /g, "\\s+");
+    const re = new RegExp("^" + words + "(?:\\s*\\(S\\))?\\s*:?\\s+(.+)$");
+    const m = line.match(re);
+    if (!m) continue;
+    const value = m[1].trim();
+    if (!value) continue;
+    const heading = HEADING_ALIASES[raw] ?? raw;
+    // The label is all caps on the template. The value is not, or it would be
+    // another label rather than content.
+    if (line.slice(0, raw.length) !== raw) continue;
+    if (value === value.toUpperCase() && /[A-Z]/.test(value)) continue;
+    return { heading, value };
+  }
+  return null;
 }
 
 /**
@@ -122,14 +178,17 @@ function headingAt(line: string): string | null {
  */
 export function looksLikeTippTemplate(text: string): boolean {
   const upper = text.toUpperCase();
-  const markers = [
-    "FULL NAME",
-    "DESIGNATED GROUP",
-    "CAREER SUMMARY",
-    "EMPLOYMENT RECORD",
-    "CANDIDATE SUMMARY",
+  // Each entry is the alternatives one label goes by across issued copies,
+  // counted once. A PDF copy says CANDIDATE OVERVIEW where the docx says
+  // CANDIDATE SUMMARY, and without the alternative it scored two of five.
+  const markers: string[][] = [
+    ["FULL NAME"],
+    ["DESIGNATED GROUP"],
+    ["CAREER SUMMARY"],
+    ["EMPLOYMENT RECORD"],
+    ["CANDIDATE SUMMARY", "CANDIDATE OVERVIEW", "CANDIDATE PROFILE"],
   ];
-  return markers.filter((m) => upper.includes(m)).length >= 3;
+  return markers.filter((group) => group.some((m) => upper.includes(m))).length >= 3;
 }
 
 interface Section {
@@ -154,7 +213,18 @@ const HEADER_RUNS = [
 /** Length of the header run starting here, or 0 when this is not one. */
 function headerRunAt(lines: string[], i: number): number {
   for (const run of HEADER_RUNS) {
-    if (run.every((word, k) => lines[i + k]?.toUpperCase() === word)) return run.length;
+    // Consume lines while each is the next chunk of the run: one word per
+    // line as a docx flattens it, all on one line as a PDF lays a row out, or
+    // any split in between as a PDF wraps it.
+    let remaining = run.join(" ");
+    let consumed = 0;
+    while (remaining && lines[i + consumed] !== undefined) {
+      const norm = normaliseHeading(lines[i + consumed]);
+      if (!norm || !remaining.startsWith(norm)) break;
+      remaining = remaining.slice(norm.length).trim();
+      consumed += 1;
+    }
+    if (consumed > 0 && remaining === "") return consumed;
   }
   return 0;
 }
@@ -183,6 +253,14 @@ function splitIntoSections(text: string): Section[] {
       current = { heading, lines: [] };
       continue;
     }
+
+    const inline = headingWithValueAt(lines[i]);
+    if (inline) {
+      sections.push(current);
+      current = { heading: inline.heading, lines: [inline.value] };
+      continue;
+    }
+
     current.lines.push(lines[i]);
   }
   sections.push(current);

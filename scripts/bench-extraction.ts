@@ -32,7 +32,7 @@ import mammoth from "mammoth";
 import { extractText as extractPdfText, getDocumentProxy } from "unpdf";
 import { extractPdfTextWithLines, type PdfDocumentLike } from "@/lib/extraction/pdf-lines";
 import { parseRfqText } from "@/lib/extraction/rfq-parser";
-import { parseTextToFields, isTippCv } from "@/lib/extraction/local-parser";
+import { parseTextToFields, isTippCv, tippParsedFully } from "@/lib/extraction/local-parser";
 import { tablesFromHtml } from "@/lib/extraction/docx-tables";
 import { mergeExtraction } from "@/lib/extraction/ai-fields";
 import type { ExtractedCandidateFields } from "@/lib/extraction/types";
@@ -113,10 +113,13 @@ async function benchCv(file: string) {
   }
   const f = parseTextToFields(text, path.basename(file), tables);
   const tipp = isTippCv(text, tables);
-  const lines = [`  chars    ${text.length}`, `  source   ${tipp ? "tipp" : "generic"}`, ...cvLines(f)];
+  // Recognised and read is the only case that stays local. A PDF of the
+  // template is recognised, gets its header read, and loses its tables.
+  const source = tipp ? (tippParsedFully(f) ? "tipp" : "tipp, header only") : "generic";
+  const lines = [`  chars    ${text.length}`, `  source   ${source}`, ...cvLines(f)];
 
   if (!WITH_AI) return lines;
-  if (tipp) return [...lines, "  ai       skipped, TiPP template never goes to the AI"];
+  if (source === "tipp") return [...lines, "  ai       skipped, a TiPP CV read in full never goes to the AI"];
 
   // Loaded here rather than at the top so the plain run never touches a
   // server-only module and never needs the react-server condition.
