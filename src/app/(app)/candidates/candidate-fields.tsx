@@ -316,6 +316,7 @@ export const EMPTY_CANDIDATE: CandidateFormFields = {
   years_experience: null,
   professional_summary: null,
   availability: "available",
+  availability_note: null,
   designated_group: null,
   available_from: null,
   status: "active",

@@ -42,6 +42,8 @@ export interface ExtractedCandidateFields {
    * the same as saying the candidate is available.
    */
   availability?: CandidateAvailability;
+  /** The CV's own words for it ("1 Calendar Month"), when it gave any. */
+  availability_note?: string | null;
 
   // The rest is what the issued TiPP Focus template carries beyond the fields
   // above. Optional here because only the template parser fills them; the

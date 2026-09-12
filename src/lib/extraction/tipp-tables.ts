@@ -568,6 +568,9 @@ export function parseTippTables(
       }),
     ),
     availability: mapAvailability(header.get("AVAILABILITY") ?? null),
+    // Kept as written beside the status: "1 Calendar Month" says more than
+    // "on notice", and it is what the generated CV prints.
+    availability_note: oneLine(header.get("AVAILABILITY")) || null,
     date_of_birth: header.get("DATE OF BIRTH")?.trim() || null,
     skill_matrix: skillMatrix,
     certificates: certificates

@@ -243,6 +243,12 @@ describe("parseTippTables on the issued template", () => {
     expect(r?.years_experience).toBe(14);
   });
 
+  it("keeps the CV's own words for availability beside the status", () => {
+    const r = parseTippTables([[...HEADER.slice(0, 5), ["AVAILABILITY", "1 Calendar Month"]]]);
+    expect(r?.availability).toBe("notice_period");
+    expect(r?.availability_note).toBe("1 Calendar Month");
+  });
+
   it("reads the date of birth", () => {
     expect(parseTippTables([HEADER])?.date_of_birth).toBe("05 February 1989");
   });

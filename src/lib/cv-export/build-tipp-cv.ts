@@ -4,6 +4,7 @@ import path from "node:path";
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import { missingTemplateFields, type CvSource } from "@/lib/cv-export/missing-fields";
+import { durationOf } from "@/lib/cv-record";
 
 export { missingTemplateFields };
 export type { CvSource };
@@ -27,15 +28,6 @@ const AVAILABILITY_TEXT: Record<string, string> = {
   unavailable: "Not currently available",
 };
 
-/** A duration cell, written the way the template writes them. */
-function durationCell(entry: { start_date?: string | null; end_date?: string | null; is_current?: boolean }): string {
-  const start = entry.start_date?.trim();
-  if (!start) return "";
-  if (entry.is_current) return `${start} - Current`;
-  const end = entry.end_date?.trim();
-  return end ? `${start} - ${end}` : start;
-}
-
 /** Duties come off the description, one line each, with any Client line dropped. */
 function dutyLines(description: string | null | undefined): string[] {
   if (!description) return [];
@@ -58,7 +50,7 @@ export function toTemplateData(source: CvSource) {
   const career = source.work_experience.map((entry) => ({
     company: entry.company ?? "",
     role: entry.title ?? "",
-    duration: durationCell(entry),
+    duration: durationOf(entry),
   }));
 
   const education = source.education.length
@@ -96,7 +88,7 @@ export function toTemplateData(source: CvSource) {
       return {
         company: entry.company ?? "",
         role: entry.title ?? "",
-        duration: durationCell(entry),
+        duration: durationOf(entry),
         client: client ?? "",
         // Zero or one entries, so the Client row renders only when there is one.
         has_client: client ? [client] : [],

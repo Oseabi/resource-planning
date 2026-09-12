@@ -25,6 +25,7 @@ export default async function EditCandidatePage({
     years_experience: candidate.years_experience,
     professional_summary: candidate.professional_summary,
     availability: candidate.availability,
+    availability_note: candidate.availability_note ?? null,
     designated_group: candidate.designated_group,
     available_from: candidate.available_from,
     status: candidate.status,

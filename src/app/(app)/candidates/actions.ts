@@ -19,6 +19,7 @@ import { parseLongDate } from "@/lib/dates";
 import {
   deriveTechnicalSkills,
   deriveCertifications,
+  deriveQualifications,
   cleanSkillMatrix,
   cleanCertificates,
 } from "@/lib/cv-record";
@@ -36,6 +37,8 @@ export interface CandidateFormFields {
   years_experience: number | null;
   professional_summary: string | null;
   availability: CandidateAvailability;
+  /** The CV's own words for it ("1 Calendar Month"); printed on the generated CV. */
+  availability_note: string | null;
   /** Employment equity group, needed by the TiPP Focus CV template. */
   designated_group: string | null;
   /** Manual override for when they next come free; null means now. */
@@ -142,6 +145,7 @@ function toCandidateColumns(fields: CandidateFormFields): CandidateUpdate & { fu
     years_experience: fields.years_experience,
     professional_summary: fields.professional_summary,
     availability: fields.availability,
+    availability_note: fields.availability_note?.trim() || null,
     designated_group: fields.designated_group,
     available_from: fields.available_from,
     status: fields.status,
@@ -150,7 +154,7 @@ function toCandidateColumns(fields: CandidateFormFields): CandidateUpdate & { fu
     skills: fields.skills,
     technical_skills: deriveTechnicalSkills(matrix, fields.technical_skills),
     certifications: deriveCertifications(certificates, fields.certifications),
-    qualifications: fields.qualifications,
+    qualifications: deriveQualifications(fields.education ?? [], fields.qualifications),
     sectors: fields.sectors,
     languages: fields.languages,
     resource_categories: fields.resource_categories,

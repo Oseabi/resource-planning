@@ -67,6 +67,13 @@ export interface ProjectGroup {
   projects: string[];
 }
 
+/** The app_settings row "account_manager": who the CV cover page names. */
+export interface AccountManager {
+  name: string;
+  email: string;
+  phone: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -110,6 +117,17 @@ export interface Database {
           user_id: string;
         };
         Update: Partial<Database["public"]["Tables"]["user_sessions"]["Insert"]>;
+        Relationships: [];
+      };
+      app_settings: {
+        Row: {
+          key: string;
+          value: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: { key: string; value: Json; updated_at?: string; updated_by?: string | null };
+        Update: Partial<Database["public"]["Tables"]["app_settings"]["Insert"]>;
         Relationships: [];
       };
       departments: {
@@ -205,6 +223,8 @@ export interface Database {
           projects: ProjectGroup[];
           /** The ACHIEVEMENTS section, verbatim. */
           achievements: string | null;
+          /** The CV's own words for availability ("1 Calendar Month"). Printed as written. */
+          availability_note: string | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
