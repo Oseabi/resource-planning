@@ -141,7 +141,6 @@ export function isCertificationEntry(value: string): boolean {
     return true;
   }
   return /\b(?:certified|certification|fundamentals|associate|practitioner)\b/i.test(v);
-  return /(?:certified|certification|fundamentals|associate|practitioner)/i.test(v);
 }
 
 interface Row3 {
@@ -150,11 +149,15 @@ interface Row3 {
   c: string;
 }
 
+/** A cell as one line: a name that wraps in the PDF is still one name. */
+const oneLine = (cell: string | undefined): string => (cell ?? "").replace(/\s*\n\s*/g, " ").trim();
+
 /** Rows of a three-column table, header and blank rows dropped. */
-function dataRows(rows: string[][], header: string[]): Row3[] {
+function dataRows(rows: string[][], header: string[], joinLines = true): Row3[] {
+  const cell = (c: string | undefined) => (joinLines ? oneLine(c) : (c ?? "").trim());
   return rows
     .filter((r) => !isEmptyRow(r) && !isColumnHeader(r, header))
-    .map((r) => ({ a: (r[0] ?? "").trim(), b: (r[1] ?? "").trim(), c: (r[2] ?? "").trim() }))
+    .map((r) => ({ a: cell(r[0]), b: cell(r[1]), c: cell(r[2]) }))
     .filter((r) => r.a || r.b);
 }
 
@@ -421,7 +424,8 @@ export function parseTippTables(
       continue;
     }
     if (opensWith(rows, ["COMPANY NAME", "PROJECT NAME"])) {
-      for (const r of dataRows(rows, ["COMPANY NAME", "PROJECT NAME"])) {
+      // One project per line in the second column, so the lines stay apart.
+      for (const r of dataRows(rows, ["COMPANY NAME", "PROJECT NAME"], false)) {
         const names = r.b.split("\n").map((l) => l.trim()).filter(Boolean);
         if (r.a || names.length) projects.push({ company: r.a, projects: names });
       }

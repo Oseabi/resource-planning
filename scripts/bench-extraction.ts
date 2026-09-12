@@ -2,11 +2,17 @@
  * Benchmark the extraction parsers against a folder of real documents.
  *
  *   npx tsx scripts/bench-extraction.ts tender "<folder>" [--files list.txt]
- *   npx tsx scripts/bench-extraction.ts cv     "<folder>" [--files list.txt] [--dump]
+ *   npx tsx scripts/bench-extraction.ts cv     "<folder>" [--files list.txt] [--dump] [--expect facts.json]
+ *
+ * With --expect, every template section is checked against a count read off
+ * the PDF by hand and printed PASS or FAIL, so a regression is a line that
+ * changed rather than a number that looks a little low. The facts file maps
+ * a file name to any subset of the keys sectionFacts() returns.
  *
  * With a real key, to read what the AI changes before trusting it:
  *
- *   npx tsx --conditions=react-server --env-file=.env.local  *     scripts/bench-extraction.ts cv "<folder>" --ai
+ *   npx tsx --conditions=react-server --env-file=.env.local \
+ *     scripts/bench-extraction.ts cv "<folder>" --ai
  *
  * The react-server condition makes the server-only guard resolve to nothing,
  * which is how the AI extractor can be loaded outside Next. Prints the local
@@ -66,6 +72,47 @@ function cvLines(f: ExtractedCandidateFields): string[] {
     `  certs+   ${(f.certificates ?? []).length} with detail | projects ${(f.projects ?? []).length} | achievements ${f.achievements ? f.achievements.length + " chars" : "-"}`,
     `  clients  ${f.work_experience.filter((w) => w.client).length} of ${f.work_experience.length} jobs`,
   ];
+}
+
+/**
+ * One number or flag per template section, in the order the CV prints them.
+ * What --expect compares, and what the section table prints.
+ */
+function sectionFacts(f: ExtractedCandidateFields, asOf: string | null): Record<string, number | boolean> {
+  return {
+    cover_as_of: !!asOf,
+    full_name: !!f.full_name,
+    date_of_birth: !!f.date_of_birth,
+    position: !!f.current_role,
+    designated_group: !!f.designated_group,
+    years: f.years_experience ?? 0,
+    availability: f.availability !== undefined,
+    summary_chars: (f.professional_summary ?? "").length,
+    career_rows: f.work_experience.length,
+    qualifications: f.education.length,
+    certificates: (f.certificates ?? []).length,
+    skill_categories: (f.skill_matrix ?? []).length,
+    skills_in_table: (f.skill_matrix ?? []).reduce((n, c) => n + c.skills.length, 0),
+    projects: (f.projects ?? []).length,
+    achievement_chars: (f.achievements ?? "").length,
+    duties_lines: f.work_experience.reduce(
+      (n, w) => n + (w.description ?? "").split("\n").filter(Boolean).length,
+      0,
+    ),
+    email_null: !f.email,
+    phone_null: !f.phone,
+  };
+}
+
+function sectionTable(
+  facts: Record<string, number | boolean>,
+  expected: Record<string, number | boolean> | undefined,
+): string[] {
+  return Object.entries(facts).map(([key, value]) => {
+    const want = expected?.[key];
+    const verdict = want === undefined ? "" : want === value ? "PASS" : `FAIL (expected ${String(want)})`;
+    return `    ${key.padEnd(18)} ${String(value).padStart(6)}  ${verdict}`.trimEnd();
+  });
 }
 
 async function readDocument(file: string): Promise<string> {
@@ -155,6 +202,16 @@ async function benchCv(file: string) {
     ...(coverAsOf ? [`  as of    ${coverAsOf}`] : []),
     ...cvLines(f),
   ];
+  if (tipp) {
+    const expected = EXPECTED[path.basename(file)];
+    const rows = sectionTable(sectionFacts(f, coverAsOf), expected);
+    const failed = rows.filter((r) => r.includes("FAIL")).length;
+    lines.push("  --- sections ---", ...rows);
+    if (expected) {
+      lines.push(`  sections ${failed === 0 ? "PASS" : `FAIL ${failed}`}`);
+      failures += failed;
+    }
+  }
 
   if (!WITH_AI) return lines;
   if (source === "tipp") return [...lines, "  ai       skipped, a TiPP CV read in full never goes to the AI"];
@@ -183,6 +240,11 @@ if (!mode || !folder) {
   console.error("usage: npx tsx scripts/bench-extraction.ts <tender|cv> <folder> [--files list.txt]");
   process.exit(1);
 }
+
+const expectArg = process.argv.indexOf("--expect");
+const EXPECTED: Record<string, Record<string, number | boolean>> =
+  expectArg > -1 ? JSON.parse(fs.readFileSync(process.argv[expectArg + 1], "utf8")) : {};
+let failures = 0;
 
 const listArg = process.argv.indexOf("--files");
 const files =
@@ -214,7 +276,10 @@ async function main() {
   fs.writeFileSync(`bench-${mode}.txt`, report);
   console.log(report);
   console.log(`\nWrote bench-${mode}.txt (${files.length} documents)`);
-  
+  if (failures > 0) {
+    console.log(`${failures} section check(s) failed`);
+    process.exit(1);
+  }
 }
 
 main();

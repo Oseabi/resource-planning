@@ -235,11 +235,17 @@ interface Cell {
 class RowBuilder {
   cells: Cell[] = [];
 
-  append(col: number, item: PdfTextItem): void {
+  /**
+   * Add a run to a cell. `wrapped` says the run continues the cell's last
+   * line even though pdf.js did not mark it, which is the case at a page
+   * break, where hasEOL stops at the page's edge.
+   */
+  append(col: number, item: PdfTextItem, wrapped = false): void {
     while (this.cells.length <= col) {
       this.cells.push({ text: "", openParagraph: false, lastY: Number.NaN, pendingBullet: false });
     }
     const cell = this.cells[col];
+    if (wrapped && cell.text) cell.openParagraph = true;
     const hadBullet = BULLET_RE.test(item.str);
     const str = item.str.replace(BULLET_RE, "").trim();
     if (!str) {
@@ -296,7 +302,16 @@ function columnOf(x: number, starts: number[]): number {
  */
 function headingOf(item: PdfTextItem): string | null {
   if (item.x < HEADING_MIN_X) return null;
-  return HEADING_ALIASES[normalise(item.str)] ?? null;
+  // Every heading on the issued template is capitals. A lower-case run
+  // that happens to read "skills." is a word of the summary, whatever its x.
+  const raw = item.str.trim();
+  if (raw !== raw.toUpperCase()) return null;
+  return HEADING_ALIASES[normalise(raw)] ?? null;
+}
+
+/** A run that is nothing but a bullet glyph. */
+function isBulletOnly(item: PdfTextItem): boolean {
+  return BULLET_RE.test(item.str) && item.str.replace(BULLET_RE, "").trim() === "";
 }
 
 /**
@@ -379,7 +394,13 @@ export function tablesFromPdfPages(pages: PdfPageItems[]): PdfTables {
       if (!Number.isNaN(headingY) && Math.abs(item.y - headingY) <= BASELINE_TOLERANCE) continue;
       headingY = Number.NaN;
 
-      const heading = headingOf(item);
+      // Across a page break there is no previous line to be on.
+      const gap = Number.isNaN(prevY) ? Number.POSITIVE_INFINITY : prevY - item.y;
+      const sameLine = Number.isFinite(gap) && Math.abs(gap) <= BASELINE_TOLERANCE;
+
+      // A heading is alone on its line. A word of justified prose can land
+      // at a heading's x and spell one; it never lands there first.
+      const heading = sameLine ? null : headingOf(item);
       if (heading) {
         closeTable();
         tables.push([[heading]]);
@@ -393,10 +414,8 @@ export function tablesFromPdfPages(pages: PdfPageItems[]): PdfTables {
         continue;
       }
 
-      // Across a page break there is no previous line to be on.
-      const gap = Number.isNaN(prevY) ? Number.POSITIVE_INFINITY : prevY - item.y;
-      const sameLine = Number.isFinite(gap) && Math.abs(gap) <= BASELINE_TOLERANCE;
       const isLabelSize = item.height >= LABEL_HEIGHT;
+      const bullet = isBulletOnly(item);
 
       // A label-sized run at the left edge ends the duties. Duties: itself is
       // body-sized, so it is recognised by its text below.
@@ -406,11 +425,23 @@ export function tablesFromPdfPages(pages: PdfPageItems[]): PdfTables {
       const prose = (section !== null && PROSE_SECTIONS.has(section)) || inDuties;
       const col = prose ? 0 : columnOf(item.x, starts);
 
+      // The first run on a page, when it sits in a column other than the
+      // first and a row is open, is the rest of that row's cell: no row of
+      // any table on the template begins past the first column. By column
+      // order alone it would start one, because the columns to its right
+      // were emitted before the page turned. pdf.js does not mark the wrap
+      // (hasEOL stops at the page's edge), so the position is the signal.
+      // (row is assigned inside startRow, which the type checker cannot see.)
+      const continuesCell = !Number.isFinite(gap) && col > 0 && (row as RowBuilder | null) !== null;
+
       const beginsRow =
-        row === null ||
-        col < prevCol ||
-        (Number.isFinite(gap) && !sameLine && col === 0 && prevCol === 0 && gap > pitch * ROW_GAP_FACTOR) ||
-        (!sameLine && col === 0 && isLabelSize && prevHeight < LABEL_HEIGHT);
+        !continuesCell &&
+        (row === null ||
+          col < prevCol ||
+          (Number.isFinite(gap) && !sameLine && col === 0 && prevCol === 0 && gap > pitch * ROW_GAP_FACTOR) ||
+          // A bullet glyph is printed at label size on some CVs; it starts
+          // a paragraph in the cell, never a row.
+          (!sameLine && col === 0 && isLabelSize && !bullet && prevHeight < LABEL_HEIGHT));
 
       if (beginsRow) {
         // One table per employment block, as mammoth gives them: a Company
@@ -418,12 +449,13 @@ export function tablesFromPdfPages(pages: PdfPageItems[]): PdfTables {
         if (section === EMPLOYMENT && col === 0 && /^company$/i.test(item.str.trim())) closeTable();
         startRow();
       }
-      row!.append(col, item);
+      row!.append(col, item, continuesCell);
       rowXs.push(item.x);
       if (section === EMPLOYMENT && col === 0 && /^duties\s*:?$/i.test(item.str.trim())) inDuties = true;
       prevCol = col;
       prevY = item.y;
-      prevHeight = item.height;
+      // A bullet's size says nothing about what follows it.
+      if (!bullet) prevHeight = item.height;
     }
   }
 
