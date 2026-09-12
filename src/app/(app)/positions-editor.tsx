@@ -3,6 +3,7 @@
 import { Plus, Trash2, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { TagInput } from "@/components/ui/tag-input";
 import { ComboboxInput } from "@/components/ui/combobox-input";
@@ -124,6 +125,17 @@ export function PositionsEditor({
                   field="certifications"
                   context={ctx}
                   placeholder="Certifications for this role..."
+                />
+              </div>
+              {/* What the document says about the seat beyond the lists: the
+                  qualification it demands, a clearance, a location. */}
+              <div className="space-y-1">
+                <Label className="text-label-sm">Notes</Label>
+                <Textarea
+                  rows={2}
+                  value={position.notes ?? ""}
+                  onChange={(e) => update(i, { notes: e.target.value || null })}
+                  placeholder="Qualifications, clearances, anything else the document asks of this role..."
                 />
               </div>
             </div>

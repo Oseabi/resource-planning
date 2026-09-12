@@ -21,6 +21,28 @@ export interface ExtractedTenderFields {
   required_certifications: string[];
   sectors: string[];
   min_experience_years: number | null;
+
+  // What a model reads off the document that the heuristics cannot.
+  // Optional because only the AI fills them; the review form derives one
+  // seat per role from the lists above when they are absent.
+
+  contract_end_date?: string | null;
+  reference_letters_required?: number | null;
+  /** The roles to staff, each with the bar the document sets for it. */
+  positions?: TenderPosition[];
+}
+
+/** One role the buyer wants staffed, as a tender document states it. */
+export interface TenderPosition {
+  role: string;
+  quantity: number;
+  min_experience_years: number | null;
+  required_skills: string[];
+  required_certifications: string[];
+  /** Degrees and diplomas the document requires for the role, as written. */
+  required_qualifications: string[];
+  /** Anything else the document says about the seat, verbatim. */
+  notes: string | null;
 }
 
 export function emptyTenderFields(): ExtractedTenderFields {

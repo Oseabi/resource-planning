@@ -21,6 +21,8 @@ interface RfqExtraction {
   fields: ExtractedTenderFields;
   raw_text: string;
   no_text_found: boolean;
+  engine?: "local" | "ai";
+  ai_note?: string;
 }
 
 function toForm(f: ExtractedTenderFields): TenderFormFields {
@@ -29,26 +31,38 @@ function toForm(f: ExtractedTenderFields): TenderFormFields {
     // dialog. Never guessed from the RFQ document.
     department_id: null,
     title: f.title ?? "",
-    // Each extracted role becomes a one-seat line, seeded with the tender-wide
-    // skills/certs the parser found. The reviewer adjusts quantities and trims
-    // per-role requirements before saving.
-    positions: f.required_roles.map((role) => ({
-      role,
-      quantity: 1,
-      min_experience_years: f.min_experience_years,
-      required_skills: f.required_skills,
-      required_certifications: f.required_certifications,
-    })),
+    // The AI reads each role with its own quantity, years, skills and
+    // certifications. The local parser gives lists for the bid as a whole,
+    // and each of its roles becomes a one-seat line seeded with those for the
+    // reviewer to trim.
+    positions: f.positions?.length
+      ? f.positions.map((p) => ({
+          role: p.role,
+          quantity: p.quantity,
+          min_experience_years: p.min_experience_years,
+          required_skills: p.required_skills,
+          required_certifications: p.required_certifications,
+          notes: [p.required_qualifications.length ? `Qualifications: ${p.required_qualifications.join("; ")}` : null, p.notes]
+            .filter(Boolean)
+            .join("\n") || null,
+        }))
+      : f.required_roles.map((role) => ({
+          role,
+          quantity: 1,
+          min_experience_years: f.min_experience_years,
+          required_skills: f.required_skills,
+          required_certifications: f.required_certifications,
+        })),
     reference_number: f.reference_number,
     client: f.client,
     location: f.location,
     value: f.value,
     submission_deadline: f.submission_deadline,
     contract_start_date: f.contract_start_date,
-    // The parser reads a start date but has no notion of a contract period, so
-    // the end is always typed in.
-    contract_end_date: null,
-    reference_letters_required: null,
+    // The AI reads a contract period or end date; the local parser has no
+    // notion of one, and then it is typed in.
+    contract_end_date: f.contract_end_date ?? null,
+    reference_letters_required: f.reference_letters_required ?? null,
     required_roles: f.required_roles,
     required_skills: f.required_skills,
     required_certifications: f.required_certifications,
@@ -68,6 +82,8 @@ function toFlags(f: ExtractedTenderFields): TenderExtractedFlags {
     value: f.value != null,
     submission_deadline: !!f.submission_deadline,
     contract_start_date: !!f.contract_start_date,
+    contract_end_date: !!f.contract_end_date,
+    reference_letters_required: f.reference_letters_required != null,
     required_roles: f.required_roles.length > 0,
     required_skills: f.required_skills.length > 0,
     required_certifications: f.required_certifications.length > 0,
@@ -218,12 +234,15 @@ function RfqReviewDialog({
             <DialogTitle>Review extracted tender</DialogTitle>
             <span className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-0.5 text-label-sm text-primary">
               <Sparkles className="size-3" />
-              Auto-extracted
+              {extraction.engine === "ai" ? "AI extraction" : "Auto-extracted"}
             </span>
           </div>
           <DialogDescription>
             Fields were pre-filled from the document. Review and correct anything before saving.
           </DialogDescription>
+          {/* Why the AI did not run, or what it had to do to. Said rather than
+              left for somebody to notice that a field is thinner than usual. */}
+          {extraction.ai_note && <p className="text-body-sm text-muted-foreground">{extraction.ai_note}</p>}
         </DialogHeader>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden md:grid-cols-[280px_1fr]">

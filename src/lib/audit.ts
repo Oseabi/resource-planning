@@ -135,6 +135,8 @@ const ENTITY_LABELS: Record<string, string> = {
   session: "session",
   department: "department",
   cv_upload: "CV",
+  tender_upload: "tender document",
+  setting: "setting",
 };
 
 /**
@@ -155,6 +157,9 @@ export function auditSentence(row: AuditRow): string {
   // full, because that is the line somebody will be looking for.
   if (row.action === "sent_for_ai_extraction") {
     return `${who} sent a CV${named} to Groq in the United States for AI extraction`;
+  }
+  if (row.action === "sent_tender_for_ai_extraction") {
+    return `${who} sent a tender document${named} to Google's Gemini for AI extraction`;
   }
   if (row.action === "role_changed") return `${who} changed the role of user${named}`;
   if (row.action === "department_changed") return `${who} moved user${named} to another department`;
