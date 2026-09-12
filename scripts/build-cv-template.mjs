@@ -158,6 +158,21 @@ function setRowCell(tr, index, paragraphs, opts) {
 /** A paragraph carrying one tag and nothing else, for loops that wrap whole tables. */
 const tagParagraph = (tag) => `<w:p><w:r><w:t xml:space="preserve">${tag}</w:t></w:r></w:p>`;
 
+/**
+ * An empty paragraph of a given height in twips, to put room between two
+ * tables. Word draws two tables with nothing between them as one, which is
+ * how the employment blocks ran into each other; and the issued CVs leave
+ * about a line and a half between every table and the next heading.
+ */
+const spacer = (twips) =>
+  `<w:p><w:pPr><w:spacing w:before="0" w:after="${twips}" w:line="240" w:lineRule="auto"/><w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr></w:pPr></w:p>`;
+const GAP_BEFORE_HEADING = spacer(360);
+const GAP_AFTER_RULE = spacer(400);
+const GAP_BETWEEN_BLOCKS = spacer(440);
+
+/** An empty paragraph between two tables: the source has a few, the spacers replace them all. */
+const EMPTY_BETWEEN_TABLES_RE = /<\/w:tbl>((?:<w:p\b[^>]*>(?:(?!<\/w:p>)[\s\S])*?<\/w:p>|<w:p\/>)+)<w:tbl>/g;
+
 const placed = new Set();
 function markPlaced(name) {
   placed.add(name);
@@ -333,7 +348,13 @@ function headingTable(sourceHeadingTable, text) {
  * table, and a PROJECTS block ahead of ACHIEVEMENTS.
  */
 function issue(xml) {
-  let out = coverPage(xml);
+  // The older template draws a faint network graphic behind the career
+  // table; the issued CVs do not. And its empty paragraphs between tables
+  // go, so that the room between tables is the spacers' and the same
+  // everywhere.
+  let out = coverPage(xml)
+    .replace(/<w:drawing>[\s\S]*?<\/w:drawing>/g, "")
+    .replace(EMPTY_BETWEEN_TABLES_RE, (all, paras) => (/<w:t[ >]/.test(paras) ? all : "</w:tbl><w:tbl>"));
 
   const tables = out.match(TABLE_RE) ?? [];
   const byText = (text) => tables.find((t) => {
@@ -432,9 +453,10 @@ function buildEmploymentTable(tbl) {
   const dutiesIndex = rows.findIndex((_, i) => /^duties/i.test(cells[i]?.[0] ?? ""));
   if (roleIndex < 0 || dutiesIndex < 0) throw new Error("employment block: expected Role and Duties rows");
 
+  // The issued CVs set the block's company, role and duration in bold.
   const labelled = (tr, label, value) => {
     const opened = setRowCell(tr, 0, [label], { size: SIZE.employmentLabel, bold: true });
-    return setRowCell(opened, 1, [value], { size: SIZE.body, bold: false });
+    return setRowCell(opened, 1, [value], { size: SIZE.body, bold: true });
   };
 
   const rebuiltRows = rows.map((tr, i) => {
@@ -457,7 +479,7 @@ function buildEmploymentTable(tbl) {
     return `<w:tbl>${upToFirstRow}${rebuiltRows.join("")}</w:tbl>`;
   });
 
-  return tagParagraph("{#employment}") + body + tagParagraph("{/employment}");
+  return tagParagraph("{#employment}") + body + GAP_BETWEEN_BLOCKS + tagParagraph("{/employment}");
 }
 
 /**
@@ -466,7 +488,9 @@ function buildEmploymentTable(tbl) {
  * paragraph, so the numbering definition is the template's.
  */
 function dutiesCell(tr) {
-  return tr.replace(CELL_RE, (tc) => {
+  // The sample block's duties row carries a minimum height. A duties list
+  // that breaks across pages then leaves a tall empty box on the next one.
+  return tr.replace(/<w:trHeight [^>]*\/>/, "").replace(CELL_RE, (tc) => {
     const tcPr = firstMatch(tc, /<w:tcPr>[\s\S]*?<\/w:tcPr>/) ?? "";
     const paragraphs = tc.match(PARA_RE) ?? [];
     const labelP = paragraphs[0];
@@ -504,11 +528,12 @@ function tag(xml) {
       const heading = SECTION_HEADINGS.find((h) => text === h);
       if (heading) {
         lastHeading = heading;
+        const spaced = GAP_BEFORE_HEADING + tbl + GAP_AFTER_RULE;
         // Optional sections: the heading and its content render only when
         // there is content, so a CV without projects has no empty PROJECTS.
-        if (heading === "PROJECTS") return tagParagraph("{#has_projects}") + tbl;
-        if (heading === "ACHIEVEMENTS") return tagParagraph("{#has_achievements}") + tbl;
-        return tbl;
+        if (heading === "PROJECTS") return tagParagraph("{#has_projects}") + spaced;
+        if (heading === "ACHIEVEMENTS") return tagParagraph("{#has_achievements}") + spaced;
+        return spaced;
       }
 
       // The cell immediately after a heading holds that section's free content.
