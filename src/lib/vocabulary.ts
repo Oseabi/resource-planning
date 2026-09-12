@@ -64,6 +64,20 @@ const softwarePack: VocabularyPack = {
     "Test Automation Engineer",
     "Solutions Architect",
     "Software Architect",
+    // The architecture practice: what the tenders ask for by name and what
+    // most of the issued CVs are. Without these a Senior Infrastructure
+    // Architect was spelled "Software Architect".
+    "Enterprise Architect",
+    "Business Architect",
+    "Data Architect",
+    "Application Architect",
+    "Infrastructure Architect",
+    "Integration Architect",
+    "Security Architect",
+    "Technology Architect",
+    "Cloud Architect",
+    "BPM Lead",
+    "Process Engineer",
     "ERP Consultant",
     "Functional Analyst",
     "Systems Analyst",

@@ -14,6 +14,12 @@
  *   npx tsx --conditions=react-server --env-file=.env.local \
  *     scripts/bench-extraction.ts cv "<folder>" --ai
  *
+ * The same for tenders sends each document to Gemini (a PDF as itself) and
+ * prints the local result and the merged one side by side:
+ *
+ *   npx tsx --conditions=react-server --env-file=.env.local \
+ *     scripts/bench-extraction.ts tender "<folder>" --ai
+ *
  * The react-server condition makes the server-only guard resolve to nothing,
  * which is how the AI extractor can be loaded outside Next. Prints the local
  * result and the merged result side by side for every generic CV, skips every
@@ -37,7 +43,7 @@ import path from "node:path";
 import mammoth from "mammoth";
 import { extractText as extractPdfText, getDocumentProxy } from "unpdf";
 import { extractPdfTextWithLines, type PdfDocumentLike } from "@/lib/extraction/pdf-lines";
-import { parseRfqText } from "@/lib/extraction/rfq-parser";
+import { parseRfqText, type ExtractedTenderFields } from "@/lib/extraction/rfq-parser";
 import { parseTextToFields, isTippCv, tippParsedFully } from "@/lib/extraction/local-parser";
 import { tablesFromHtml } from "@/lib/extraction/docx-tables";
 import { tablesFromPdfPages, pdfItemsFrom, type PdfPageItems } from "@/lib/extraction/pdf-tables";
@@ -53,6 +59,8 @@ const WITH_AI = process.argv.includes("--ai");
 const DUMP = process.argv.includes("--dump");
 /** A minute, plus a little, between calls. The budget is per minute. */
 const AI_PAUSE_MS = 65_000;
+/** Gemini's free tier allows ten calls a minute; this keeps well under it. */
+const TENDER_AI_PAUSE_MS = 8_000;
 
 function cvLines(f: ExtractedCandidateFields): string[] {
   return [
@@ -146,20 +154,53 @@ const show = (v: unknown, len = 68): string => {
   return s.length > len ? s.slice(0, len) + "..." : s;
 };
 
-async function benchTender(file: string) {
-  const text = await readDocument(file);
-  const f = parseRfqText(text, path.basename(file));
+function tenderLines(f: ExtractedTenderFields): string[] {
   return [
-    `  chars    ${text.length}`,
     `  title    ${show(f.title)}`,
     `  client   ${show(f.client)}`,
     `  ref      ${show(f.reference_number)}`,
+    `  location ${show(f.location)}`,
     `  deadline ${show(f.submission_deadline)}`,
+    `  contract ${show(f.contract_start_date)} to ${show(f.contract_end_date)}`,
     `  value    ${show(f.value)}`,
-    `  minExp   ${show(f.min_experience_years)}`,
+    `  minExp   ${show(f.min_experience_years)} | ref letters ${show(f.reference_letters_required)}`,
     `  roles    ${show(f.required_roles)}`,
-    `  skills   ${f.required_skills.length} | certs ${f.required_certifications.length}`,
+    `  skills   ${f.required_skills.length} | certs ${f.required_certifications.length} | sectors ${show(f.sectors)}`,
+    ...(f.positions ?? []).map(
+      (p) =>
+        `  seat     ${p.quantity} x ${p.role} | ${p.min_experience_years ?? "-"} yrs | skills ${p.required_skills.length} | certs ${p.required_certifications.length} | quals ${p.required_qualifications.length}${p.notes ? " | " + p.notes.slice(0, 60) : ""}`,
+    ),
   ];
+}
+
+async function benchTender(file: string) {
+  const text = await readDocument(file);
+  const f = parseRfqText(text, path.basename(file));
+  const lines = [`  chars    ${text.length}`, ...tenderLines(f)];
+
+  if (!WITH_AI) return lines;
+
+  // Loaded here rather than at the top so the plain run never touches a
+  // server-only module and never needs the react-server condition.
+  const { extractTenderWithGemini, isGeminiConfigured } = await import("@/lib/extraction/gemini");
+  const { mergeTenderExtraction } = await import("@/lib/extraction/tender-ai");
+  if (!isGeminiConfigured()) return [...lines, "  ai       GEMINI_API_KEY not set"];
+
+  const isPdf = /\.pdf$/i.test(file);
+  const started = Date.now();
+  const ai = await extractTenderWithGemini({ text, pdf: isPdf ? fs.readFileSync(file) : null, filename: path.basename(file) });
+  const took = ((Date.now() - started) / 1000).toFixed(1);
+  if (!ai.ok) return [...lines, `  ai       FAILED after ${took}s: ${ai.reason}`];
+
+  lines.push(
+    `  ai       ok in ${took}s, ${ai.usage?.promptTokens ?? "?"} tokens in, ${ai.usage?.outputTokens ?? "?"} out${ai.truncated ? ", text was truncated" : ""}${ai.note ? `, ${ai.note}` : ""}`,
+  );
+  lines.push("  --- merged (local + ai) ---");
+  lines.push(...tenderLines(mergeTenderExtraction(f, ai.fields)));
+
+  // The free tier allows ten requests a minute.
+  await new Promise((r) => setTimeout(r, TENDER_AI_PAUSE_MS));
+  return lines;
 }
 
 async function benchCv(file: string) {
