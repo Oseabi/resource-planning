@@ -233,9 +233,15 @@ function Header() {
   );
 }
 
-function Section({ title }: { title: string }) {
+/**
+ * A heading over its rule. Never split from each other, and never left at
+ * the foot of a page with nothing under them: a table's heading travels
+ * with the table's column header and first row, and a box's heading asks
+ * for room enough for a few lines below it.
+ */
+function Section({ title, keepWithNext = true }: { title: string; keepWithNext?: boolean }) {
   return (
-    <View wrap={false} minPresenceAhead={90}>
+    <View wrap={false} minPresenceAhead={keepWithNext ? 60 : 0}>
       <Text style={s.heading}>{title}</Text>
       <View style={s.rule} />
     </View>
@@ -250,35 +256,52 @@ function edges(col: number, cols: number, last: boolean) {
 /** A cell's paragraphs: one line each, as the PROJECTS table lists its projects. */
 type Cell = string | string[];
 
-function Table({ widths, header, rows }: { widths: number[]; header: string[]; rows: Cell[][] }) {
+function TableRow({ cells, widths, last }: { cells: Cell[]; widths: number[]; last: boolean }) {
   const cols = widths.length;
   return (
+    <View style={s.row} wrap={false}>
+      {cells.map((c, i) => (
+        <View key={i} style={[...edges(i, cols, last), { width: widths[i] }]}>
+          {Array.isArray(c) ? (
+            // A list in a cell is bulleted, as the PROJECTS table is on the issued CVs.
+            c.map((item, j) => (
+              <View key={j} style={s.cellBulletRow} wrap={false}>
+                <Text style={s.bulletGlyph}>{"•"}</Text>
+                <Text style={{ flex: 1 }}>{item}</Text>
+              </View>
+            ))
+          ) : (
+            <Text>{c}</Text>
+          )}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/**
+ * A section heading with its table. The heading, the column header and the
+ * first row are one unbreakable piece, so a page never ends on a heading
+ * with an empty table under it, nor on a column header with no row.
+ */
+function Table({ title, widths, header, rows }: { title: string; widths: number[]; header: string[]; rows: Cell[][] }) {
+  const cols = widths.length;
+  const [first, ...rest] = rows;
+  return (
     <View style={s.table}>
-      <View style={s.row} wrap={false}>
-        {header.map((h, i) => (
-          <View key={i} style={[...edges(i, cols, rows.length === 0), s.columnHeader, { width: widths[i] }]}>
-            <Text>{h}</Text>
-          </View>
-        ))}
-      </View>
-      {rows.map((cells, r) => (
-        <View key={r} style={s.row} wrap={false}>
-          {cells.map((c, i) => (
-            <View key={i} style={[...edges(i, cols, r === rows.length - 1), { width: widths[i] }]}>
-              {Array.isArray(c) ? (
-                // A list in a cell is bulleted, as the PROJECTS table is on the issued CVs.
-                c.map((item, j) => (
-                  <View key={j} style={s.cellBulletRow} wrap={false}>
-                    <Text style={s.bulletGlyph}>{"•"}</Text>
-                    <Text style={{ flex: 1 }}>{item}</Text>
-                  </View>
-                ))
-              ) : (
-                <Text>{c}</Text>
-              )}
+      <View wrap={false}>
+        <Section title={title} keepWithNext={false} />
+        <View style={s.row} wrap={false}>
+          {header.map((h, i) => (
+            <View key={i} style={[...edges(i, cols, rows.length === 0), s.columnHeader, { width: widths[i] }]}>
+              <Text>{h}</Text>
             </View>
           ))}
         </View>
+        {first && <TableRow cells={first} widths={widths} last={rest.length === 0} />}
+      </View>
+      {rest.map((cells, r) => (
+        <TableRow key={r} cells={cells} widths={widths} last={r === rest.length - 1} />
       ))}
     </View>
   );
@@ -425,26 +448,21 @@ function CvDocument({ source, context }: { source: CvSource; context: CvPdfConte
           ))}
         </View>
 
-        <Section title="CAREER SUMMARY" />
-        <Table widths={COLUMNS_3} header={["COMPANY", "POSITION", "DURATION"]} rows={career} />
+        <Table title="CAREER SUMMARY" widths={COLUMNS_3} header={["COMPANY", "POSITION", "DURATION"]} rows={career} />
 
-        <Section title="QUALIFICATIONS" />
-        <Table widths={COLUMNS_3} header={["QUALIFICATION", "INSTITUTION", "YEAR"]} rows={education} />
+        <Table title="QUALIFICATIONS" widths={COLUMNS_3} header={["QUALIFICATION", "INSTITUTION", "YEAR"]} rows={education} />
 
         {certificates.length > 0 && (
           <>
-            <Section title="CERTIFICATES AND COURSES" />
-            <Table widths={COLUMNS_3} header={["QUALIFICATION", "INSTITUTION", "YEAR"]} rows={certificates} />
+            <Table title="CERTIFICATES AND COURSES" widths={COLUMNS_3} header={["QUALIFICATION", "INSTITUTION", "YEAR"]} rows={certificates} />
           </>
         )}
 
-        <Section title="SKILLSET" />
-        <Table widths={COLUMNS_3} header={["SKILLS", "PROFICIENCY", "YEARS OF EXPERIENCE"]} rows={skillset} />
+        <Table title="SKILLSET" widths={COLUMNS_3} header={["SKILLS", "PROFICIENCY", "YEARS OF EXPERIENCE"]} rows={skillset} />
 
         {projects.length > 0 && (
           <>
-            <Section title="PROJECTS" />
-            <Table widths={[EMPLOYMENT_LABEL_COLUMN, CONTENT_WIDTH - EMPLOYMENT_LABEL_COLUMN]} header={["COMPANY NAME", "PROJECT NAME"]} rows={projects} />
+            <Table title="PROJECTS" widths={[EMPLOYMENT_LABEL_COLUMN, CONTENT_WIDTH - EMPLOYMENT_LABEL_COLUMN]} header={["COMPANY NAME", "PROJECT NAME"]} rows={projects} />
           </>
         )}
 
@@ -457,7 +475,6 @@ function CvDocument({ source, context }: { source: CvSource; context: CvPdfConte
           </>
         )}
 
-        <Section title="EMPLOYMENT HISTORY" />
         {source.work_experience.map((job, i) => {
           const client = job.client?.trim() || null;
           const labelled: [string, string][] = [
@@ -467,17 +484,21 @@ function CvDocument({ source, context }: { source: CvSource; context: CvPdfConte
             ["Duration", durationOf(job)],
           ];
           return (
-            <View key={i} style={{ marginBottom: i < source.work_experience.length - 1 ? 14 : 0 }}>
-              {labelled.map(([label, value]) => (
-                <View key={label} style={s.row} wrap={false}>
-                  <View style={[s.cell, s.employmentLabel, { width: EMPLOYMENT_LABEL_COLUMN }]}>
-                    <Text>{label}</Text>
+            <View key={i} style={{ marginBottom: i < source.work_experience.length - 1 ? 24 : 0 }}>
+              {/* The label rows stay together, and the first block's with the heading. */}
+              <View wrap={false}>
+                {i === 0 && <Section title="EMPLOYMENT HISTORY" keepWithNext={false} />}
+                {labelled.map(([label, value]) => (
+                  <View key={label} style={s.row} wrap={false}>
+                    <View style={[s.cell, s.employmentLabel, { width: EMPLOYMENT_LABEL_COLUMN }]}>
+                      <Text>{label}</Text>
+                    </View>
+                    <View style={[s.cell, s.lastCell, { width: CONTENT_WIDTH - EMPLOYMENT_LABEL_COLUMN }]}>
+                      <Text style={s.employmentValue}>{value}</Text>
+                    </View>
                   </View>
-                  <View style={[s.cell, s.lastCell, { width: CONTENT_WIDTH - EMPLOYMENT_LABEL_COLUMN }]}>
-                    <Text style={s.employmentValue}>{value}</Text>
-                  </View>
-                </View>
-              ))}
+                ))}
+              </View>
               {/* A column, not a row, so a long list splits across pages. */}
               <View style={[s.cell, s.lastCell, s.lastRow, { width: CONTENT_WIDTH }]}>
                 <Text style={s.employmentValue}>Duties:</Text>
