@@ -80,6 +80,8 @@ describe("coerceTenderAi", () => {
     expect(out.positions[0].quantity).toBe(3);
     expect(out.positions[1].quantity).toBe(1);
     expect(out.positions[1].min_experience_years).toBe(8.5);
+    // Twenty years is a points value from an evaluation table, not a requirement.
+    expect(coerceTenderAi({ min_experience_years: 20 }).min_experience_years).toBeNull();
     expect(out.positions[1].required_certifications).toEqual(["PMP"]);
     expect(out.required_roles).toEqual(["Business Analyst", "Project Manager"]);
     expect(out.contract_duration_months).toBe(36);

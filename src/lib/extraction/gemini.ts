@@ -17,8 +17,12 @@ import { buildTenderPrompt, coerceTenderAi, truncateTenderText, TENDER_SCHEMA, t
  * the key set. Every send is recorded in the audit trail.
  */
 
-/** The model, read at call time so a deployment can move to a newer one without a change here. */
-export const geminiModel = (): string => process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+/**
+ * The model, read at call time so a deployment can move to a newer one
+ * without a change here. The default is the one Google's API itself pointed
+ * new keys at when it retired gemini-2.5-flash.
+ */
+export const geminiModel = (): string => process.env.GEMINI_MODEL?.trim() || "gemini-3.6-flash";
 export const geminiEndpoint = (model: string): string =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 /** A long document takes a while to read; the route allows sixty seconds in all. */
@@ -46,7 +50,10 @@ export interface TenderDocument {
  * What goes over the wire, minus the key. Built here rather than in the
  * caller so the bench sends exactly what the app sends.
  */
-export function buildTenderRequest(doc: TenderDocument): { body: Record<string, unknown>; truncated: boolean; asPdf: boolean } {
+export function buildTenderRequest(
+  doc: TenderDocument,
+  { thinking = true }: { thinking?: boolean } = {},
+): { body: Record<string, unknown>; truncated: boolean; asPdf: boolean } {
   const asPdf = !!doc.pdf && doc.pdf.length > 0 && doc.pdf.length <= MAX_PDF_BYTES;
   const { text, truncated } = asPdf ? { text: "", truncated: false } : truncateTenderText(doc.text);
   const parts: Record<string, unknown>[] = [{ text: buildTenderPrompt() }];
@@ -65,9 +72,11 @@ export function buildTenderRequest(doc: TenderDocument): { body: Record<string, 
         responseMimeType: "application/json",
         responseSchema: TENDER_SCHEMA,
         maxOutputTokens: 8192,
-        // Reading, not reasoning; the thinking tokens cost time and budget
-        // and on the CV side they cut the answer off.
-        thinkingConfig: { thinkingBudget: 0 },
+        // Reading, not reasoning: at the low level the model spends no
+        // thinking tokens on this, which on the CV side were what cut the
+        // answer off. A model generation that does not know the setting
+        // refuses the request, and the call is made again without it.
+        ...(thinking ? { thinkingConfig: { thinkingLevel: "low" } } : {}),
       },
     },
   };
@@ -129,19 +138,26 @@ export async function extractTenderWithGemini(doc: TenderDocument): Promise<Tend
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return { ok: false, reason: "GEMINI_API_KEY is not set" };
 
-  const { body, truncated } = buildTenderRequest(doc);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  try {
-    const res = await fetch(geminiEndpoint(geminiModel()), {
+  const send = (thinking: boolean) => {
+    const { body, truncated } = buildTenderRequest(doc, { thinking });
+    return fetch(geminiEndpoint(geminiModel()), {
       method: "POST",
       signal: controller.signal,
       headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    });
+    }).then(async (res) => ({ res, truncated, data: (await res.json().catch(() => null)) as GeminiResponse | null }));
+  };
 
-    const data = (await res.json().catch(() => null)) as GeminiResponse | null;
+  try {
+    let { res, data, truncated } = await send(true);
+    // The thinking setting is the one part of the request that differs
+    // between model generations. Refused, it is dropped and the call made
+    // once more, rather than a whole generation of models being unusable.
+    if (res.status === 400 && /argument/i.test(data?.error?.message ?? "")) {
+      ({ res, data, truncated } = await send(false));
+    }
 
     if (res.status === 429) {
       const retry = data?.error?.details?.find((d) => d.retryDelay)?.retryDelay;

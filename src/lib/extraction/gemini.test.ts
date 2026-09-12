@@ -72,7 +72,8 @@ describe("buildTenderRequest", () => {
     expect(config.responseMimeType).toBe("application/json");
     expect(config.temperature).toBe(0);
     expect(config.responseSchema).toBeDefined();
-    expect(config.thinkingConfig).toEqual({ thinkingBudget: 0 });
+    expect(config.thinkingConfig).toEqual({ thinkingLevel: "low" });
+    expect(buildTenderRequest({ text: TEXT }, { thinking: false }).body).not.toHaveProperty("generationConfig.thinkingConfig");
   });
 });
 
@@ -149,6 +150,21 @@ describe("extractTenderWithGemini", () => {
     );
     const out = await extractTenderWithGemini({ text: TEXT });
     expect(out).toEqual({ ok: false, reason: "Gemini rate limit reached, try again in 17s" });
+  });
+
+  it("tries once more without the thinking setting when a model refuses it", async () => {
+    let n = 0;
+    stubFetch(() =>
+      n++ === 0
+        ? answer({ error: { code: 400, message: "Request contains an invalid argument.", status: "INVALID_ARGUMENT" } }, 400)
+        : completion({ title: "Read on the second try" }),
+    );
+    const out = await extractTenderWithGemini({ text: TEXT });
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.fields.title).toBe("Read on the second try");
+    expect(calls).toHaveLength(2);
+    expect(JSON.parse(calls[0].init.body as string).generationConfig.thinkingConfig).toBeDefined();
+    expect(JSON.parse(calls[1].init.body as string).generationConfig.thinkingConfig).toBeUndefined();
   });
 
   it("reports any other failure with the status and the message", async () => {

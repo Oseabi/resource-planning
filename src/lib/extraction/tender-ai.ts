@@ -125,6 +125,8 @@ export function buildTenderPrompt(): string {
     "- Spell roles exactly as they appear in this list where one fits, otherwise use the document's own words:",
     ALL_ROLES.join(", "),
     "- required_skills and required_certifications are the ones the document sets for the bid as a whole. min_experience_years is the tender-wide minimum, or null.",
+    "- Years of experience, for a role or for the bid, are only what the document requires: a minimum of, at least, not less than, or a stated range like 8 to 10 years (take the lower figure). A table that awards points for more years is an evaluation, not a requirement: never take a points value or a band boundary from such a table as the years.",
+    "- Where a role in the document has its own title (Senior Infrastructure Architect, Junior Developer) and you spell it as one from the list, put the document's own title in that position's notes.",
     "- sectors: the buyer's sector and the sector of the work, from this list where one fits: " + ALL_SECTORS.join(", ") + ".",
     "- Ignore the standard forms (SBD 1, SBD 4, SBD 6.1, tax and B-BBEE declarations) and the pricing schedule except where they state the closing date, the reference number or the client.",
   ].join("\n");
@@ -164,10 +166,14 @@ const asNumber = (v: unknown): number | null => {
   return null;
 };
 
-/** Years: a positive number, capped where a sentence has been misread as one. */
+/**
+ * Years: a positive number. No tender asks for more than fifteen years of
+ * anything; a larger figure is a points value or a band boundary read off
+ * an evaluation table, and is dropped rather than shown as a requirement.
+ */
 const asYears = (v: unknown): number | null => {
   const n = asNumber(v);
-  return n !== null && n > 0 && n <= 40 ? Math.round(n * 2) / 2 : null;
+  return n !== null && n > 0 && n <= 15 ? Math.round(n * 2) / 2 : null;
 };
 
 const asCount = (v: unknown): number | null => {
@@ -226,7 +232,8 @@ export function coerceTenderAi(json: unknown): TenderAiFields {
 
   return {
     title: asString(r.title),
-    reference_number: asString(r.reference_number),
+    // "A- ICT 03- 2026" is a line-wrapped "A-ICT 03-2026".
+    reference_number: asString(r.reference_number)?.replace(/\s*([-/])\s*/g, "$1") ?? null,
     client: asString(r.client),
     location: asString(r.location),
     value: value !== null && value > 0 ? value : null,
@@ -235,7 +242,7 @@ export function coerceTenderAi(json: unknown): TenderAiFields {
     contract_end_date: asIsoDate(r.contract_end_date),
     contract_duration_months: asCount(r.contract_duration_months),
     reference_letters_required: asCount(r.reference_letters_required),
-    required_roles: positions.map((p) => p.role),
+    required_roles: [...new Set(positions.map((p) => p.role))],
     required_skills: canonicalise(asStringList(r.required_skills), [...ALL_TECHNICAL_SKILLS, ...ALL_SKILLS]),
     required_certifications: canonicalise(asStringList(r.required_certifications), ALL_CERTIFICATIONS),
     sectors: canonicalise(asStringList(r.sectors), ALL_SECTORS),
