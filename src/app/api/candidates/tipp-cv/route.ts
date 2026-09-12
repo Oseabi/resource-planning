@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/auth/current-user";
 import { buildTippCv, cvFilename, type CvSource } from "@/lib/cv-export/build-tipp-cv";
+import { loadAccountManager } from "@/lib/settings";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+/** Every column the template prints. */
+const CV_COLUMNS =
+  "full_name, current_role, designated_group, languages, availability, availability_note, professional_summary, skills, technical_skills, certifications, qualifications, work_experience, education, date_of_birth, years_experience, skill_matrix, certificates, projects, achievements";
 
 /**
  * Render a candidate as a TiPP Focus CV.
@@ -14,14 +20,13 @@ const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingm
  *
  * Nothing is written to storage. The document is built on each request so it
  * always reflects the current record, and there is no stale copy to go out with
- * a bid by mistake.
+ * a bid by mistake. The cover page carries today's date and the account
+ * manager from settings, and the file names the person who generated it.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  const profile = await getCurrentProfile();
+  if (!profile) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
 
   let body: { candidateId?: string; fields?: Partial<CvSource> };
   try {
@@ -35,9 +40,7 @@ export async function POST(request: Request) {
   if (body.candidateId) {
     const { data, error } = await supabase
       .from("candidates")
-      .select(
-        "full_name, current_role, designated_group, languages, availability, professional_summary, skills, technical_skills, certifications, qualifications, work_experience, education",
-      )
+      .select(CV_COLUMNS)
       .eq("id", body.candidateId)
       .single();
 
@@ -71,7 +74,12 @@ export async function POST(request: Request) {
 
   let document: Buffer;
   try {
-    document = buildTippCv(source);
+    const manager = await loadAccountManager();
+    document = buildTippCv(source, {
+      manager,
+      asOf: new Date(),
+      generatedBy: profile.fullName || profile.email || "TiPP Focus",
+    });
   } catch (e) {
     // A template error is a deployment problem, not something the user can fix,
     // so say so plainly rather than showing them a render trace.

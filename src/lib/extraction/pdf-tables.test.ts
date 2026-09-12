@@ -143,8 +143,8 @@ describe("tablesFromPdfPages", () => {
         run("CANDIDATE OVERVIEW", 229, 584, { h: LABEL }),
         run("Mduduzi brings strong analytical and interpersonal", 78, 379),
         run("skills.", 469, 379),
-        run("He", 494, 379),
-        run("is", 512, 379, { eol: true }),
+        run("He", 505, 379),
+        run("is", 520, 379, { eol: true }),
         run("effective at prioritising tasks.", 78, 368),
       ),
     ]);

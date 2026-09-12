@@ -15,6 +15,8 @@ import { ResetPasswordDialog } from "@/app/(app)/settings/users/reset-password-d
 import { RoleSelect } from "@/app/(app)/settings/users/role-select";
 import { DeleteUserDialog } from "@/app/(app)/settings/users/delete-user-dialog";
 import { DepartmentSelect } from "@/app/(app)/settings/users/department-select";
+import { AccountManagerCard } from "@/app/(app)/settings/users/account-manager-card";
+import { loadAccountManager } from "@/lib/settings";
 
 export default async function UsersSettingsPage() {
   const supabase = await createClient();
@@ -36,12 +38,13 @@ export default async function UsersSettingsPage() {
     );
   }
 
-  const [{ data: profiles }, { data: departments }] = await Promise.all([
+  const [{ data: profiles }, { data: departments }, accountManager] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, full_name, email, role, department_id, must_change_password, created_at")
       .order("created_at", { ascending: false }),
     supabase.from("departments").select("id, name, slug").order("sort_order"),
+    loadAccountManager(),
   ]);
 
   const allDepartments = departments ?? [];
@@ -156,6 +159,10 @@ export default async function UsersSettingsPage() {
             </li>
           ))}
         </ul>
+      </div>
+
+      <div className="mt-6">
+        <AccountManagerCard initial={accountManager} />
       </div>
     </div>
   );

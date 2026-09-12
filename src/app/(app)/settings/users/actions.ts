@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/auth/require-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recordAudit } from "@/app/(app)/audit-actions";
 import type { ProfileRole } from "@/lib/supabase/database.types";
+import { ACCOUNT_MANAGER_KEY } from "@/lib/settings";
 
 export type CreateUserState = {
   error: string | null;
@@ -254,4 +255,45 @@ export async function updateUserDepartment(userId: string, departmentId: string 
   revalidatePath("/settings/users");
   // Every scoped list changes for that person, so nothing cached survives.
   revalidatePath("/", "layout");
+}
+
+/**
+ * Who the CV cover page names as the account manager.
+ *
+ * One row, admin-only, audited like every other change on this screen. Her
+ * details print on every CV that leaves the building and on nothing else,
+ * which is why they are a setting and not a field on any candidate.
+ */
+export async function updateAccountManager(input: { name: string; email: string; phone: string }) {
+  const profile = await requireAdmin();
+
+  const name = input.name.trim();
+  const email = input.email.trim();
+  const phone = input.phone.trim();
+  if (!name) throw new Error("A name is needed: it prints on the cover page.");
+
+  const admin = createAdminClient();
+  const { data: before } = await admin
+    .from("app_settings")
+    .select("value")
+    .eq("key", ACCOUNT_MANAGER_KEY)
+    .maybeSingle();
+
+  const { error } = await admin.from("app_settings").upsert({
+    key: ACCOUNT_MANAGER_KEY,
+    value: { name, email, phone },
+    updated_at: new Date().toISOString(),
+    updated_by: profile.id,
+  });
+  if (error) throw new Error(error.message);
+
+  await recordAudit({
+    action: "setting_changed",
+    entityType: "setting",
+    entityId: ACCOUNT_MANAGER_KEY,
+    entityLabel: "Account manager on the CV cover page",
+    detail: { from: before?.value ?? null, to: { name, email, phone } },
+  });
+
+  revalidatePath("/settings/users");
 }

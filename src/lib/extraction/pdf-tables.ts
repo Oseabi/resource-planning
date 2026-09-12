@@ -36,6 +36,7 @@
 
 import type { DocumentTables } from "@/lib/extraction/docx-tables";
 import { normaliseLine } from "@/lib/extraction/pdf-lines";
+import { canonicalHeading } from "@/lib/extraction/tipp-tables";
 
 /** The subset of a pdf.js text item this needs, already unpacked. */
 export interface PdfTextItem {
@@ -83,34 +84,17 @@ const HEADING_MIN_X = 150;
  */
 const HYPHEN_WRAP_RE = /[A-Za-z]-$/;
 
+/**
+ * A line that ended on a dash of any kind, which no paragraph does: "Data
+ * Modelling –" is followed by "Conceptual" on the next line. Word's own PDF
+ * writer puts the dash in a run of its own and marks the wrap on an empty run
+ * after it rather than on the dash, so the wrap flag is missing and the dash
+ * is the signal.
+ */
+const DASH_END_RE = /[-\u2013\u2014]$/;
+
 /** The bullet glyph Word writes from the Symbol font, and its sub-bullet. */
 const BULLET_RE = /^[•▪●]\s*/;
-
-/**
- * Section headings as the issued template spells them, mapped to the names
- * parseTippTables understands. Each alias came from a real CV.
- */
-const HEADING_ALIASES: Record<string, string> = {
-  "CANDIDATE SUMMARY": "CANDIDATE SUMMARY",
-  "CANDIDATE OVERVIEW": "CANDIDATE SUMMARY",
-  "CANDIDATE PROFILE": "CANDIDATE SUMMARY",
-  "CAREER SUMMARY": "CAREER SUMMARY",
-  QUALIFICATION: "QUALIFICATION",
-  QUALIFICATIONS: "QUALIFICATION",
-  "CERTIFICATES AND COURSES": "CERTIFICATES AND COURSES",
-  CERTIFICATIONS: "CERTIFICATIONS",
-  SKILLS: "SKILLS",
-  SKILLSET: "SKILLS",
-  "SKILLS MATRIX": "SKILLS",
-  "SKILLS AND TRAINING": "SKILLS AND TRAINING",
-  PROJECTS: "PROJECTS",
-  ACHIEVEMENTS: "ACHIEVEMENTS",
-  "OTHER ACHIEVEMENTS": "OTHER ACHIEVEMENTS",
-  "EMPLOYMENT RECORD": "EMPLOYMENT RECORD",
-  "EMPLOYMENT HISTORY": "EMPLOYMENT RECORD",
-  REFERENCE: "REFERENCE",
-  REFERENCES: "REFERENCE",
-};
 
 /** Column header rows, which fix a table's column starts when recognised. */
 const COLUMN_HEADERS: string[][] = [
@@ -228,9 +212,19 @@ interface Cell {
   /** The last run ended a wrapped line, so the next run continues its paragraph. */
   openParagraph: boolean;
   lastY: number;
+  /** Where the last run ended, to tell a word boundary from a run boundary. */
+  lastEndX: number;
   /** A bare bullet glyph was just seen: whatever comes next starts a paragraph. */
   pendingBullet: boolean;
 }
+
+/**
+ * Two runs on one line closer than this are one word. A space at 9pt is
+ * about 2.3 units wide; a run that ends where the next begins ("payment"
+ * then "-system", where Word broke the run at the hyphen) is a word boundary
+ * only in the renderer's bookkeeping.
+ */
+const GLUE_TOLERANCE = 1.5;
 
 class RowBuilder {
   cells: Cell[] = [];
@@ -242,7 +236,7 @@ class RowBuilder {
    */
   append(col: number, item: PdfTextItem, wrapped = false): void {
     while (this.cells.length <= col) {
-      this.cells.push({ text: "", openParagraph: false, lastY: Number.NaN, pendingBullet: false });
+      this.cells.push({ text: "", openParagraph: false, lastY: Number.NaN, lastEndX: Number.NaN, pendingBullet: false });
     }
     const cell = this.cells[col];
     if (wrapped && cell.text) cell.openParagraph = true;
@@ -259,19 +253,21 @@ class RowBuilder {
     } else if (cell.pendingBullet || hadBullet) {
       cell.text += "\n" + str;
     } else if (Math.abs(cell.lastY - item.y) <= BASELINE_TOLERANCE) {
-      // Same line: one paragraph.
-      cell.text += " " + str;
-    } else if (cell.openParagraph) {
+      // Same line: one paragraph, and one word when the runs touch.
+      const glued = Number.isFinite(cell.lastEndX) && item.x - cell.lastEndX < GLUE_TOLERANCE;
+      cell.text += (glued ? "" : " ") + str;
+    } else if (cell.openParagraph || DASH_END_RE.test(cell.text)) {
       // The previous run wrapped. A line that broke after the hyphen of a
-      // compound word ("system-" / "integration") rejoins without a space;
-      // anything else gets one.
-      cell.text += (HYPHEN_WRAP_RE.test(cell.text) && /^[a-z]/.test(str) ? "" : " ") + str;
+      // compound word ("system-" / "integration", "As-" / "Is") rejoins
+      // without a space; anything else gets one.
+      cell.text += (HYPHEN_WRAP_RE.test(cell.text) && /^[A-Za-z]/.test(str) ? "" : " ") + str;
     } else {
       cell.text += "\n" + str;
     }
     cell.pendingBullet = false;
     cell.openParagraph = item.hasEOL;
     cell.lastY = item.y;
+    cell.lastEndX = item.x + item.width;
   }
 
   toRow(): string[] {
@@ -306,7 +302,7 @@ function headingOf(item: PdfTextItem): string | null {
   // that happens to read "skills." is a word of the summary, whatever its x.
   const raw = item.str.trim();
   if (raw !== raw.toUpperCase()) return null;
-  return HEADING_ALIASES[normalise(raw)] ?? null;
+  return canonicalHeading(normalise(raw));
 }
 
 /** A run that is nothing but a bullet glyph. */
@@ -338,6 +334,8 @@ export function tablesFromPdfPages(pages: PdfPageItems[]): PdfTables {
   let prevCol = -1;
   let prevY = Number.NaN;
   let prevHeight = 0;
+  /** The previous run wrapped, so whatever follows continues its paragraph. */
+  let prevEol = false;
   let pitch = DEFAULT_PITCH;
   /** The x of every run in the row being built, to fix column starts if it is a header. */
   let rowXs: number[] = [];
@@ -411,6 +409,7 @@ export function tablesFromPdfPages(pages: PdfPageItems[]): PdfTables {
         prevCol = -1;
         prevY = Number.NaN;
         prevHeight = 0;
+        prevEol = false;
         continue;
       }
 
@@ -418,8 +417,9 @@ export function tablesFromPdfPages(pages: PdfPageItems[]): PdfTables {
       const bullet = isBulletOnly(item);
 
       // A label-sized run at the left edge ends the duties. Duties: itself is
-      // body-sized, so it is recognised by its text below.
-      if (inDuties && isLabelSize && columnOf(item.x, starts) === 0) inDuties = false;
+      // body-sized, so it is recognised by its text below. A bullet glyph at
+      // label size is a bullet, not a label.
+      if (inDuties && isLabelSize && !bullet && columnOf(item.x, starts) === 0) inDuties = false;
       // Justified text splits into word runs across the page. Read as columns
       // it becomes three cells of fragments, so prose is never bucketed.
       const prose = (section !== null && PROSE_SECTIONS.has(section)) || inDuties;
@@ -438,7 +438,10 @@ export function tablesFromPdfPages(pages: PdfPageItems[]): PdfTables {
         !continuesCell &&
         (row === null ||
           col < prevCol ||
-          (Number.isFinite(gap) && !sameLine && col === 0 && prevCol === 0 && gap > pitch * ROW_GAP_FACTOR) ||
+          // A wide gap between same-column runs is a row boundary, unless the
+          // run before it wrapped: a paragraph set at a wider line pitch than
+          // the page's tables is still one paragraph.
+          (Number.isFinite(gap) && !sameLine && !prevEol && col === 0 && prevCol === 0 && gap > pitch * ROW_GAP_FACTOR) ||
           // A bullet glyph is printed at label size on some CVs; it starts
           // a paragraph in the cell, never a row.
           (!sameLine && col === 0 && isLabelSize && !bullet && prevHeight < LABEL_HEIGHT));
@@ -454,6 +457,7 @@ export function tablesFromPdfPages(pages: PdfPageItems[]): PdfTables {
       if (section === EMPLOYMENT && col === 0 && /^duties\s*:?$/i.test(item.str.trim())) inDuties = true;
       prevCol = col;
       prevY = item.y;
+      prevEol = item.hasEOL;
       // A bullet's size says nothing about what follows it.
       if (!bullet) prevHeight = item.height;
     }
