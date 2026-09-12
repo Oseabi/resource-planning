@@ -32,6 +32,7 @@ import {
   ALL_SECTORS,
   SEED_LANGUAGES,
 } from "@/lib/vocabulary";
+import { TEMPLATE_SKILL_CATEGORIES } from "@/lib/cv-record";
 
 // -------------------------------------------------------------------------
 // What leaves the building
@@ -124,6 +125,7 @@ export const CV_SCHEMA = {
     "languages",
     "designated_group",
     "availability",
+    "availability_note",
     "work_experience",
     "education",
     "skill_matrix",
@@ -144,6 +146,7 @@ export const CV_SCHEMA = {
     languages: stringList,
     designated_group: nullableString,
     availability: { type: ["string", "null"], enum: ["available", "notice_period", "unavailable", null] },
+    availability_note: nullableString,
     work_experience: {
       type: "array",
       items: {
@@ -294,9 +297,9 @@ export function buildPrompt(cvText: string): string {
     "- qualifications are degrees and diplomas, the award name only: 'BTech Information Technology', not the institution or the year, which belong in education. certifications are professional certifications like PMP or AWS. Keep them apart.",
     "- years_experience is total professional years as a number, or null if it cannot be read off the CV.",
     "- designated_group is only for South African employment equity wording stated outright on the CV (for example African, Coloured, Indian, White, person with a disability). Otherwise null.",
-    "- availability is only for an explicit statement: available, notice_period, or unavailable. Otherwise null.",
+    "- availability is only for an explicit statement: available, notice_period, or unavailable. Otherwise null. availability_note is the CV's own words for it ('1 Calendar Month', 'Immediately'), or null.",
     "- work_experience: one entry per job, most recent first. Dates as written on the CV. is_current true only if the CV says so. client is the end client when the employer placed them somewhere else, otherwise null.",
-    "- skill_matrix: skills grouped by category as the CV groups them, with years beside a skill only when the CV gives them. Leave empty if the CV has no such grouping.",
+    `- skill_matrix: every skill on the CV sorted into these categories, in this order, leaving out any category with nothing in it: ${TEMPLATE_SKILL_CATEGORIES.join(", ")}. Keep the CV's own grouping where it has one. years beside a skill only when the CV states them.`,
     "- certificates: each certificate or course with its institution and year where given. Every name here should also appear in certifications.",
     "- projects: named projects grouped by the company they were done for, only if the CV lists them that way.",
     "- achievements: the CV's achievements or memberships section as written, or null.",
@@ -526,6 +529,7 @@ export function coerceAiFields(json: unknown): AiFields {
     ...(availability && (AVAILABILITY as string[]).includes(availability)
       ? { availability: availability as CandidateAvailability }
       : {}),
+    availability_note: asString(r.availability_note),
     work_experience: asWorkExperience(r.work_experience),
     education: asEducation(r.education),
     skill_matrix: asSkillMatrix(r.skill_matrix),
@@ -575,6 +579,7 @@ export function mergeExtraction(
     designated_group: ai.designated_group ?? local.designated_group,
     achievements: ai.achievements ?? local.achievements ?? null,
     ...(ai.availability ? { availability: ai.availability } : {}),
+    availability_note: ai.availability_note ?? local.availability_note ?? null,
   };
 
   for (const field of LIST_FIELDS) {

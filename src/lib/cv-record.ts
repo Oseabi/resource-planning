@@ -11,7 +11,23 @@
  * Pure, no I/O.
  */
 
-import type { SkillCategory, Certificate } from "@/lib/supabase/database.types";
+import type { SkillCategory, Certificate, Education } from "@/lib/supabase/database.types";
+
+/**
+ * The SKILLSET rows as the issued template prints them, in its order. Every
+ * one of the eight real CVs read so far uses exactly these; the AI is asked
+ * to sort a generic CV's skills into them so its CV comes out the same way.
+ */
+export const TEMPLATE_SKILL_CATEGORIES = [
+  "Programming Languages",
+  "Technologies",
+  "Databases",
+  "Frameworks",
+  "Software Platforms",
+  "Tools",
+  "Methodologies",
+  "Domain Knowledge",
+] as const;
 
 const fold = (v: string) => v.trim().toLowerCase().replace(/\s+/g, " ");
 
@@ -44,6 +60,30 @@ export function deriveCertifications(certificates: Certificate[], existing: stri
     existing,
     certificates.map((c) => c.name),
   );
+}
+
+/** The flat qualification names, with every education row included. */
+export function deriveQualifications(education: Education[], existing: string[]): string[] {
+  return union(
+    existing,
+    education.map((e) => e.qualification),
+  );
+}
+
+/**
+ * A duration as the template writes it: "October 2020 - Current". Shared by
+ * the profile's career summary and the generated CV so the two agree.
+ */
+export function durationOf(entry: {
+  start_date?: string | null;
+  end_date?: string | null;
+  is_current?: boolean;
+}): string {
+  const start = entry.start_date?.trim();
+  if (!start) return "";
+  if (entry.is_current) return `${start} - Current`;
+  const end = entry.end_date?.trim();
+  return end ? `${start} - ${end}` : start;
 }
 
 /** Drop rows the form left blank, and blank skills inside a category. */

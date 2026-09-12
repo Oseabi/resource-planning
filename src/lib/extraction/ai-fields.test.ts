@@ -179,6 +179,15 @@ describe("buildPrompt", () => {
   it("tells the model not to guess", () => {
     expect(buildPrompt("x")).toMatch(/Never guess/);
   });
+
+  it("asks for the template's own skill categories, and for the availability words", () => {
+    // A generic CV rarely groups its skills, and the issued template prints
+    // eight fixed rows; the model sorts into those so the CV comes out the
+    // same way. The words beside the status are what the CV prints.
+    const prompt = buildPrompt("x");
+    expect(prompt).toContain("Programming Languages, Technologies, Databases, Frameworks, Software Platforms, Tools, Methodologies, Domain Knowledge");
+    expect(prompt).toContain("availability_note");
+  });
 });
 
 describe("coerceAiFields", () => {

@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   deriveTechnicalSkills,
   deriveCertifications,
+  deriveQualifications,
+  durationOf,
   cleanSkillMatrix,
   cleanCertificates,
 } from "@/lib/cv-record";
@@ -63,5 +65,37 @@ describe("cleanCertificates", () => {
         { name: " PMP ", institution: " PMI ", year: "" },
       ]),
     ).toEqual([{ name: "PMP", institution: "PMI", year: null }]);
+  });
+});
+
+describe("deriveQualifications", () => {
+  const education = [
+    { qualification: "BSc Computer Science", field: null, institution: "UCT", year: "2011" },
+    { qualification: "Matric", field: null, institution: null, year: "2005" },
+  ];
+
+  it("puts every education row's award into the flat list", () => {
+    expect(deriveQualifications(education, [])).toEqual(["BSc Computer Science", "Matric"]);
+  });
+
+  it("keeps an award typed straight into the list, and never doubles one", () => {
+    expect(deriveQualifications(education, ["MBA", "matric"])).toEqual(["MBA", "matric", "BSc Computer Science"]);
+  });
+});
+
+describe("durationOf", () => {
+  it("writes a range the way the template does", () => {
+    expect(durationOf({ start_date: "April 2016", end_date: "September 2020", is_current: false })).toBe(
+      "April 2016 - September 2020",
+    );
+  });
+
+  it("says Current for a current job whatever the end date holds", () => {
+    expect(durationOf({ start_date: "October 2020", end_date: null, is_current: true })).toBe("October 2020 - Current");
+  });
+
+  it("is the start alone when that is all there is, and nothing without a start", () => {
+    expect(durationOf({ start_date: "2014", end_date: null, is_current: false })).toBe("2014");
+    expect(durationOf({ start_date: null, end_date: "2016", is_current: false })).toBe("");
   });
 });

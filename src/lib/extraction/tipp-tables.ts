@@ -55,6 +55,39 @@ const HEADINGS = [
 ] as const;
 
 /**
+ * Section headings as issued copies spell them, mapped onto the names above.
+ * Each alias came from a real CV. Shared with the PDF reader, and applied to
+ * a .docx here, so the generated CV, which uses the issued spellings, reads
+ * back through the same parser that reads the ones the team writes.
+ */
+export const HEADING_ALIASES: Record<string, string> = {
+  "CANDIDATE SUMMARY": "CANDIDATE SUMMARY",
+  "CANDIDATE OVERVIEW": "CANDIDATE SUMMARY",
+  "CANDIDATE PROFILE": "CANDIDATE SUMMARY",
+  "CAREER SUMMARY": "CAREER SUMMARY",
+  QUALIFICATION: "QUALIFICATION",
+  QUALIFICATIONS: "QUALIFICATION",
+  "CERTIFICATES AND COURSES": "CERTIFICATES AND COURSES",
+  CERTIFICATIONS: "CERTIFICATIONS",
+  SKILLS: "SKILLS",
+  SKILLSET: "SKILLS",
+  "SKILLS MATRIX": "SKILLS",
+  "SKILLS AND TRAINING": "SKILLS AND TRAINING",
+  PROJECTS: "PROJECTS",
+  ACHIEVEMENTS: "ACHIEVEMENTS",
+  "OTHER ACHIEVEMENTS": "OTHER ACHIEVEMENTS",
+  "EMPLOYMENT RECORD": "EMPLOYMENT RECORD",
+  "EMPLOYMENT HISTORY": "EMPLOYMENT RECORD",
+  REFERENCE: "REFERENCE",
+  REFERENCES: "REFERENCE",
+};
+
+/** The canonical heading a normalised (upper-case, letters-only) text names, or null. */
+export function canonicalHeading(normalised: string): string | null {
+  return HEADING_ALIASES[normalised] ?? null;
+}
+
+/**
  * Header-block labels, with the spellings issued copies carry. POSITON is a
  * typo every current copy of the template has.
  */
@@ -83,8 +116,8 @@ const normalise = (value: string): string =>
 const isHeadingRow = (row: string[]): string | null => {
   const cells = row.filter((c) => c.trim());
   if (cells.length !== 1) return null;
-  const text = normalise(cells[0]);
-  return HEADINGS.find((h) => text === h) ?? null;
+  const text = canonicalHeading(normalise(cells[0]));
+  return text && (HEADINGS as readonly string[]).includes(text) ? text : null;
 };
 
 const isColumnHeader = (row: string[], words: string[]): boolean =>
@@ -141,7 +174,6 @@ export function isCertificationEntry(value: string): boolean {
     return true;
   }
   return /\b(?:certified|certification|fundamentals|associate|practitioner)\b/i.test(v);
-  return /(?:certified|certification|fundamentals|associate|practitioner)/i.test(v);
 }
 
 interface Row3 {
@@ -150,11 +182,15 @@ interface Row3 {
   c: string;
 }
 
+/** A cell as one line: a name that wraps in the PDF is still one name. */
+const oneLine = (cell: string | undefined): string => (cell ?? "").replace(/\s*\n\s*/g, " ").trim();
+
 /** Rows of a three-column table, header and blank rows dropped. */
-function dataRows(rows: string[][], header: string[]): Row3[] {
+function dataRows(rows: string[][], header: string[], joinLines = true): Row3[] {
+  const cell = (c: string | undefined) => (joinLines ? oneLine(c) : (c ?? "").trim());
   return rows
     .filter((r) => !isEmptyRow(r) && !isColumnHeader(r, header))
-    .map((r) => ({ a: (r[0] ?? "").trim(), b: (r[1] ?? "").trim(), c: (r[2] ?? "").trim() }))
+    .map((r) => ({ a: cell(r[0]), b: cell(r[1]), c: cell(r[2]) }))
     .filter((r) => r.a || r.b);
 }
 
@@ -204,7 +240,8 @@ function employmentBlocks(rows: string[][]): EmploymentBlock[] {
     const label = normalise(row[0] ?? "").toLowerCase();
     const value = (row[1] ?? "").trim();
     if (value && /^(company|client|role|position|duration)$/.test(label)) {
-      lines.push(`${row[0].trim()}: ${value}`);
+      // A role that wraps in its cell is still one role.
+      lines.push(`${row[0].trim()}: ${oneLine(value)}`);
     } else {
       for (const cell of row) for (const line of cell.split("\n")) if (line.trim()) lines.push(line.trim());
     }
@@ -421,7 +458,8 @@ export function parseTippTables(
       continue;
     }
     if (opensWith(rows, ["COMPANY NAME", "PROJECT NAME"])) {
-      for (const r of dataRows(rows, ["COMPANY NAME", "PROJECT NAME"])) {
+      // One project per line in the second column, so the lines stay apart.
+      for (const r of dataRows(rows, ["COMPANY NAME", "PROJECT NAME"], false)) {
         const names = r.b.split("\n").map((l) => l.trim()).filter(Boolean);
         if (r.a || names.length) projects.push({ company: r.a, projects: names });
       }
@@ -564,6 +602,9 @@ export function parseTippTables(
       }),
     ),
     availability: mapAvailability(header.get("AVAILABILITY") ?? null),
+    // Kept as written beside the status: "1 Calendar Month" says more than
+    // "on notice", and it is what the generated CV prints.
+    availability_note: oneLine(header.get("AVAILABILITY")) || null,
     date_of_birth: header.get("DATE OF BIRTH")?.trim() || null,
     skill_matrix: skillMatrix,
     certificates: certificates

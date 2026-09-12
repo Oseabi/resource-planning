@@ -12,7 +12,7 @@ import {
   type DuplicateMatch,
 } from "@/app/(app)/candidates/actions";
 import type { ExtractionResult } from "@/lib/extraction/types";
-import { deriveCategories } from "@/lib/resource-categories";
+import { mergeExtractionIntoFields } from "@/app/(app)/candidates/cv-fields";
 
 export function EditCandidateForm({
   candidateId,
@@ -44,39 +44,13 @@ export function EditCandidateForm({
       const res = await fetch("/api/candidates/extract", { method: "POST", body: fd });
       if (!res.ok) throw new Error();
       const result: ExtractionResult = await res.json();
-      // Merge any newly-extracted values over the current fields, highlighting them.
-      const f = result.fields;
-      const nextFlags: ExtractedFlags = {};
-      const union = (a: string[], b: string[]) => Array.from(new Set([...a, ...b]));
+      // The new CV is the newer truth: its sections replace the record's,
+      // the matching lists are unioned, and what it did not say is kept.
+      let nextFlags: ExtractedFlags = {};
       setFields((prev) => {
-        const next = { ...prev };
-        if (f.full_name) { next.full_name = f.full_name; nextFlags.full_name = true; }
-        if (f.email) { next.email = f.email; nextFlags.email = true; }
-        if (f.phone) { next.phone = f.phone; nextFlags.phone = true; }
-        if (f.linkedin_url) { next.linkedin_url = f.linkedin_url; nextFlags.linkedin_url = true; }
-        if (f.portfolio_url) { next.portfolio_url = f.portfolio_url; nextFlags.portfolio_url = true; }
-        if (f.current_role) { next.current_role = f.current_role; nextFlags.current_role = true; }
-        if (f.professional_summary) { next.professional_summary = f.professional_summary; nextFlags.professional_summary = true; }
-        if (f.years_experience != null) { next.years_experience = f.years_experience; nextFlags.years_experience = true; }
-        if (f.additional_roles.length) { next.additional_roles = union(prev.additional_roles, f.additional_roles); nextFlags.additional_roles = true; }
-        if (f.technical_skills.length) { next.technical_skills = union(prev.technical_skills, f.technical_skills); nextFlags.technical_skills = true; }
-        if (f.skills.length) { next.skills = union(prev.skills, f.skills); nextFlags.skills = true; }
-        if (f.certifications.length) { next.certifications = union(prev.certifications, f.certifications); nextFlags.certifications = true; }
-        if (f.qualifications.length) { next.qualifications = union(prev.qualifications, f.qualifications); nextFlags.qualifications = true; }
-        if (f.sectors.length) { next.sectors = union(prev.sectors, f.sectors); nextFlags.sectors = true; }
-        if (f.languages.length) { next.languages = union(prev.languages, f.languages); nextFlags.languages = true; }
-        if (f.work_experience.length) { next.work_experience = [...prev.work_experience, ...f.work_experience]; nextFlags.work_experience = true; }
-        if (f.education.length) { next.education = [...prev.education, ...f.education]; nextFlags.education = true; }
-        // Suggest categories from the merged skills/roles (union with any existing).
-        const derived = deriveCategories(next);
-        if (derived.length) {
-          const merged = union(prev.resource_categories, derived);
-          if (merged.length !== prev.resource_categories.length) {
-            next.resource_categories = merged;
-            nextFlags.resource_categories = true;
-          }
-        }
-        return next;
+        const merged = mergeExtractionIntoFields(prev, result);
+        nextFlags = merged.flags;
+        return merged.fields;
       });
       setFlags(nextFlags);
       setReparseNote(

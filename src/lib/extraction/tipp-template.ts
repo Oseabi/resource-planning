@@ -700,5 +700,6 @@ export function parseTippTemplate(
     work_experience,
     education,
     availability: mapAvailability(firstValue(sectionLines(sections, "AVAILABILITY"))),
+    availability_note: firstValue(sectionLines(sections, "AVAILABILITY")),
   };
 }

@@ -106,6 +106,54 @@ describe("tablesFromPdfPages", () => {
     ]);
   });
 
+  it("continues a cell that wrapped at the foot of a page, even without a wrap mark", () => {
+    // pdf.js sets hasEOL on a wrapped line, but not on the last line of a
+    // page. The years column was emitted before the page turned, so by
+    // column order the continuation would start a row with no category.
+    const { tables } = tablesFromPdfPages([
+      page(
+        run("SKILLS", 78.3, 400, { h: HEADER }),
+        run("PROFICIENCY", 235.1, 400, { h: HEADER }),
+        run("YEARS OF EXPERIENCE", 410.3, 400, { h: HEADER }),
+        run("Frameworks", 78.3, 92),
+        run("BPM frameworks; Software", 233, 103, { eol: true }),
+        run("Development Life Cycle; operating-", 233, 92),
+        run("13+ years", 411, 92),
+      ),
+      page(
+        run("model frameworks; governance and", 233, 761, { eol: true }),
+        run("control frameworks", 233, 750),
+        run("Software Platforms", 78.3, 705),
+        run("SAP; core-banking platforms", 233, 738),
+        run("10+ years", 411, 738),
+      ),
+    ]);
+    expect(tables[0]).toEqual([
+      ["SKILLS", "PROFICIENCY", "YEARS OF EXPERIENCE"],
+      ["Frameworks", "BPM frameworks; Software Development Life Cycle; operating-model frameworks; governance and control frameworks", "13+ years"],
+      ["Software Platforms", "SAP; core-banking platforms", "10+ years"],
+    ]);
+  });
+
+  it("does not take a word of justified prose for a heading", () => {
+    // "skills." at x of 469 spells the SKILLS heading; it is a word of the
+    // summary, on a line that started at the margin.
+    const { tables } = tablesFromPdfPages([
+      page(
+        run("CANDIDATE OVERVIEW", 229, 584, { h: LABEL }),
+        run("Mduduzi brings strong analytical and interpersonal", 78, 379),
+        run("skills.", 469, 379),
+        run("He", 505, 379),
+        run("is", 520, 379, { eol: true }),
+        run("effective at prioritising tasks.", 78, 368),
+      ),
+    ]);
+    expect(tables).toEqual([
+      [["CANDIDATE SUMMARY"]],
+      [["Mduduzi brings strong analytical and interpersonal skills. He is effective at prioritising tasks."]],
+    ]);
+  });
+
   it("rejoins a row whose first column wraps too", () => {
     // "Accident Compensation" then "Corporation" on the next line at x 78:
     // a rule that reads an empty first column as the only continuation
@@ -318,6 +366,31 @@ describe("tablesFromPdfPages", () => {
         ["Company", "Tower Group"],
         ["Duties:\nFirst duty\nSecond duty"],
       ]);
+    });
+
+    it("lets a bullet printed at label size start a paragraph, never a row", () => {
+      // One CV prints some bullets at 11pt. Label-sized runs at the left
+      // edge start rows, which put the last duty of a block in a row of its
+      // own.
+      const { tables } = tablesFromPdfPages([
+        page(
+          run("EMPLOYMENT HISTORY", 240, 780, { h: LABEL }),
+          run("Company", 78.3, 720, { h: HEADER }),
+          run("Tower Group", 236.7, 721.4),
+          run("Duties:", 78.3, 700),
+          run("", 96.3, 689, { w: 4.2 }),
+          run("First duty", 114.3, 689),
+          run("", 96.3, 678, { w: 4.2, h: HEADER }),
+          run("Second duty", 114.3, 678),
+        ),
+        page(run("Company", 78.3, 760, { h: HEADER }), run("Standard Bank", 236.7, 761.4)),
+      ]);
+      expect(tables[1]).toEqual([
+        ["Company", "Tower Group"],
+        ["Duties:\nFirst duty\nSecond duty"],
+      ]);
+      // The block that follows on the next page still opens on its label.
+      expect(tables[2][0]).toEqual(["Company", "Standard Bank"]);
     });
 
     it("does not read justified duty text as columns", () => {
