@@ -82,6 +82,22 @@ function withTightSpacing(pPr) {
   return stripped.replace("</w:pPr>", `${spacing}</w:pPr>`);
 }
 
+/**
+ * The issued CVs are set in Century Gothic with Arial Bold for the headings,
+ * labels and column headers; the older template is Calibri throughout. The
+ * face is written onto every run this script produces, in place of whatever
+ * the theme said.
+ */
+const BODY_FONT = "Century Gothic";
+const LABEL_FONT = "Arial";
+
+function withFont(rPr, face) {
+  const stripped = rPr.replace(/<w:rFonts [^>]*\/>/g, "");
+  const fonts = `<w:rFonts w:ascii="${face}" w:hAnsi="${face}" w:cs="${face}"/>`;
+  if (!stripped) return `<w:rPr>${fonts}</w:rPr>`;
+  return stripped.replace("<w:rPr>", `<w:rPr>${fonts}`);
+}
+
 /** Run properties with the size set, replacing any size already there. */
 function withSize(rPr, size) {
   const stripped = rPr.replace(/<w:sz w:val="\d+"\/>/g, "").replace(/<w:szCs w:val="\d+"\/>/g, "");
@@ -120,6 +136,8 @@ function setCellParagraphs(tc, paragraphs, { size, bold, align } = {}) {
   rPr = rPr.replace(/<w:color [^>]*\/>/g, "");
   if (size) rPr = withSize(rPr, size);
   if (bold !== undefined) rPr = withBold(rPr, bold);
+  // Labels, headings and column headers are the bold faces at 11pt and up.
+  rPr = withFont(rPr, bold && size && size >= SIZE.columnHeader ? LABEL_FONT : BODY_FONT);
 
   const body = paragraphs
     .map(
@@ -158,12 +176,12 @@ function markPlaced(name) {
  * of it.
  */
 function coverPage(xml) {
-  const P = (text, { size, bold = false, center = false, before = 0, after = 120, tabs = [], indent = null } = {}) => {
+  const P = (text, { size, bold = false, italic = false, grey = false, center = false, before = 0, after = 120, tabs = [], indent = null } = {}) => {
     const tabXml = tabs.length
       ? `<w:tabs>${tabs.map((t) => `<w:tab w:val="left" w:pos="${t}"/>`).join("")}</w:tabs>`
       : "";
     const indXml = indent ? `<w:ind w:left="${indent}" w:hanging="${indent}"/>` : "";
-    const rPr = `<w:rPr>${bold ? "<w:b/>" : ""}<w:sz w:val="${size}"/><w:szCs w:val="${size}"/></w:rPr>`;
+    const rPr = `<w:rPr><w:rFonts w:ascii="${BODY_FONT}" w:hAnsi="${BODY_FONT}" w:cs="${BODY_FONT}"/>${bold ? "<w:b/>" : ""}${italic ? "<w:i/>" : ""}${grey ? '<w:color w:val="808080"/>' : ""}<w:sz w:val="${size}"/><w:szCs w:val="${size}"/></w:rPr>`;
     const runs = text
       .split("\t")
       .map((part, i) =>
@@ -173,8 +191,9 @@ function coverPage(xml) {
     return `<w:p><w:pPr>${tabXml}<w:spacing w:before="${before}" w:after="${after}" w:line="240" w:lineRule="auto"/>${indXml}<w:jc w:val="${center ? "center" : "left"}"/>${rPr}</w:pPr>${runs}</w:p>`;
   };
 
-  const small = { size: SIZE.coverSmall, after: 60 };
-  const line = { size: SIZE.body, after: 40, tabs: [2280] };
+  // The issued cover sets its details in grey and its small print in grey italics.
+  const small = { size: SIZE.coverSmall, after: 60, italic: true, grey: true };
+  const line = { size: SIZE.body, after: 40, tabs: [2280], grey: true };
   const cover = [
     P("Candidate Resume", { size: SIZE.coverTitle, bold: true, center: true, before: 1600, after: 900 }),
     P("{full_name}", { size: SIZE.coverName, bold: true, center: true, after: 200 }),
@@ -301,7 +320,11 @@ function projectsTable(careerTable) {
 
 /** A heading table with its text replaced. */
 function headingTable(sourceHeadingTable, text) {
-  return sourceHeadingTable.replace(CELL_RE, (tc) => setCellParagraphs(tc, [text], { size: SIZE.heading }));
+  // The rule under a heading is the issued CVs' dark teal, not the theme's
+  // lighter blue the older template drew.
+  return sourceHeadingTable
+    .replace(/<w:bottom w:val="single" w:sz="18" w:space="0" w:color="[0-9A-F]{6}"[^>]*\/>/, '<w:bottom w:val="single" w:sz="18" w:space="0" w:color="0F4761"/>')
+    .replace(CELL_RE, (tc) => setCellParagraphs(tc, [text], { size: SIZE.heading, bold: true }));
 }
 
 /**
@@ -459,6 +482,7 @@ function dutiesCell(tr) {
       let rPr = firstMatch(source.replace(sourcePPr, ""), /<w:rPr>[\s\S]*?<\/w:rPr>/) ?? "";
       rPr = withSize(rPr, SIZE.body);
       rPr = withBold(rPr, opts.bold);
+      rPr = withFont(rPr, BODY_FONT);
       return `<w:p>${pPr}<w:r>${rPr}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
     };
 
@@ -555,6 +579,20 @@ function tag(xml) {
 
 const zip = new PizZip(fs.readFileSync(SOURCE));
 const original = zip.file("word/document.xml").asText();
+
+// The page header's logo is the older horizontal mark; the issued CVs carry
+// the stacked one, the same image the PDF renderer uses. The drawing's
+// height follows the new image's proportions so it is not squashed.
+const LOGO = fs.readFileSync(path.join("src", "lib", "cv-export", "assets", "logo-header.png"));
+zip.file("word/media/image3.png", LOGO);
+for (const part of ["word/header1.xml", "word/header2.xml"]) {
+  const xml = zip.file(part)?.asText();
+  if (!xml) continue;
+  // 324 by 95 pixels: keep the width the template gives the logo, scale the height.
+  const updated = xml.replace(/<wp:extent cx="1760855" cy="870585"\/>/g, '<wp:extent cx="1760855" cy="516400"/>')
+    .replace(/<a:ext cx="1760855" cy="870585"\/>/g, '<a:ext cx="1760855" cy="516400"/>');
+  zip.file(part, updated);
+}
 
 const rebuilt = tag(issue(original));
 
