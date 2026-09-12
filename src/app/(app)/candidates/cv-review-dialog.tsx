@@ -58,7 +58,7 @@ export function CvReviewDialog({
       const res = await fetch("/api/candidates/tipp-cv", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fields }),
+        body: JSON.stringify({ fields, format: "pdf" }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -69,7 +69,7 @@ export function CvReviewDialog({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `TippFocus - ${fields.full_name || "candidate"}.docx`;
+      a.download = `TippFocus - ${fields.full_name || "candidate"}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } finally {

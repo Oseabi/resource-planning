@@ -2,7 +2,7 @@ import { Link2, Globe, Mail, Phone, MapPin, CalendarClock } from "lucide-react";
 import { AvailabilityBadge, Chip } from "@/app/(app)/candidates/candidate-badges";
 import { availabilityLabel, INDEFINITE, type FreeFrom } from "@/lib/availability";
 import { formatLongDate } from "@/lib/dates";
-import { durationOf } from "@/lib/cv-record";
+import { durationOf, lineKinds } from "@/lib/cv-record";
 import type { Database } from "@/lib/supabase/database.types";
 
 type Candidate = Database["public"]["Tables"]["candidates"]["Row"];
@@ -166,7 +166,7 @@ export function CandidateCvView({ candidate, freeFrom }: { candidate: Candidate;
 
       {candidate.achievements && (
         <Card title="Achievements">
-          <p className="whitespace-pre-wrap text-body-sm text-foreground">{candidate.achievements}</p>
+          <Lines text={candidate.achievements} />
         </Card>
       )}
 
@@ -191,15 +191,7 @@ export function CandidateCvView({ candidate, freeFrom }: { candidate: Candidate;
                 {exp.description && (
                   <div className="mt-3">
                     <div className="text-label-sm font-medium text-muted-foreground">Duties</div>
-                    <ul className="mt-1 list-disc space-y-0.5 pl-5 text-body-sm text-foreground">
-                      {exp.description
-                        .split("\n")
-                        .map((line) => line.trim())
-                        .filter(Boolean)
-                        .map((line, j) => (
-                          <li key={j}>{line}</li>
-                        ))}
-                    </ul>
+                    <Lines text={exp.description} />
                   </div>
                 )}
                 {exp.achievements && (
@@ -215,6 +207,30 @@ export function CandidateCvView({ candidate, freeFrom }: { candidate: Candidate;
       </Card>
 
     </>
+  );
+}
+
+/**
+ * A duties cell or an achievements box as the CV prints it: bullets
+ * indented, and a line that was not a bullet on the CV as a bold
+ * sub-heading. Text without any bullet marks is all bullets.
+ */
+function Lines({ text }: { text: string }) {
+  return (
+    <div className="mt-1 space-y-0.5 text-body-sm text-foreground">
+      {lineKinds(text).map((line, i) =>
+        line.kind === "heading" ? (
+          <div key={i} className={"font-medium" + (i > 0 ? " pt-2" : "")}>
+            {line.text}
+          </div>
+        ) : (
+          <div key={i} className="flex gap-2 pl-4">
+            <span aria-hidden="true">{"\u2022"}</span>
+            <span>{line.text}</span>
+          </div>
+        ),
+      )}
+    </div>
   );
 }
 

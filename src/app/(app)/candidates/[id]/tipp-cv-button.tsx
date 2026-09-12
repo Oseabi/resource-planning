@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileDown, Loader2, AlertTriangle } from "lucide-react";
+import { FileDown, FileText, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,12 +12,17 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
+type CvFormat = "pdf" | "docx";
+
 /**
  * Download a candidate as a TiPP Focus CV.
  *
- * When the record cannot fill every row the template has, the gaps are listed
- * first. Warning here rather than after the download is the point: this is the
- * last moment the person can still fix it before the document reaches a bid.
+ * The PDF is the document as the team issues it and is what goes to a
+ * client; the Word file is the same content on the team's template, for
+ * anyone who wants to edit it first. When the record cannot fill every row
+ * the template has, the gaps are listed first. Warning here rather than
+ * after the download is the point: this is the last moment the person can
+ * still fix it before the document reaches a bid.
  */
 export function TippCvButton({
   candidateId,
@@ -28,18 +33,18 @@ export function TippCvButton({
   candidateName: string;
   missingFields: string[];
 }) {
-  const [busy, setBusy] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState<CvFormat | null>(null);
+  const [confirming, setConfirming] = useState<CvFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function download() {
-    setBusy(true);
+  async function download(format: CvFormat) {
+    setBusy(format);
     setError(null);
     try {
       const res = await fetch("/api/candidates/tipp-cv", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ candidateId }),
+        body: JSON.stringify({ candidateId, format }),
       });
 
       if (!res.ok) {
@@ -54,30 +59,40 @@ export function TippCvButton({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `TippFocus - ${candidateName}.docx`;
+      a.download = `TippFocus - ${candidateName}.${format}`;
       a.click();
       URL.revokeObjectURL(url);
-      setConfirming(false);
+      setConfirming(null);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
+  }
+
+  function start(format: CvFormat) {
+    if (missingFields.length > 0) setConfirming(format);
+    else void download(format);
   }
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={busy}
-        onClick={() => (missingFields.length > 0 ? setConfirming(true) : download())}
-      >
-        {busy ? <Loader2 className="size-4 animate-spin" /> : <FileDown className="size-4" />}
+      <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => start("pdf")}>
+        {busy === "pdf" ? <Loader2 className="size-4 animate-spin" /> : <FileDown className="size-4" />}
         TiPP Focus CV
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={busy !== null}
+        onClick={() => start("docx")}
+        title="The same CV as a Word document, for editing"
+      >
+        {busy === "docx" ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />}
+        Word
       </Button>
 
       {error && !confirming && <p className="text-body-sm text-destructive">{error}</p>}
 
-      <Dialog open={confirming} onOpenChange={(o) => !o && setConfirming(false)}>
+      <Dialog open={confirming !== null} onOpenChange={(o) => !o && setConfirming(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Some template fields are empty</DialogTitle>
@@ -99,10 +114,10 @@ export function TippCvButton({
           {error && <p className="text-body-sm text-destructive">{error}</p>}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirming(false)} disabled={busy}>
+            <Button variant="outline" onClick={() => setConfirming(null)} disabled={busy !== null}>
               Go back and fill them in
             </Button>
-            <Button onClick={download} disabled={busy}>
+            <Button onClick={() => confirming && download(confirming)} disabled={busy !== null}>
               {busy ? "Building..." : "Download anyway"}
             </Button>
           </DialogFooter>

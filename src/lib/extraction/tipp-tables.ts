@@ -215,6 +215,9 @@ const SUB_ROLE_RE = new RegExp(
 
 const LABEL_RE = /^(company|client|role|position|duration|duties|responsibilities)\s*:?\s*(.*)$/i;
 
+/** A bullet at the start of a line, as the readers write one or a CV types one. */
+const BULLET_LINE_RE = /^[•\u25AA\u25CF\u2043\-\*]\s*/;
+
 /**
  * The jobs in one employer's block: the block itself, and one per titled
  * sub-role inside it.
@@ -265,7 +268,11 @@ function employmentBlocks(rows: string[][]): EmploymentBlock[] {
       else if (rest.trim()) current.duties.push(rest.trim());
       continue;
     }
-    current.duties.push(line.replace(/^[••▪●\-]\s*/, "").trim());
+    // The marker is kept, normalised: a line that was a bullet on the CV
+    // prints as a bullet, and one that was not is a sub-heading.
+    const bulleted = BULLET_LINE_RE.test(line);
+    const text = line.replace(BULLET_LINE_RE, "").trim();
+    if (text) current.duties.push(bulleted ? `• ${text}` : text);
   }
 
   // A CV that carries only the roll-up, or that writes duties before the first
@@ -460,7 +467,11 @@ export function parseTippTables(
     if (opensWith(rows, ["COMPANY NAME", "PROJECT NAME"])) {
       // One project per line in the second column, so the lines stay apart.
       for (const r of dataRows(rows, ["COMPANY NAME", "PROJECT NAME"], false)) {
-        const names = r.b.split("\n").map((l) => l.trim()).filter(Boolean);
+        // Listed one per line, often as bullets; the bullet is the list's, not the name's.
+        const names = r.b
+          .split("\n")
+          .map((l) => l.replace(BULLET_LINE_RE, "").trim())
+          .filter(Boolean);
         if (r.a || names.length) projects.push({ company: r.a, projects: names });
       }
       continue;

@@ -167,9 +167,9 @@ export function toTemplateData(source: CvSource, context: CvContext) {
 }
 
 /** A filename that will not surprise anyone in a bid folder. */
-export function cvFilename(fullName: string): string {
+export function cvFilename(fullName: string, format: "pdf" | "docx" = "pdf"): string {
   const safe = (fullName || "candidate").replace(/[^A-Za-z0-9 ]+/g, "").trim() || "candidate";
-  return `TippFocus - ${safe}.docx`;
+  return `TippFocus - ${safe}.${format}`;
 }
 
 /**

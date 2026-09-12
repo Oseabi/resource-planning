@@ -112,3 +112,23 @@ export function cleanCertificates(certificates: Certificate[]): Certificate[] {
     }))
     .filter((c) => c.name);
 }
+
+type LineKind = "bullet" | "heading";
+
+/**
+ * The lines of a duties cell or an achievements box, each a bullet or a
+ * sub-heading. The readers keep a bullet on every line that was one on the
+ * CV, so a line without one is a sub-heading. Text from before the markers,
+ * or from the AI, has none at all, and then every line is a bullet.
+ */
+export function lineKinds(text: string | null | undefined): { kind: LineKind; text: string }[] {
+  const lines = (text ?? "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !/^client:/i.test(l));
+  const marked = lines.some((l) => /^[•▪●]/.test(l));
+  return lines.map((l) => {
+    const bullet = /^[•▪●\-\*]\s*/.test(l);
+    return { kind: !marked || bullet ? "bullet" : "heading", text: l.replace(/^[•▪●\-\*]\s*/, "") };
+  });
+}

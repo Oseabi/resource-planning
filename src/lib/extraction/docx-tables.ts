@@ -48,6 +48,9 @@ function decodeEntities(value: string): string {
 export function cellText(html: string): string {
   return decodeEntities(
     html
+      // A list item keeps its bullet, so a duties cell still says which
+      // lines were bullets and which were sub-headings once it is text.
+      .replace(/<li[^>]*>/gi, "• ")
       .replace(/<\/(?:p|div|li)>/gi, "\n")
       .replace(/<br\s*\/?>/gi, "\n")
       .replace(/<[^>]+>/g, ""),

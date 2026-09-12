@@ -1,15 +1,20 @@
 /**
  * The round trip: a real CV in, the generated CV out, the generated CV back in.
  *
- *   npx tsx --conditions=react-server scripts/roundtrip-cv.ts "<cv.pdf>" [out-dir]
+ *   npx tsx scripts/roundtrip-cv.mts "<cv.pdf>" [out-dir]
+ *   npx tsx --conditions=react-server scripts/roundtrip-cv.mts "<cv.pdf>" [out-dir] --word
  *
- * Reads a PDF of the issued template with the reader, builds the .docx from
- * exactly those fields, converts the .docx to PDF with the Word installed on
- * this machine, and reads that PDF back with the same reader. The two reads
- * are then compared field by field. If they agree, the generator has printed
- * every section where the template puts it, in a form the team's own layout
- * yields, and the reader is consistent on both. A mismatch names the field
- * and shows where the two first differ.
+ * Reads a PDF of the issued template with the reader, draws the PDF the app
+ * would download from exactly those fields, and reads that PDF back with the
+ * same reader. With --word it builds the .docx instead and converts it to
+ * PDF with the Word installed on this machine; that mode needs the
+ * react-server condition for the server-only guard on the Word builder, and
+ * the PDF mode must run without it, since under it React loads its server
+ * build and the PDF renderer cannot use that. The two reads are then
+ * compared field by field. If they agree, the generator has printed every
+ * section where the template puts it, in a form the reader recognises, and
+ * the reader is consistent on both. A mismatch names the field and shows
+ * where the two first differ.
  *
  * Compared as words in order, not as exact strings. The team's PDFs come out
  * of Word 2016 and iLovePDF and mark every wrapped line on its last run;
@@ -32,12 +37,15 @@ import { spawnSync } from "node:child_process";
 import { getDocumentProxy } from "unpdf";
 import { tablesFromPdfPages, pdfItemsFrom, type PdfPageItems } from "@/lib/extraction/pdf-tables";
 import { parseTippTables } from "@/lib/extraction/tipp-tables";
-import { buildTippCv, type CvSource } from "@/lib/cv-export/build-tipp-cv";
+import type { CvSource } from "@/lib/cv-export/missing-fields";
 import type { ExtractedCandidateFields } from "@/lib/extraction/types";
 
-const [file, outDir = fs.mkdtempSync(path.join(os.tmpdir(), "tipp-roundtrip-"))] = process.argv.slice(2);
+const WORD = process.argv.includes("--word");
+const [file, outDir = fs.mkdtempSync(path.join(os.tmpdir(), "tipp-roundtrip-"))] = process.argv
+  .slice(2)
+  .filter((a) => !a.startsWith("--"));
 if (!file) {
-  console.error('usage: npx tsx --conditions=react-server scripts/roundtrip-cv.ts "<cv.pdf>" [out-dir]');
+  console.error('usage: npx tsx --conditions=react-server scripts/roundtrip-cv.mts "<cv.pdf>" [out-dir] [--word]');
   process.exit(1);
 }
 
@@ -115,14 +123,22 @@ async function main() {
   const original = await readPdf(file);
   const source = original.fields as unknown as CvSource;
 
-  const docx = buildTippCv(source, {
+  const context = {
     manager: { name: "Samantha Example", email: "cv@example.com", phone: "011 000 0000" },
     asOf: new Date(),
     generatedBy: "roundtrip-cv",
-  });
+  };
   const base = path.join(outDir, path.basename(file, path.extname(file)));
-  fs.writeFileSync(`${base}.generated.docx`, docx);
-  docxToPdf(`${base}.generated.docx`, `${base}.generated.pdf`);
+  // Loaded here, not at the top: each generator wants a different React
+  // condition, so only the one asked for is ever loaded.
+  if (WORD) {
+    const { buildTippCv } = await import("@/lib/cv-export/build-tipp-cv");
+    fs.writeFileSync(`${base}.generated.docx`, buildTippCv(source, context));
+    docxToPdf(`${base}.generated.docx`, `${base}.generated.pdf`);
+  } else {
+    const { renderTippCvPdf } = await import("@/lib/cv-export/pdf/tipp-cv-pdf");
+    fs.writeFileSync(`${base}.generated.pdf`, await renderTippCvPdf(source, context));
+  }
 
   const generated = await readPdf(`${base}.generated.pdf`);
 
@@ -144,6 +160,6 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error(e instanceof Error ? e.message : e);
+  console.error(e instanceof Error ? (e.stack ?? e.message) : e);
   process.exit(1);
 });

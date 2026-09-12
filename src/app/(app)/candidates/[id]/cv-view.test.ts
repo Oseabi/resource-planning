@@ -110,10 +110,14 @@ describe("CandidateCvView", () => {
     expect(html).toContain("Jira (8+ years); Visio (3 years)");
   });
 
-  it("lists the duties as the CV's own lines", () => {
-    const html = render(candidate);
-    expect(html).toContain("<li>Collaborated with stakeholders.</li>");
-    expect(html).toContain("<li>Analysed existing processes.</li>");
+  it("lists the duties as the CV's own lines, bullets and sub-headings apart", () => {
+    const html = render({
+      ...candidate,
+      work_experience: [{ ...candidate.work_experience[0], description: "Team leadership\n\u2022 Collaborated with stakeholders.\n\u2022 Analysed existing processes." }],
+    });
+    expect(html).toContain(">Team leadership<");
+    expect(html).toContain("<span>Collaborated with stakeholders.</span>");
+    expect(html).toContain("<span>Analysed existing processes.</span>");
   });
 
   it("leaves out the sections the template prints only when the CV had them", () => {
