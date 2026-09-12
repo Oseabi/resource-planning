@@ -1,19 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil, Link2, Globe, Mail, Phone, MapPin, Briefcase, GraduationCap, CalendarClock, Cake, FileClock } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { StatusBadge, AvailabilityBadge, Chip } from "@/app/(app)/candidates/candidate-badges";
-import { availableFrom, availabilityLabel, INDEFINITE } from "@/lib/availability";
+import { StatusBadge, AvailabilityBadge } from "@/app/(app)/candidates/candidate-badges";
+import { availableFrom } from "@/lib/availability";
 import { loadActivity } from "@/app/(app)/activity-actions";
 import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import { loadDeployments } from "@/lib/deployments-repo";
 import { DeploymentsPanel } from "@/app/(app)/candidates/[id]/deployments-panel";
 import { TippCvButton } from "@/app/(app)/candidates/[id]/tipp-cv-button";
 import { missingTemplateFields, type CvSource } from "@/lib/cv-export/build-tipp-cv";
-import { formatLongDate } from "@/lib/dates";
+import { CandidateCvView, Card, Chips } from "@/app/(app)/candidates/[id]/cv-view";
 import { CvDownloadButton } from "@/app/(app)/candidates/[id]/cv-download-button";
 import { DeleteCandidateButton } from "@/app/(app)/candidates/[id]/delete-candidate-button";
 
@@ -62,25 +61,6 @@ export default async function CandidateProfilePage({
             {candidate.current_role ?? "No role set"}
             {candidate.location ? ` · ${candidate.location}` : ""}
           </p>
-          {candidate.additional_roles.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {candidate.additional_roles.map((r) => (
-                <Chip key={r}>{r}</Chip>
-              ))}
-            </div>
-          )}
-          {candidate.resource_categories.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {candidate.resource_categories.map((cat) => (
-                <span
-                  key={cat}
-                  className="inline-flex items-center rounded-lg bg-primary/10 px-2 py-0.5 text-label-md font-medium text-primary"
-                >
-                  {cat}
-                </span>
-              ))}
-            </div>
-          )}
           <div className="mt-3 flex items-center gap-2">
             <StatusBadge status={candidate.status} />
             <AvailabilityBadge availability={candidate.availability} />
@@ -88,16 +68,6 @@ export default async function CandidateProfilePage({
               <span className="text-body-sm text-muted-foreground">{candidate.years_experience} yrs experience</span>
             )}
           </div>
-          {freeFrom !== null && (
-            <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-muted px-2 py-1 text-body-sm">
-              <CalendarClock className="size-4 text-muted-foreground" />
-              <span
-                className={freeFrom === INDEFINITE ? "text-muted-foreground" : "text-foreground"}
-              >
-                {availabilityLabel(freeFrom)}
-              </span>
-            </div>
-          )}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {candidate.cv_file_path && (
@@ -116,255 +86,59 @@ export default async function CandidateProfilePage({
         </div>
       </div>
 
-      {/* Above the tabs on purpose: "where is this person right now" is the
-          first question anyone opening a profile is asking. */}
+      {/* Above everything else on purpose: "where is this person right now"
+          is the first question anyone opening a profile is asking. */}
       <DeploymentsPanel deployments={deployments} />
 
-      <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="experience">Experience</TabsTrigger>
-          <TabsTrigger value="education">Education &amp; Certifications</TabsTrigger>
-          <TabsTrigger value="skills">Skills &amp; Documents</TabsTrigger>
-        </TabsList>
+      <CandidateCvView candidate={candidate} freeFrom={freeFrom} />
 
-        {/* Overview */}
-        <TabsContent value="overview" className="space-y-4">
-          {candidate.professional_summary && (
-            <Card title="Professional summary">
-              <p className="whitespace-pre-wrap text-body-md text-foreground">{candidate.professional_summary}</p>
-            </Card>
-          )}
-          <Card title="Contact">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <IconLine icon={<Mail className="size-4" />} value={candidate.email} />
-              <IconLine icon={<Phone className="size-4" />} value={candidate.phone} />
-              <IconLine icon={<MapPin className="size-4" />} value={candidate.location} />
-              <IconLine icon={<Link2 className="size-4" />} value={candidate.linkedin_url} href={candidate.linkedin_url} />
-              <IconLine icon={<Globe className="size-4" />} value={candidate.portfolio_url} href={candidate.portfolio_url} />
-              {/* Printed on the TiPP CV, so it is shown here as the template prints it. */}
-              <IconLine icon={<Cake className="size-4" />} value={formatLongDate(candidate.date_of_birth)} />
-              {/* When the CV this was read from was last confirmed. Shown, not policed. */}
-              <IconLine
-                icon={<FileClock className="size-4" />}
-                value={candidate.cv_as_of ? `CV as of ${formatLongDate(candidate.cv_as_of)}` : null}
-              />
-            </div>
-          </Card>
-          <TagCard title="Sectors" tags={candidate.sectors} />
-        </TabsContent>
-
-        {/* Experience */}
-        <TabsContent value="experience" className="space-y-4">
-          {candidate.work_experience.length === 0 ? (
-            <Empty>No work experience recorded.</Empty>
-          ) : (
-            candidate.work_experience.map((exp, i) => (
-              <Card key={i}>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-accent text-primary">
-                    <Briefcase className="size-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <h3 className="text-headline-sm font-semibold text-foreground">{exp.title}</h3>
-                      <span className="text-body-sm text-muted-foreground">
-                        {exp.start_date ?? "?"}
-                        {" – "}
-                        {exp.is_current ? "Present" : (exp.end_date ?? "?")}
-                      </span>
-                    </div>
-                    {(exp.company || exp.location || exp.employment_type) && (
-                      <p className="text-body-sm text-muted-foreground">
-                        {[exp.company, exp.location, exp.employment_type].filter(Boolean).join(" · ")}
-                      </p>
-                    )}
-                    {exp.client && (
-                      <p className="text-body-sm text-muted-foreground">Client: {exp.client}</p>
-                    )}
-                    {exp.description && (
-                      <p className="mt-1.5 whitespace-pre-wrap text-body-sm text-foreground">{exp.description}</p>
-                    )}
-                    {exp.achievements && (
-                      <div className="mt-1.5">
-                        <div className="text-label-sm uppercase tracking-wide text-muted-foreground">
-                          Key achievements
-                        </div>
-                        <p className="whitespace-pre-wrap text-body-sm text-foreground">{exp.achievements}</p>
-                      </div>
-                    )}
-                  </div>
+      {/* The system's own sections. */}
+      {(candidate.resource_categories.length > 0 || candidate.sectors.length > 0 || candidate.additional_roles.length > 0) && (
+        <Card title="Matching profile">
+          <div className="space-y-3">
+            {candidate.resource_categories.length > 0 && (
+              <div>
+                <div className="mb-1 text-label-sm font-medium text-muted-foreground">Resource categories</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {candidate.resource_categories.map((cat) => (
+                    <span key={cat} className="inline-flex items-center rounded-lg bg-primary/10 px-2 py-0.5 text-label-md font-medium text-primary">
+                      {cat}
+                    </span>
+                  ))}
                 </div>
-              </Card>
-            ))
-          )}
-        </TabsContent>
-
-        {/* Education & Certifications */}
-        <TabsContent value="education" className="space-y-4">
-          {candidate.education.length > 0 && (
-            <Card title="Education">
-              <div className="space-y-3">
-                {candidate.education.map((edu, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-accent text-primary">
-                      <GraduationCap className="size-4" />
-                    </div>
-                    <div>
-                      <div className="text-body-md font-medium text-foreground">{edu.qualification}</div>
-                      <div className="text-body-sm text-muted-foreground">
-                        {[edu.institution, edu.year].filter(Boolean).join(" · ") || "-"}
-                      </div>
-                    </div>
-                  </div>
-                ))}
               </div>
-            </Card>
-          )}
-          {(candidate.certificates ?? []).length > 0 ? (
-            <Card title="Certificates and courses">
-              <div className="space-y-3">
-                {candidate.certificates.map((c, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-accent text-primary">
-                      <GraduationCap className="size-4" />
-                    </div>
-                    <div>
-                      <div className="text-body-md font-medium text-foreground">{c.name}</div>
-                      <div className="text-body-sm text-muted-foreground">
-                        {[c.institution, c.year].filter(Boolean).join(" · ") || "-"}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          ) : (
-            <TagCard title="Certifications" tags={candidate.certifications} />
-          )}
-          <TagCard title="Qualifications" tags={candidate.qualifications} />
-          {candidate.education.length === 0 &&
-            candidate.certifications.length === 0 &&
-            candidate.qualifications.length === 0 && <Empty>No education or certifications recorded.</Empty>}
-        </TabsContent>
-
-        {/* Skills & Documents */}
-        <TabsContent value="skills" className="space-y-4">
-          {(candidate.skill_matrix ?? []).length > 0 && (
-            <Card title="Skills table">
-              <div className="overflow-x-auto">
-                <table className="w-full text-body-sm">
-                  <tbody>
-                    {candidate.skill_matrix.map((cat, i) => (
-                      <tr key={i} className="border-t border-border first:border-t-0">
-                        <td className="w-48 py-2 pr-3 align-top font-medium text-foreground">{cat.category}</td>
-                        <td className="py-2 align-top">
-                          <ul className="space-y-0.5">
-                            {cat.skills.map((s, j) => (
-                              <li key={j} className="flex flex-wrap justify-between gap-x-4">
-                                <span className="text-foreground">{s.name}</span>
-                                {(s.years || s.note) && (
-                                  <span className="text-muted-foreground">
-                                    {[s.years, s.note].filter(Boolean).join(", ")}
-                                  </span>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          )}
-          <TagCard title="Technical skills" tags={candidate.technical_skills} />
-          <TagCard title="Professional skills" tags={candidate.skills} />
-          <TagCard title="Languages" tags={candidate.languages} />
-          {(candidate.projects ?? []).length > 0 && (
-            <Card title="Projects">
-              <div className="space-y-3">
-                {candidate.projects.map((g, i) => (
-                  <div key={i}>
-                    <div className="text-body-md font-medium text-foreground">{g.company}</div>
-                    <ul className="mt-0.5 list-disc pl-5 text-body-sm text-muted-foreground">
-                      {g.projects.map((p, j) => (
-                        <li key={j}>{p}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-          {candidate.achievements && (
-            <Card title="Achievements">
-              <p className="whitespace-pre-wrap text-body-sm text-foreground">{candidate.achievements}</p>
-            </Card>
-          )}
-          <Card title="Documents">
-            {candidate.cv_file_path ? (
-              <CvDownloadButton path={candidate.cv_file_path} filename={candidate.cv_original_filename} />
-            ) : (
-              <p className="text-body-sm text-muted-foreground">No CV on file.</p>
             )}
-          </Card>
-          {candidate.notes && (
-            <Card title="Notes">
-              <p className="whitespace-pre-wrap text-body-md text-foreground">{candidate.notes}</p>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
+            {candidate.sectors.length > 0 && (
+              <div>
+                <div className="mb-1 text-label-sm font-medium text-muted-foreground">Sectors</div>
+                <Chips tags={candidate.sectors} />
+              </div>
+            )}
+            {candidate.additional_roles.length > 0 && (
+              <div>
+                <div className="mb-1 text-label-sm font-medium text-muted-foreground">Additional roles</div>
+                <Chips tags={candidate.additional_roles} />
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      <Card title="Documents">
+        {candidate.cv_file_path ? (
+          <CvDownloadButton path={candidate.cv_file_path} filename={candidate.cv_original_filename} />
+        ) : (
+          <p className="text-body-sm text-muted-foreground">No CV on file.</p>
+        )}
+      </Card>
+
+      {candidate.notes && (
+        <Card title="Notes">
+          <p className="whitespace-pre-wrap text-body-sm text-foreground">{candidate.notes}</p>
+        </Card>
+      )}
 
       <ActivityTimeline entityType="candidate" entityId={id} entries={activity} />
-    </div>
-  );
-}
-
-function Card({ title, children }: { title?: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-border bg-card shadow-card p-5">
-      {title && <h2 className="mb-2 text-label-sm uppercase tracking-wide text-muted-foreground">{title}</h2>}
-      {children}
-    </div>
-  );
-}
-
-function TagCard({ title, tags }: { title: string; tags: string[] }) {
-  if (tags.length === 0) return null;
-  return (
-    <Card title={title}>
-      <div className="flex flex-wrap gap-1.5">
-        {tags.map((t) => (
-          <Chip key={t}>{t}</Chip>
-        ))}
-      </div>
-    </Card>
-  );
-}
-
-function IconLine({ icon, value, href }: { icon: React.ReactNode; value: string | null; href?: string | null }) {
-  if (!value) return null;
-  return (
-    <div className="flex min-w-0 items-center gap-2 text-body-md text-foreground">
-      <span className="shrink-0 text-muted-foreground">{icon}</span>
-      {href ? (
-        <a href={href.startsWith("http") ? href : `https://${href}`} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate text-primary hover:underline">
-          {value}
-        </a>
-      ) : (
-        <span className="min-w-0 truncate">{value}</span>
-      )}
-    </div>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-md border border-dashed border-border bg-card p-8 text-center text-body-sm text-muted-foreground">
-      {children}
     </div>
   );
 }

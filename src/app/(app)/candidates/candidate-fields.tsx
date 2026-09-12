@@ -78,26 +78,15 @@ export function CandidateFields({
 
   return (
     <div className="space-y-6">
-      {/* Personal information */}
-      <Section title="Personal information">
+      {/* The sections follow the issued TiPP CV top to bottom, under its own
+          names, so somebody holding the PDF can check the record against it
+          in order. The system's own fields come after. */}
+
+      {/* 1. The header table */}
+      <Section title="Candidate details">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Full name" htmlFor="cf-name" required highlight={extracted.full_name}>
             <Input id="cf-name" value={value.full_name} onChange={(e) => set("full_name", e.target.value)} required />
-          </Field>
-          <Field label="Email" htmlFor="cf-email" highlight={extracted.email}>
-            <Input id="cf-email" type="email" value={value.email ?? ""} onChange={(e) => set("email", e.target.value || null)} />
-          </Field>
-          <Field label="Phone" htmlFor="cf-phone" highlight={extracted.phone}>
-            <Input id="cf-phone" value={value.phone ?? ""} onChange={(e) => set("phone", e.target.value || null)} />
-          </Field>
-          <Field label="Location" htmlFor="cf-location" highlight={extracted.location}>
-            <Input id="cf-location" value={value.location ?? ""} onChange={(e) => set("location", e.target.value || null)} />
-          </Field>
-          <Field label="LinkedIn" htmlFor="cf-linkedin" highlight={extracted.linkedin_url}>
-            <Input id="cf-linkedin" value={value.linkedin_url ?? ""} onChange={(e) => set("linkedin_url", e.target.value || null)} placeholder="linkedin.com/in/..." />
-          </Field>
-          <Field label="Portfolio / GitHub" htmlFor="cf-portfolio" highlight={extracted.portfolio_url}>
-            <Input id="cf-portfolio" value={value.portfolio_url ?? ""} onChange={(e) => set("portfolio_url", e.target.value || null)} placeholder="github.com/..." />
           </Field>
           {/* Printed on the TiPP CV. Kept as the template writes it and
               converted to a real date on save; anything unreadable is refused
@@ -105,54 +94,16 @@ export function CandidateFields({
           <Field label="Date of birth" htmlFor="cf-dob" highlight={extracted.date_of_birth}>
             <Input id="cf-dob" value={value.date_of_birth ?? ""} onChange={(e) => set("date_of_birth", e.target.value || null)} placeholder="e.g. 05 February 1989" />
           </Field>
-          {/* The cover page's "As of date": when this information was last
-              confirmed. Shown, not policed. */}
-          <Field label="CV as of" htmlFor="cf-asof" highlight={extracted.cv_as_of}>
-            <Input id="cf-asof" value={value.cv_as_of ?? ""} onChange={(e) => set("cv_as_of", e.target.value || null)} placeholder="e.g. 07 September 2026" />
-          </Field>
-        </div>
-      </Section>
-
-      {/* Professional details */}
-      <Section title="Professional details">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Primary role" htmlFor="cf-role" highlight={extracted.current_role}>
+          <Field label="Position" htmlFor="cf-role" highlight={extracted.current_role}>
             <ComboboxInput
               id="cf-role"
               value={value.current_role}
               onChange={(v) => set("current_role", v)}
               field="roles"
               context={{ sectors: value.sectors }}
-              placeholder="e.g. ERP Consultant"
+              placeholder="e.g. Business Analyst"
               highlight={extracted.current_role}
             />
-          </Field>
-          <Field label="Years of experience" htmlFor="cf-years" highlight={extracted.years_experience}>
-            <Input id="cf-years" type="number" min={0} step={0.5} value={value.years_experience ?? ""} onChange={(e) => set("years_experience", e.target.value === "" ? null : Number(e.target.value))} />
-          </Field>
-          <Field label="Availability" htmlFor="cf-availability">
-            <Select value={value.availability} onValueChange={(v) => set("availability", v as CandidateAvailability)}>
-              <SelectTrigger id="cf-availability" className="w-full">
-                <SelectValue>{(v) => AVAILABILITY_LABELS[String(v)] ?? "Available"}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="available">Available</SelectItem>
-                <SelectItem value="notice_period">On notice period</SelectItem>
-                <SelectItem value="unavailable">Unavailable</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Status" htmlFor="cf-status">
-            <Select value={value.status} onValueChange={(v) => set("status", v as CandidateStatus)}>
-              <SelectTrigger id="cf-status" className="w-full">
-                <SelectValue>{(v) => STATUS_LABELS[String(v)] ?? "Active"}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-                <SelectItem value="placed">Placed</SelectItem>
-              </SelectContent>
-            </Select>
           </Field>
           {/* On the TiPP Focus CV template, and read automatically from a CV
               already on it. Everything else has to be typed once. */}
@@ -169,6 +120,26 @@ export function CandidateFields({
               Appears on the submitted CV and is scored on most public sector bids.
             </p>
           </Field>
+          <Field label="Years of experience" htmlFor="cf-years" highlight={extracted.years_experience}>
+            <Input id="cf-years" type="number" min={0} step={0.5} value={value.years_experience ?? ""} onChange={(e) => set("years_experience", e.target.value === "" ? null : Number(e.target.value))} />
+          </Field>
+          <Field label="Availability" htmlFor="cf-availability">
+            <Select value={value.availability} onValueChange={(v) => set("availability", v as CandidateAvailability)}>
+              <SelectTrigger id="cf-availability" className="w-full">
+                <SelectValue>{(v) => AVAILABILITY_LABELS[String(v)] ?? "Available"}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="available">Available</SelectItem>
+                <SelectItem value="notice_period">On notice period</SelectItem>
+                <SelectItem value="unavailable">Unavailable</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          {/* The CV's own words, printed on the generated CV when present. The
+              status above is what matching and the filter use. */}
+          <Field label="Availability, as the CV puts it" htmlFor="cf-availability-note" highlight={extracted.availability_note}>
+            <Input id="cf-availability-note" value={value.availability_note ?? ""} onChange={(e) => set("availability_note", e.target.value || null)} placeholder="e.g. 1 Calendar Month" />
+          </Field>
           {/* Only needed when no placement explains the gap, e.g. parental leave
               or a candidate who has told you a date directly. */}
           <Field label="Available from" htmlFor="cf-available-from">
@@ -181,6 +152,118 @@ export function CandidateFields({
             <p className="mt-1 text-body-sm text-muted-foreground">
               Leave blank unless they are unavailable for a reason no placement records.
             </p>
+          </Field>
+          {/* The cover page's "As of date": when this information was last
+              confirmed. Shown, not policed. */}
+          <Field label="CV as of" htmlFor="cf-asof" highlight={extracted.cv_as_of}>
+            <Input id="cf-asof" value={value.cv_as_of ?? ""} onChange={(e) => set("cv_as_of", e.target.value || null)} placeholder="e.g. 07 September 2026" />
+          </Field>
+        </div>
+      </Section>
+
+      {/* Not on the CV, but short, and the system needs it to spot a duplicate. */}
+      <Section title="Contact">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Email" htmlFor="cf-email" highlight={extracted.email}>
+            <Input id="cf-email" type="email" value={value.email ?? ""} onChange={(e) => set("email", e.target.value || null)} />
+          </Field>
+          <Field label="Phone" htmlFor="cf-phone" highlight={extracted.phone}>
+            <Input id="cf-phone" value={value.phone ?? ""} onChange={(e) => set("phone", e.target.value || null)} />
+          </Field>
+          <Field label="Location" htmlFor="cf-location" highlight={extracted.location}>
+            <Input id="cf-location" value={value.location ?? ""} onChange={(e) => set("location", e.target.value || null)} />
+          </Field>
+          <Field label="LinkedIn" htmlFor="cf-linkedin" highlight={extracted.linkedin_url}>
+            <Input id="cf-linkedin" value={value.linkedin_url ?? ""} onChange={(e) => set("linkedin_url", e.target.value || null)} placeholder="linkedin.com/in/..." />
+          </Field>
+          <Field label="Portfolio / GitHub" htmlFor="cf-portfolio" highlight={extracted.portfolio_url}>
+            <Input id="cf-portfolio" value={value.portfolio_url ?? ""} onChange={(e) => set("portfolio_url", e.target.value || null)} placeholder="github.com/..." />
+          </Field>
+        </div>
+      </Section>
+
+      {/* 2. CANDIDATE OVERVIEW */}
+      <Section title="Candidate overview">
+        <Field label="Summary" htmlFor="cf-summary" highlight={extracted.professional_summary}>
+          <Textarea id="cf-summary" rows={5} value={value.professional_summary ?? ""} onChange={(e) => set("professional_summary", e.target.value || null)} placeholder="A short professional summary..." />
+        </Field>
+      </Section>
+
+      {/* 3. CAREER SUMMARY is derived from the employment history below and
+          is not edited on its own. 4. QUALIFICATIONS */}
+      <Section title="Qualifications">
+        <EducationEditor value={value.education} onChange={(v) => set("education", v)} highlight={extracted.education} />
+        <Field label="Also for matching" highlight={extracted.qualifications}>
+          <TagInput value={value.qualifications} onChange={(v) => set("qualifications", v)} field="qualifications" context={ctx} placeholder="Add a qualification..." highlight={extracted.qualifications} />
+          <p className="mt-1 text-body-sm text-muted-foreground">
+            Filled from the rows above on save. Add here only what has no row.
+          </p>
+        </Field>
+      </Section>
+
+      {/* 5. CERTIFICATES AND COURSES */}
+      <Section title="Certificates and courses">
+        <CertificatesEditor value={value.certificates} onChange={(v) => set("certificates", v)} highlight={extracted.certificates} />
+        <Field label="Also for matching" highlight={extracted.certifications}>
+          <TagInput value={value.certifications} onChange={(v) => set("certifications", v)} field="certifications" context={ctx} placeholder="Add a certification..." highlight={extracted.certifications} />
+          <p className="mt-1 text-body-sm text-muted-foreground">
+            Filled from the rows above on save. Add here only what has no row.
+          </p>
+        </Field>
+      </Section>
+
+      {/* 6. SKILLSET */}
+      <Section title="Skillset">
+        <p className="mb-3 text-body-sm text-muted-foreground">
+          As printed on the TiPP CV: skills by category, with years beside each.
+        </p>
+        <SkillMatrixEditor value={value.skill_matrix} onChange={(v) => set("skill_matrix", v)} highlight={extracted.skill_matrix} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Technical skills, for matching" highlight={extracted.technical_skills}>
+            <TagInput value={value.technical_skills} onChange={(v) => set("technical_skills", v)} field="technical_skills" context={ctx} placeholder="Languages, frameworks, tools..." highlight={extracted.technical_skills} />
+            <p className="mt-1 text-body-sm text-muted-foreground">
+              Filled from the table above on save.
+            </p>
+          </Field>
+          <Field label="Professional skills, for matching" highlight={extracted.skills}>
+            <TagInput value={value.skills} onChange={(v) => set("skills", v)} field="skills" context={ctx} placeholder="Domain & soft skills..." highlight={extracted.skills} />
+          </Field>
+        </div>
+      </Section>
+
+      {/* 7. PROJECTS, 8. ACHIEVEMENTS */}
+      <Section title="Projects">
+        <ProjectsEditor value={value.projects} onChange={(v) => set("projects", v)} highlight={extracted.projects} />
+      </Section>
+
+      <Section title="Achievements">
+        <Field label="As written on the CV, sub-headings included" htmlFor="cf-achievements" highlight={extracted.achievements}>
+          <Textarea id="cf-achievements" rows={6} value={value.achievements ?? ""} onChange={(e) => set("achievements", e.target.value || null)} placeholder="Professional memberships, courses, expertise, highlights..." />
+        </Field>
+      </Section>
+
+      {/* 9. EMPLOYMENT HISTORY */}
+      <Section title="Employment history">
+        <ExperienceEditor value={value.work_experience} onChange={(v) => set("work_experience", v)} highlight={extracted.work_experience} />
+      </Section>
+
+      {/* The system's own fields, which no CV carries. */}
+      <Section title="Matching and status">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Status" htmlFor="cf-status">
+            <Select value={value.status} onValueChange={(v) => set("status", v as CandidateStatus)}>
+              <SelectTrigger id="cf-status" className="w-full">
+                <SelectValue>{(v) => STATUS_LABELS[String(v)] ?? "Active"}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+                <SelectItem value="placed">Placed</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Languages" highlight={extracted.languages}>
+            <TagInput value={value.languages} onChange={(v) => set("languages", v)} field="languages" context={ctx} placeholder="Add a language..." highlight={extracted.languages} />
           </Field>
         </div>
         <Field label="Additional roles" highlight={extracted.additional_roles}>
@@ -200,68 +283,11 @@ export function CandidateFields({
             are auto-detected from this person&apos;s skills &amp; roles.
           </p>
         </Field>
-        <Field label="Professional summary" htmlFor="cf-summary" highlight={extracted.professional_summary}>
-          <Textarea id="cf-summary" rows={4} value={value.professional_summary ?? ""} onChange={(e) => set("professional_summary", e.target.value || null)} placeholder="A short professional summary..." />
-        </Field>
-      </Section>
-
-      {/* Skills, certifications & qualifications */}
-      <Section title="Skills, certifications & qualifications">
-        <Field label="Technical skills" highlight={extracted.technical_skills}>
-          <TagInput value={value.technical_skills} onChange={(v) => set("technical_skills", v)} field="technical_skills" context={ctx} placeholder="Languages, frameworks, tools..." highlight={extracted.technical_skills} />
-        </Field>
-        <Field label="Professional skills" highlight={extracted.skills}>
-          <TagInput value={value.skills} onChange={(v) => set("skills", v)} field="skills" context={ctx} placeholder="Domain & soft skills..." highlight={extracted.skills} />
-        </Field>
-        <Field label="Certifications" highlight={extracted.certifications}>
-          <TagInput value={value.certifications} onChange={(v) => set("certifications", v)} field="certifications" context={ctx} placeholder="Add a certification..." highlight={extracted.certifications} />
-        </Field>
-        <Field label="Qualifications" highlight={extracted.qualifications}>
-          <TagInput value={value.qualifications} onChange={(v) => set("qualifications", v)} field="qualifications" context={ctx} placeholder="Add a qualification..." highlight={extracted.qualifications} />
-        </Field>
         <Field label="Sectors" highlight={extracted.sectors}>
           <TagInput value={value.sectors} onChange={(v) => set("sectors", v)} field="sectors" context={ctx} placeholder="Add a sector..." highlight={extracted.sectors} />
         </Field>
-        <Field label="Languages" highlight={extracted.languages}>
-          <TagInput value={value.languages} onChange={(v) => set("languages", v)} field="languages" context={ctx} placeholder="Add a language..." highlight={extracted.languages} />
-        </Field>
       </Section>
 
-      {/* Work experience */}
-      <Section title="Work experience">
-        <ExperienceEditor value={value.work_experience} onChange={(v) => set("work_experience", v)} highlight={extracted.work_experience} />
-      </Section>
-
-      {/* Education */}
-      <Section title="Education">
-        <EducationEditor value={value.education} onChange={(v) => set("education", v)} highlight={extracted.education} />
-      </Section>
-
-      {/* The rest of what the TiPP template prints. Each has a flat list
-          above it that matching scores on, derived from these on save. */}
-      <Section title="Skills table">
-        <p className="mb-3 text-body-sm text-muted-foreground">
-          As printed on the TiPP CV: skills grouped by category with years beside each. Everything
-          here also lands in the technical skills list above, so it need not be typed twice.
-        </p>
-        <SkillMatrixEditor value={value.skill_matrix} onChange={(v) => set("skill_matrix", v)} highlight={extracted.skill_matrix} />
-      </Section>
-
-      <Section title="Certificates and courses">
-        <CertificatesEditor value={value.certificates} onChange={(v) => set("certificates", v)} highlight={extracted.certificates} />
-      </Section>
-
-      <Section title="Projects">
-        <ProjectsEditor value={value.projects} onChange={(v) => set("projects", v)} highlight={extracted.projects} />
-      </Section>
-
-      <Section title="Achievements">
-        <Field label="As written on the CV, sub-headings included" htmlFor="cf-achievements" highlight={extracted.achievements}>
-          <Textarea id="cf-achievements" rows={6} value={value.achievements ?? ""} onChange={(e) => set("achievements", e.target.value || null)} placeholder="Professional memberships, courses, expertise, highlights..." />
-        </Field>
-      </Section>
-
-      {/* Notes */}
       <Section title="Notes">
         <Textarea rows={3} value={value.notes ?? ""} onChange={(e) => set("notes", e.target.value || null)} placeholder="Internal notes about this candidate..." />
       </Section>
