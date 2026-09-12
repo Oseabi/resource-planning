@@ -326,7 +326,7 @@ describe("tablesFromPdfPages", () => {
         ["Role", "Consultant"],
         ["Duration", "Aug 2007 – Apr 2008"],
         [
-          "Duties:\nProviding technical support to clients\nProcessing and developing reports for management at an operational level",
+          "Duties:\n• Providing technical support to clients\n• Processing and developing reports for management at an operational level",
         ],
       ]);
     });
@@ -364,7 +364,7 @@ describe("tablesFromPdfPages", () => {
       ]);
       expect(tables[1]).toEqual([
         ["Company", "Tower Group"],
-        ["Duties:\nFirst duty\nSecond duty"],
+        ["Duties:\n• First duty\n• Second duty"],
       ]);
     });
 
@@ -387,7 +387,7 @@ describe("tablesFromPdfPages", () => {
       ]);
       expect(tables[1]).toEqual([
         ["Company", "Tower Group"],
-        ["Duties:\nFirst duty\nSecond duty"],
+        ["Duties:\n• First duty\n• Second duty"],
       ]);
       // The block that follows on the next page still opens on its label.
       expect(tables[2][0]).toEqual(["Company", "Standard Bank"]);

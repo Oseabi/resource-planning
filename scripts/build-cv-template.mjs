@@ -107,11 +107,17 @@ function withBold(rPr, bold) {
  * override what the source had, because the issued sizes differ from the
  * older revision's.
  */
-function setCellParagraphs(tc, paragraphs, { size, bold } = {}) {
+function setCellParagraphs(tc, paragraphs, { size, bold, align } = {}) {
   const tcPr = firstMatch(tc, /<w:tcPr>[\s\S]*?<\/w:tcPr>/) ?? "";
   const firstP = firstMatch(tc, /<w:p\b[\s\S]*?<\/w:p>/) ?? "<w:p></w:p>";
-  const pPr = withTightSpacing(firstMatch(firstP, /<w:pPr>[\s\S]*?<\/w:pPr>/) ?? "");
-  let rPr = firstMatch(firstP.replace(pPr, ""), /<w:rPr>[\s\S]*?<\/w:rPr>/) ?? "";
+  const sourcePPr = firstMatch(firstP, /<w:pPr>[\s\S]*?<\/w:pPr>/) ?? "";
+  // The run's own properties, never the paragraph mark's: the source's empty
+  // OTHER ACHIEVEMENTS cell carries a white, centred mark, and a template
+  // built from it printed every achievement in white on white.
+  let rPr = firstMatch(firstP.replace(sourcePPr, ""), /<w:rPr>[\s\S]*?<\/w:rPr>/) ?? "";
+  let pPr = withTightSpacing(sourcePPr).replace(/<w:color [^>]*\/>/g, "");
+  if (align) pPr = pPr.replace(/<w:jc w:val="[a-z]+"\/>/, `<w:jc w:val="${align}"/>`);
+  rPr = rPr.replace(/<w:color [^>]*\/>/g, "");
   if (size) rPr = withSize(rPr, size);
   if (bold !== undefined) rPr = withBold(rPr, bold);
 
@@ -490,7 +496,7 @@ function tag(xml) {
       if (lastHeading === "ACHIEVEMENTS") {
         lastHeading = null;
         markPlaced("achievements");
-        return tbl.replace(CELL_RE, (tc) => setCellParagraphs(tc, ["{achievements}"], { size: SIZE.body, bold: false })) + tagParagraph("{/has_achievements}");
+        return tbl.replace(CELL_RE, (tc) => setCellParagraphs(tc, ["{achievements}"], { size: SIZE.body, bold: false, align: "left" })) + tagParagraph("{/has_achievements}");
       }
       return tbl;
     }

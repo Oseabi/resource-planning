@@ -248,10 +248,14 @@ class RowBuilder {
       if (hadBullet) cell.pendingBullet = true;
       return;
     }
+    // A bulleted paragraph keeps a bullet, normalised, so the text still
+    // says which lines were bullets and which were sub-headings: a duties
+    // cell has both, and the issued CV prints them differently.
+    const marked = cell.pendingBullet || hadBullet ? "• " + str : str;
     if (!cell.text) {
-      cell.text = str;
+      cell.text = marked;
     } else if (cell.pendingBullet || hadBullet) {
-      cell.text += "\n" + str;
+      cell.text += "\n" + marked;
     } else if (Math.abs(cell.lastY - item.y) <= BASELINE_TOLERANCE) {
       // Same line: one paragraph, and one word when the runs touch.
       const glued = Number.isFinite(cell.lastEndX) && item.x - cell.lastEndX < GLUE_TOLERANCE;

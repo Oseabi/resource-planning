@@ -188,11 +188,30 @@ describe("missingTemplateFields", () => {
   });
 });
 
+describe("the built template", () => {
+  it("prints nothing in white, and prints the achievements left-aligned", () => {
+    // The source's empty OTHER ACHIEVEMENTS cell carries a white, centred
+    // paragraph mark. A template built from it once rendered every
+    // achievement invisible, which no text-level check can see.
+    const zip = new PizZip(buildTippCv(candidate(), CONTEXT));
+    const xml = zip.file("word/document.xml")!.asText();
+    const cells = xml.match(/<w:tc>[\s\S]*?<\/w:tc>/g) ?? [];
+    const withText = cells.filter((c) => /<w:t[^>]*>[^<]+<\/w:t>/.test(c));
+    expect(withText.length).toBeGreaterThan(10);
+    for (const cell of withText) {
+      expect(cell).not.toContain('w:color w:val="FFFFFF"');
+    }
+    const achievements = withText.find((c) => c.includes("Speaker at DevConf 2024"))!;
+    expect(achievements).toContain('<w:jc w:val="left"/>');
+  });
+});
+
 describe("cvFilename", () => {
   it("is safe to drop in a bid folder", () => {
-    expect(cvFilename("Nomsa Khumalo")).toBe("TippFocus - Nomsa Khumalo.docx");
-    expect(cvFilename("Dr Ayanda Cele (PhD)")).toBe("TippFocus - Dr Ayanda Cele PhD.docx");
-    expect(cvFilename("")).toBe("TippFocus - candidate.docx");
+    expect(cvFilename("Nomsa Khumalo")).toBe("TippFocus - Nomsa Khumalo.pdf");
+    expect(cvFilename("Nomsa Khumalo", "docx")).toBe("TippFocus - Nomsa Khumalo.docx");
+    expect(cvFilename("Dr Ayanda Cele (PhD)")).toBe("TippFocus - Dr Ayanda Cele PhD.pdf");
+    expect(cvFilename("")).toBe("TippFocus - candidate.pdf");
   });
 });
 
@@ -256,7 +275,8 @@ describe("round trip: generate, then read back with the template reader", () => 
     expect(first.client).toBe("Internal Platform");
     expect(first.title).toBe("DevOps Engineer");
     expect(first.is_current).toBe(true);
-    expect(first.description).toBe("Owns the Kubernetes platform\nRuns CI/CD tooling");
+    // Every duty is a bullet on the generated CV, and the reader says so.
+    expect(first.description).toBe("• Owns the Kubernetes platform\n• Runs CI/CD tooling");
 
     expect(second.company).toBe("AWS Cape Town");
     expect(second.client).toBeNull();

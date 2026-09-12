@@ -2,9 +2,13 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth/current-user";
 import { buildTippCv, cvFilename, type CvSource } from "@/lib/cv-export/build-tipp-cv";
+import { renderTippCvPdf } from "@/lib/cv-export/pdf/tipp-cv-pdf";
 import { loadAccountManager } from "@/lib/settings";
 
-const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const MIME = {
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+} as const;
 
 /** Every column the template prints. */
 const CV_COLUMNS =
@@ -22,13 +26,17 @@ const CV_COLUMNS =
  * always reflects the current record, and there is no stale copy to go out with
  * a bid by mistake. The cover page carries today's date and the account
  * manager from settings, and the file names the person who generated it.
+ *
+ * A PDF unless the body asks for "docx": the PDF is drawn to match the CVs
+ * the team issues and is what goes to a client; the Word file is the same
+ * content on the team's template, for anyone who wants to edit it first.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
   const profile = await getCurrentProfile();
   if (!profile) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
 
-  let body: { candidateId?: string; fields?: Partial<CvSource> };
+  let body: { candidateId?: string; fields?: Partial<CvSource>; format?: "pdf" | "docx" };
   try {
     body = await request.json();
   } catch {
@@ -72,14 +80,16 @@ export async function POST(request: Request) {
     );
   }
 
+  const format = body.format === "docx" ? "docx" : "pdf";
   let document: Buffer;
   try {
     const manager = await loadAccountManager();
-    document = buildTippCv(source, {
+    const context = {
       manager,
       asOf: new Date(),
       generatedBy: profile.fullName || profile.email || "TiPP Focus",
-    });
+    };
+    document = format === "docx" ? buildTippCv(source, context) : await renderTippCvPdf(source, context);
   } catch (e) {
     // A template error is a deployment problem, not something the user can fix,
     // so say so plainly rather than showing them a render trace.
@@ -92,8 +102,8 @@ export async function POST(request: Request) {
 
   return new NextResponse(new Uint8Array(document), {
     headers: {
-      "Content-Type": DOCX_MIME,
-      "Content-Disposition": `attachment; filename="${cvFilename(source.full_name)}"`,
+      "Content-Type": MIME[format],
+      "Content-Disposition": `attachment; filename="${cvFilename(source.full_name, format)}"`,
       "Content-Length": String(document.length),
     },
   });
