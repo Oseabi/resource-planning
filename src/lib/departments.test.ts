@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  defaultTenderDepartment,
   resolveTenderDepartment,
   resolveImportDepartment,
   departmentName,
@@ -96,6 +97,26 @@ describe("resolveTenderDepartment", () => {
       departments: DEPARTMENTS,
     });
     expect(result.error).toMatch(/Pick a department/);
+  });
+});
+
+describe("defaultTenderDepartment", () => {
+  const departments = [
+    { id: "r", name: "Tipp Resourcing", slug: "resourcing" },
+    { id: "c", name: "Tipp Consulting", slug: "consulting" },
+  ];
+
+  it("files an admin with no department of their own under Consulting", () => {
+    expect(defaultTenderDepartment(departments, null)).toBe("c");
+  });
+
+  it("leaves the choice open when the admin has a department, which the server falls back to", () => {
+    expect(defaultTenderDepartment(departments, "Tipp Resourcing")).toBeNull();
+  });
+
+  it("has nothing to offer when Consulting is not among the departments", () => {
+    expect(defaultTenderDepartment([departments[0]], null)).toBeNull();
+    expect(defaultTenderDepartment([], null)).toBeNull();
   });
 });
 

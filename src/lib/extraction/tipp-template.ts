@@ -327,24 +327,34 @@ const SKILL_PREAMBLE_RE =
  * anything.
  */
 export function expandSkillLine(line: string): string[] {
-  const trimmed = line.trim();
+  const trimmed = stripBullet(line);
   // Semicolons are the stronger separator: a line that uses them keeps its
   // commas inside the items.
   if (trimmed.includes(";")) {
     return trimmed
       .replace(SKILL_PREAMBLE_RE, "")
       .split(";")
-      .map((part) => part.replace(/\.$/, "").trim())
+      .map((part) => stripBullet(part.replace(/\.$/, "")))
       .filter((part) => part.length > 1);
   }
-  if (!trimmed.includes(",")) return [trimmed];
+  if (!trimmed.includes(",")) return trimmed.length > 0 ? [trimmed] : [];
 
   const body = trimmed.replace(SKILL_PREAMBLE_RE, "");
   return splitTopLevelCommas(body)
     .flatMap((part) => part.split(/\bas well as\b/i))
     // A list written "BPMN, EPC, or DMN" leaves the conjunction on the last item.
-    .map((part) => part.replace(/\.$/, "").replace(/^\s*(?:or|and)\s+/i, "").trim())
+    .map((part) => stripBullet(part.replace(/\.$/, "").replace(/^\s*(?:or|and)\s+/i, "")))
     .filter((part) => part.length > 1);
+}
+
+/**
+ * The bullet a skills cell was typed with, gone. A cell written as several
+ * bulleted items on one line ("• SQL; • Oracle; • DB2") carries a glyph at
+ * the head of every item, not only the first, and a skill named "• Oracle"
+ * matches nothing and prints as a bullet inside a semicolon list.
+ */
+function stripBullet(text: string): string {
+  return text.replace(/^[\s•▪●◦‣∙·*-]+/, "").trim();
 }
 
 /**

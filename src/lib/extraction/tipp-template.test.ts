@@ -357,6 +357,16 @@ describe("expandSkillLine", () => {
     ]);
   });
 
+  it("drops the bullet every item was typed with, not only the first", () => {
+    expect(expandSkillLine("• DoD Architecture Framework; • Zachman Framework; • Gartner EA Method")).toEqual([
+      "DoD Architecture Framework",
+      "Zachman Framework",
+      "Gartner EA Method",
+    ]);
+    expect(expandSkillLine("- Java, - Kotlin")).toEqual(["Java", "Kotlin"]);
+    expect(expandSkillLine("•")).toEqual([]);
+  });
+
   it("does not split inside brackets", () => {
     expect(expandSkillLine("Microsoft Server Support, Cloud Services (Azure, Office 365)")).toEqual([
       "Microsoft Server Support",

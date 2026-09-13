@@ -19,6 +19,19 @@ export interface DepartmentOption {
   slug?: string;
 }
 
+/**
+ * Where an admin's bid is filed when they have no department of their own
+ * and have not picked one: Tipp Consulting, which bids most of the work.
+ * A default on the form, not a rule on the server, so it shows in the
+ * Department field and can be changed before the save. For now.
+ */
+export const DEFAULT_TENDER_DEPARTMENT_SLUG = "consulting";
+
+export function defaultTenderDepartment(departments: DepartmentOption[], ownDepartmentName: string | null): string | null {
+  if (ownDepartmentName) return null;
+  return departments.find((d) => d.slug === DEFAULT_TENDER_DEPARTMENT_SLUG)?.id ?? null;
+}
+
 export interface TenderDepartmentInput {
   isAdmin: boolean;
   /** The department of the person doing the saving. Null for most admins. */
