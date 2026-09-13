@@ -36,19 +36,29 @@ export function TenderForm({
       setError("Title is required.");
       return;
     }
+    // An admin without a department of their own has nothing to fall back
+    // on; the server refuses the save, so this says so before the round trip.
+    if (mode === "create" && departments.length > 0 && !fields.department_id && !ownDepartmentName) {
+      setError("Pick a department for this tender.");
+      return;
+    }
     startTransition(async () => {
-      let result;
-      if (mode === "create") {
-        const fd = new FormData();
-        fd.set("payload", JSON.stringify(fields));
-        result = await createTender(fd);
-      } else {
-        result = await updateTender(tenderId!, fields);
-      }
-      if (result.error) setError(result.error);
-      else {
-        router.push(`/tenders/${result.id}`);
-        router.refresh();
+      try {
+        let result;
+        if (mode === "create") {
+          const fd = new FormData();
+          fd.set("payload", JSON.stringify(fields));
+          result = await createTender(fd);
+        } else {
+          result = await updateTender(tenderId!, fields);
+        }
+        if (result.error) setError(result.error);
+        else {
+          router.push(`/tenders/${result.id}`);
+          router.refresh();
+        }
+      } catch (e) {
+        setError(`Could not save the tender: ${e instanceof Error ? e.message : "the request failed"}.`);
       }
     });
   }

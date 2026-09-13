@@ -59,6 +59,8 @@ describe("buildTenderPrompt", () => {
     // The one thing every tender does that the reader must not: a points
     // band is not a minimum.
     expect(prompt).toMatch(/points band is not a minimum/);
+    // Reference letters that earn points rather than gate the bid still count.
+    expect(prompt).toMatch(/number that earns full points/);
     expect(prompt).not.toMatch(/\bvalue\b.*rand/);
   });
 });
@@ -259,5 +261,9 @@ describe("mergeTenderExtraction", () => {
     const merged = mergeTenderExtraction(local, ai);
     expect(merged.positions).toHaveLength(1);
     expect(merged.required_roles).toEqual(["Business Analyst"]);
+    // Once the model has read the roles, its silence on a tender-wide
+    // minimum is the answer; the local "11+ years" off a points table is not.
+    expect(merged.min_experience_years).toBeNull();
+    expect(mergeTenderExtraction(local, { ...ai, min_experience_years: 4 }).min_experience_years).toBe(4);
   });
 });
