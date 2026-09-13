@@ -40,7 +40,6 @@ function tender(over: Partial<TenderRow> = {}): TenderRow {
     id: crypto.randomUUID(),
     status: "draft",
     client: "Acme",
-    value: 100,
     submission_deadline: null,
     sectors: [],
     ...over,
@@ -138,43 +137,39 @@ describe("skillGaps", () => {
 
 describe("tenderPerformance", () => {
   const tenders = [
-    tender({ status: "won", value: 1000 }),
-    tender({ status: "won", value: 500 }),
-    tender({ status: "lost", value: 800 }),
-    tender({ status: "live", value: 200 }),
-    tender({ status: "submitted", value: 300 }),
+    tender({ status: "won" }),
+    tender({ status: "won" }),
+    tender({ status: "lost" }),
+    tender({ status: "live" }),
+    tender({ status: "submitted" }),
   ];
 
   it("computes win rate from decided bids only", () => {
     expect(tenderPerformance(tenders).winRate).toBe(67); // 2 of 3
   });
 
-  it("separates won, lost and pipeline value", () => {
+  it("counts each status", () => {
     const p = tenderPerformance(tenders);
-    expect(p.wonValue).toBe(1500);
-    expect(p.lostValue).toBe(800);
-    expect(p.pipelineValue).toBe(500); // live + submitted
-    expect(p.avgDealSize).toBe(750);
+    expect(p).toMatchObject({ won: 2, lost: 1, live: 1, submitted: 1, draft: 0 });
   });
 
   it("returns null rather than 0% when nothing is decided", () => {
     const p = tenderPerformance([tender({ status: "live" })]);
     expect(p.winRate).toBeNull();
-    expect(p.avgDealSize).toBeNull();
   });
 });
 
 describe("winRateByClient", () => {
-  it("tracks each client's record and won value", () => {
+  it("tracks each client's record", () => {
     const rows = winRateByClient([
-      tender({ client: "Eskom", status: "won", value: 100 }),
-      tender({ client: "Eskom", status: "lost", value: 900 }),
-      tender({ client: "TCTA", status: "won", value: 50 }),
+      tender({ client: "Eskom", status: "won" }),
+      tender({ client: "Eskom", status: "lost" }),
+      tender({ client: "TCTA", status: "won" }),
     ]);
     const eskom = rows.find((r) => r.client === "Eskom")!;
     expect(eskom.bids).toBe(2);
+    expect(eskom.won).toBe(1);
     expect(eskom.winRate).toBe(50);
-    expect(eskom.value).toBe(100); // only won value counts
     expect(rows.find((r) => r.client === "TCTA")!.winRate).toBe(100);
   });
 

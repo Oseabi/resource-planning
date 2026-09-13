@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   parseRfqText,
-  parseMoney,
   parseMinExperience,
   extractRequiredRoles,
   parseReferenceNumber,
@@ -53,17 +52,6 @@ describe("tenderBody", () => {
     const plain = tenderBody("We would like a quote for some work.\nPlease respond by Friday.");
     expect(plain.foundCore).toBe(false);
     expect(plain.core.length).toBeGreaterThan(0);
-  });
-});
-
-describe("parseMoney, word-boundary guards", () => {
-  it("does not read 'FURTHER 24 MONTHS' as R24 million", () => {
-    expect(parseMoney("RENEW FOR A FURTHER 24 MONTHS BASED ON PERFORMANCE")).toBeNull();
-  });
-  it("still parses genuine amounts", () => {
-    expect(parseMoney("R 12,500,000")).toBe(12_500_000);
-    expect(parseMoney("R2.5 million")).toBe(2_500_000);
-    expect(parseMoney("$950k")).toBe(950_000);
   });
 });
 
@@ -196,10 +184,6 @@ describe("parseRfqText on a tabular front-page tender", () => {
     expect(f.required_roles).toContain("Project Manager");
     expect(f.required_roles).not.toContain("TCTA");
   });
-
-  it("reports no value rather than inventing one", () => {
-    expect(f.value).toBeNull();
-  });
 });
 
 describe("tenderBody on multi-level numbering", () => {
@@ -234,20 +218,6 @@ describe("client screening", () => {
   it("does not mistake a document-type acronym for the client", () => {
     const f = parseRfqText("Request for Proposals (RFP) for the appointment of a provider.\n");
     expect(f.client).toBeNull();
-  });
-});
-
-describe("value is only taken from a labelled field", () => {
-  it("ignores background prose mentioning large amounts", () => {
-    const f = parseRfqText(
-      "SCOPE OF WORK\nAs at 31 March 2025, the fund's assets were over R2.69 trillion.\n",
-    );
-    expect(f.value).toBeNull();
-  });
-
-  it("still reads an explicitly labelled value", () => {
-    const f = parseRfqText("Estimated Contract Value: R 12,500,000\nSCOPE OF WORK\nBuild it.\n");
-    expect(f.value).toBe(12_500_000);
   });
 });
 
@@ -290,10 +260,6 @@ describe("parseRfqText on a full government tender", () => {
 
   it("lifts the bid number out of the SBD1 page", () => {
     expect(f.reference_number).toBe("H004L2705RFP00048");
-  });
-
-  it("does not mistake the preference-points threshold for the contract value", () => {
-    expect(f.value).toBeNull();
   });
 
   it("extracts the full required team", () => {

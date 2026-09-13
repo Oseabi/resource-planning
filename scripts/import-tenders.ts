@@ -274,7 +274,6 @@ async function main() {
       reference_number: p.row.reference_number,
       client: p.row.client,
       location: p.row.location,
-      value: p.row.value,
       submission_deadline: p.row.submission_deadline,
       contract_start_date: p.row.contract_start_date,
       contract_end_date: p.row.contract_end_date,

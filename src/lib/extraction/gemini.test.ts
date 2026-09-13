@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { extractTenderWithGemini, isGeminiConfigured, buildTenderRequest, geminiModel } from "@/lib/extraction/gemini";
+import {
+  extractTenderWithGemini,
+  isGeminiConfigured,
+  buildTenderRequest,
+  geminiModel,
+  geminiModels,
+  DEFAULT_GEMINI_MODELS,
+} from "@/lib/extraction/gemini";
 
 /**
  * The fetch layer, with the network replaced.
@@ -30,17 +37,56 @@ let calls: { url: string; init: RequestInit }[] = [];
 beforeEach(() => {
   calls = [];
   vi.stubEnv("GEMINI_API_KEY", "test-key");
+  // One model unless a test says otherwise: the chain has its own tests.
+  vi.stubEnv("GEMINI_MODEL", "gemini-test");
 });
+
+/** A 429 body the way Google writes one, for the per-minute or the per-day quota. */
+function rateLimited(daily: boolean) {
+  return answer(
+    {
+      error: {
+        code: 429,
+        message: "You exceeded your current quota",
+        status: "RESOURCE_EXHAUSTED",
+        details: [
+          {
+            "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+            violations: [
+              {
+                quotaId: daily ? "GenerateRequestsPerDayPerProjectPerModel-FreeTier" : "GenerateRequestsPerMinutePerProjectPerModel-FreeTier",
+                quotaValue: daily ? "20" : "5",
+              },
+            ],
+          },
+          { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "35s" },
+        ],
+      },
+    },
+    429,
+  );
+}
 
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
-function stubFetch(respond: () => Response | Promise<Response>) {
+function stubFetch(respond: (init: RequestInit) => Response | Promise<Response>) {
   vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
     calls.push({ url, init });
-    return respond();
+    return respond(init);
+  });
+}
+
+/** A fetch that never answers and, like the real one, rejects when its signal aborts. */
+function hangingFetch(init: RequestInit): Promise<Response> {
+  return new Promise((_, reject) => {
+    init.signal?.addEventListener("abort", () => {
+      const err = new Error("aborted");
+      err.name = "AbortError";
+      reject(err);
+    });
   });
 }
 
@@ -49,6 +95,17 @@ describe("isGeminiConfigured", () => {
     expect(isGeminiConfigured()).toBe(true);
     vi.stubEnv("GEMINI_API_KEY", "");
     expect(isGeminiConfigured()).toBe(false);
+  });
+});
+
+describe("geminiModels", () => {
+  it("reads one model or a comma-separated chain, and falls back to the default chain", () => {
+    expect(geminiModels()).toEqual(["gemini-test"]);
+    vi.stubEnv("GEMINI_MODEL", " gemini-a , gemini-b,,gemini-c ");
+    expect(geminiModels()).toEqual(["gemini-a", "gemini-b", "gemini-c"]);
+    expect(geminiModel()).toBe("gemini-a");
+    vi.stubEnv("GEMINI_MODEL", "");
+    expect(geminiModels()).toEqual([...DEFAULT_GEMINI_MODELS]);
   });
 });
 
@@ -118,6 +175,8 @@ describe("extractTenderWithGemini", () => {
       expect(out.fields.positions[0].role).toBe("Business Analyst");
       expect(out.usage).toEqual({ promptTokens: 1200, outputTokens: 300 });
       expect(out.note).toBeUndefined();
+      expect(out.model).toBe("gemini-test");
+      expect(out.fallbacks).toEqual([]);
     }
   });
 
@@ -150,6 +209,15 @@ describe("extractTenderWithGemini", () => {
     );
     const out = await extractTenderWithGemini({ text: TEXT });
     expect(out).toEqual({ ok: false, reason: "Gemini rate limit reached, try again in 17s" });
+  });
+
+  it("names the daily limit when that is the one hit, rather than repeating a retry hint that is wrong", async () => {
+    stubFetch(() => rateLimited(true));
+    const out = await extractTenderWithGemini({ text: TEXT });
+    expect(out).toEqual({
+      ok: false,
+      reason: "Gemini daily free limit used up (20 requests a day for this model, back at midnight Pacific time)",
+    });
   });
 
   it("tries once more without the thinking setting when a model refuses it", async () => {
@@ -192,23 +260,98 @@ describe("extractTenderWithGemini", () => {
       throw new Error("getaddrinfo ENOTFOUND");
     });
     const out = await extractTenderWithGemini({ text: TEXT });
-    expect(out).toEqual({ ok: false, reason: "getaddrinfo ENOTFOUND" });
+    expect(out).toEqual({ ok: false, reason: "Gemini could not be reached: getaddrinfo ENOTFOUND" });
   });
 
   it("reports a timeout in words", async () => {
     vi.useFakeTimers();
-    stubFetch(
-      () =>
-        new Promise((_, reject) => {
-          const err = new Error("aborted");
-          err.name = "AbortError";
-          setTimeout(() => reject(err), 60_000);
-        }),
-    );
+    stubFetch(hangingFetch);
     const pending = extractTenderWithGemini({ text: TEXT });
     await vi.advanceTimersByTimeAsync(60_000);
     const out = await pending;
     vi.useRealTimers();
-    expect(out).toEqual({ ok: false, reason: "Gemini did not answer within 50s" });
+    expect(out).toEqual({ ok: false, reason: "Gemini did not answer within 52s" });
+  });
+});
+
+describe("the model chain", () => {
+  beforeEach(() => {
+    vi.stubEnv("GEMINI_MODEL", "gemini-a,gemini-b,gemini-c");
+  });
+
+  it("moves to the next model when one is out of quota, and says so", async () => {
+    let n = 0;
+    stubFetch(() => (n++ === 0 ? rateLimited(true) : completion({ title: "Read by the second" })));
+    const out = await extractTenderWithGemini({ text: TEXT });
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.model).toBe("gemini-b");
+      expect(out.fields.title).toBe("Read by the second");
+      expect(out.fallbacks).toEqual(["gemini-a: daily free limit used up (20 requests a day for this model, back at midnight Pacific time)"]);
+    }
+    expect(calls.map((c) => c.url)).toEqual([
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-a:generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-b:generateContent",
+    ]);
+  });
+
+  it("moves on from a retired model and an overloaded one", async () => {
+    let n = 0;
+    stubFetch(() => {
+      n += 1;
+      if (n === 1) return answer({ error: { code: 404, message: "models/gemini-a is not found", status: "NOT_FOUND" } }, 404);
+      if (n === 2) return answer({ error: { code: 503, message: "This model is currently experiencing high demand", status: "UNAVAILABLE" } }, 503);
+      return completion({ title: "Third time" });
+    });
+    const out = await extractTenderWithGemini({ text: TEXT });
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.model).toBe("gemini-c");
+      expect(out.fallbacks).toEqual([
+        "gemini-a: 404: models/gemini-a is not found",
+        "gemini-b: 503: This model is currently experiencing high demand",
+      ]);
+    }
+  });
+
+  it("reports every model's reason when none of them answers", async () => {
+    let n = 0;
+    stubFetch(() => (n++ === 0 ? rateLimited(false) : rateLimited(true)));
+    const out = await extractTenderWithGemini({ text: TEXT });
+    expect(out).toEqual({
+      ok: false,
+      reason:
+        "Gemini could not read the document (gemini-a: rate limit reached, try again in 35s; " +
+        "gemini-b: daily free limit used up (20 requests a day for this model, back at midnight Pacific time); " +
+        "gemini-c: daily free limit used up (20 requests a day for this model, back at midnight Pacific time))",
+    });
+    expect(calls).toHaveLength(3);
+  });
+
+  it("stops at a bad key rather than asking every model", async () => {
+    stubFetch(() => answer({ error: { code: 400, message: "API key not valid. Please pass a valid API key.", status: "INVALID_ARGUMENT" } }, 400));
+    const out = await extractTenderWithGemini({ text: TEXT });
+    // Not a thinking-setting refusal, so no retry on the same model, and the chain stops.
+    expect(calls).toHaveLength(1);
+    expect(out).toEqual({
+      ok: false,
+      reason: "Gemini could not read the document (gemini-a: 400: API key not valid. Please pass a valid API key.; 2 more not tried, no time left)",
+    });
+  });
+
+  it("cuts a hanging model off so the next one gets the time left, and stops when none is left", async () => {
+    vi.useFakeTimers();
+    stubFetch(hangingFetch);
+    const pending = extractTenderWithGemini({ text: TEXT });
+    await vi.advanceTimersByTimeAsync(60_000);
+    const out = await pending;
+    vi.useRealTimers();
+    // Thirty-five seconds for the first, the seventeen left for the second, nothing for the third.
+    expect(calls).toHaveLength(2);
+    expect(out).toEqual({
+      ok: false,
+      reason:
+        "Gemini could not read the document (gemini-a: did not answer within 35s; gemini-b: did not answer within 17s; 1 more not tried, no time left)",
+    });
   });
 });

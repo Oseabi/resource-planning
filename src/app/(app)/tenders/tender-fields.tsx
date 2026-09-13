@@ -2,6 +2,7 @@
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -33,7 +34,7 @@ export const EMPTY_TENDER: TenderFormFields = {
   reference_number: null,
   client: null,
   location: null,
-  value: null,
+  summary: null,
   submission_deadline: null,
   contract_start_date: null,
   contract_end_date: null,
@@ -83,9 +84,21 @@ export function TenderFields({
           <Field label="Location" htmlFor="tf-location" highlight={extracted.location}>
             <Input id="tf-location" value={value.location ?? ""} onChange={(e) => set("location", e.target.value || null)} />
           </Field>
-          <Field label="Value" htmlFor="tf-value" highlight={extracted.value}>
-            <Input id="tf-value" type="number" min={0} step="0.01" value={value.value ?? ""} onChange={(e) => set("value", e.target.value === "" ? null : Number(e.target.value))} placeholder="e.g. 12500000" />
-          </Field>
+          {/* The document in a paragraph: what is being bought, for how long,
+              how it is scored, what to attach. Read off the document by the AI
+              and shown at the top of the tender, so the team does not open a
+              two-hundred-page PDF to answer "what is this one". */}
+          <div className="sm:col-span-2">
+            <Field label="Summary" htmlFor="tf-summary" highlight={extracted.summary}>
+              <Textarea
+                id="tf-summary"
+                rows={value.summary ? 6 : 3}
+                value={value.summary ?? ""}
+                onChange={(e) => set("summary", e.target.value || null)}
+                placeholder="What is being procured, the contract period, how bids are evaluated and what must be submitted for the people proposed..."
+              />
+            </Field>
+          </div>
           <Field label="Submission deadline" htmlFor="tf-deadline" highlight={extracted.submission_deadline}>
             <Input id="tf-deadline" type="date" value={value.submission_deadline ?? ""} onChange={(e) => set("submission_deadline", e.target.value || null)} />
           </Field>

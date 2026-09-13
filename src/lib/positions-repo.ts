@@ -188,6 +188,7 @@ export async function loadPositionViews(
     minExperienceYears: position.min_experience_years,
     requiredSkills: position.required_skills,
     requiredCertifications: position.required_certifications,
+    notes: position.notes ?? null,
     filled: (assignedByPosition.get(position.id) ?? []).length,
     assigned: assignedByPosition.get(position.id) ?? [],
     matches: (matchRows ?? [])

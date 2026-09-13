@@ -18,15 +18,43 @@ import { buildTenderPrompt, coerceTenderAi, truncateTenderText, TENDER_SCHEMA, t
  */
 
 /**
- * The model, read at call time so a deployment can move to a newer one
- * without a change here. The default is the one Google's API itself pointed
- * new keys at when it retired gemini-2.5-flash.
+ * The models to try, in this order, when GEMINI_MODEL names none.
+ *
+ * The free tier allows each model twenty requests a day, and a model can be
+ * retired, overloaded or slow on any given afternoon. One model is a
+ * document that does not get read; three in a row are sixty documents a
+ * day and a quiet failover when Google is having a bad one. Ordered by how
+ * each read the same set of real tenders: 3.6-flash read every one, 3.7-flash
+ * answered "high demand" to half of them on the same morning, and the lite
+ * model reads the roles but little of the detail.
  */
-export const geminiModel = (): string => process.env.GEMINI_MODEL?.trim() || "gemini-3.6-flash";
+export const DEFAULT_GEMINI_MODELS = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite"] as const;
+
+/** The chain, read at call time: GEMINI_MODEL may name one model or several separated by commas. */
+export const geminiModels = (): string[] => {
+  const named = (process.env.GEMINI_MODEL ?? "")
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
+  return named.length > 0 ? named : [...DEFAULT_GEMINI_MODELS];
+};
+/** The first choice, which is what the audit trail names before the call is made. */
+export const geminiModel = (): string => geminiModels()[0];
+/** How hard the model thinks before answering: low reads a document well and fast; high for when it does not. */
+export const geminiThinkingLevel = (): string => process.env.GEMINI_THINKING?.trim() || "low";
 export const geminiEndpoint = (model: string): string =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-/** A long document takes a while to read; the route allows sixty seconds in all. */
-const TIMEOUT_MS = 50_000;
+/** A long document takes a while to read; the route allows sixty seconds in all, shared across the chain. */
+const TIMEOUT_MS = 52_000;
+/**
+ * The most a model gets while another waits behind it. A hundred-page PDF
+ * takes a healthy model thirty seconds; one that has not answered in
+ * thirty-five is hanging, and the time left is better spent on the next.
+ * The last model in the chain gets whatever remains.
+ */
+const ATTEMPT_MS = 35_000;
+/** Below this there is no point starting another model: a document takes ten seconds or more to read. */
+const MIN_ATTEMPT_MS = 8_000;
 /** Base64 grows a file by a third, and the request may not pass twenty megabytes. */
 const MAX_PDF_BYTES = 14 * 1024 * 1024;
 
@@ -35,7 +63,17 @@ export function isGeminiConfigured(): boolean {
 }
 
 export type TenderAiResult =
-  | { ok: true; fields: TenderAiFields; truncated: boolean; note?: string; usage?: { promptTokens: number; outputTokens: number } }
+  | {
+      ok: true;
+      /** The model that answered. */
+      model: string;
+      fields: TenderAiFields;
+      truncated: boolean;
+      note?: string;
+      usage?: { promptTokens: number; outputTokens: number };
+      /** Models earlier in the chain that could not, and why. */
+      fallbacks: string[];
+    }
   | { ok: false; reason: string };
 
 export interface TenderDocument {
@@ -71,12 +109,14 @@ export function buildTenderRequest(
         temperature: 0,
         responseMimeType: "application/json",
         responseSchema: TENDER_SCHEMA,
-        maxOutputTokens: 8192,
+        // Ten seats, each with a paragraph of experience and one of scoring,
+        // plus the brief: a few thousand tokens. Room for a thirty-seat RFP.
+        maxOutputTokens: 16384,
         // Reading, not reasoning: at the low level the model spends no
         // thinking tokens on this, which on the CV side were what cut the
         // answer off. A model generation that does not know the setting
         // refuses the request, and the call is made again without it.
-        ...(thinking ? { thinkingConfig: { thinkingLevel: "low" } } : {}),
+        ...(thinking ? { thinkingConfig: { thinkingLevel: geminiThinkingLevel() } } : {}),
       },
     },
   };
@@ -86,7 +126,12 @@ interface GeminiResponse {
   candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
   promptFeedback?: { blockReason?: string };
   usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
-  error?: { code?: number; message?: string; status?: string; details?: { retryDelay?: string }[] };
+  error?: {
+    code?: number;
+    message?: string;
+    status?: string;
+    details?: { retryDelay?: string; violations?: { quotaId?: string; quotaValue?: string }[] }[];
+  };
 }
 
 /**
@@ -128,73 +173,143 @@ function parseAnswer(text: string): unknown | null {
 }
 
 /**
+ * A 429 in words. The free tier has two limits, a few requests a minute
+ * and twenty a day for each model, and the body only says which through a
+ * quota id; the retry hint on the daily one says thirty seconds, which is
+ * not when it comes back.
+ */
+function rateLimitReason(data: GeminiResponse | null): string {
+  const violations = data?.error?.details?.flatMap((d) => d.violations ?? []) ?? [];
+  const daily = violations.find((v) => /PerDay/i.test(v.quotaId ?? ""));
+  if (daily) {
+    const allowance = daily.quotaValue ? `${daily.quotaValue} requests a day` : "the daily allowance";
+    return `daily free limit used up (${allowance} for this model, back at midnight Pacific time)`;
+  }
+  const retry = data?.error?.details?.find((d) => d.retryDelay)?.retryDelay;
+  return `rate limit reached${retry ? `, try again in ${retry}` : ""}`;
+}
+
+/** What one model made of the document: an answer, or a reason and whether the next model should be asked. */
+type Attempt =
+  | { kind: "answered"; data: GeminiResponse; truncated: boolean }
+  | { kind: "next" | "stop"; reason: string };
+
+/**
  * Ask the model to read a tender document.
  *
- * The answer is coerced field by field, because a schema is a promise about
- * the model and not about the network in between, and an answer cut off at
- * the output limit is used as far as it goes rather than thrown away.
+ * The models in the chain are asked in turn until one answers, within one
+ * shared time budget. A model that is out of quota, retired or overloaded
+ * hands on to the next; a bad key or a dead network stops the chain, since
+ * the next model would only say the same. The answer is coerced field by
+ * field, because a schema is a promise about the model and not about the
+ * network in between, and an answer cut off at the output limit is used as
+ * far as it goes rather than thrown away.
  */
 export async function extractTenderWithGemini(doc: TenderDocument): Promise<TenderAiResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return { ok: false, reason: "GEMINI_API_KEY is not set" };
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  const send = (thinking: boolean) => {
-    const { body, truncated } = buildTenderRequest(doc, { thinking });
-    return fetch(geminiEndpoint(geminiModel()), {
-      method: "POST",
-      signal: controller.signal,
-      headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }).then(async (res) => ({ res, truncated, data: (await res.json().catch(() => null)) as GeminiResponse | null }));
+  const deadline = Date.now() + TIMEOUT_MS;
+  // The PDF is base64-encoded once per setting, not once per model.
+  const bodies = new Map<boolean, ReturnType<typeof buildTenderRequest>>();
+  const request = (thinking: boolean) => {
+    let built = bodies.get(thinking);
+    if (!built) {
+      built = buildTenderRequest(doc, { thinking });
+      bodies.set(thinking, built);
+    }
+    return built;
   };
 
-  try {
-    let { res, data, truncated } = await send(true);
-    // The thinking setting is the one part of the request that differs
-    // between model generations. Refused, it is dropped and the call made
-    // once more, rather than a whole generation of models being unusable.
-    if (res.status === 400 && /argument/i.test(data?.error?.message ?? "")) {
-      ({ res, data, truncated } = await send(false));
-    }
-
-    if (res.status === 429) {
-      const retry = data?.error?.details?.find((d) => d.retryDelay)?.retryDelay;
-      return { ok: false, reason: `Gemini rate limit reached${retry ? `, try again in ${retry}` : ""}` };
-    }
-    if (!res.ok) {
-      const message = data?.error?.message ?? "";
-      return { ok: false, reason: `Gemini ${res.status}: ${message.slice(0, 200)}` };
-    }
-    if (data?.promptFeedback?.blockReason) {
-      return { ok: false, reason: `Gemini declined the document: ${data.promptFeedback.blockReason}` };
-    }
-
-    const candidate = data?.candidates?.[0];
-    const text = candidate?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-    if (!text.trim()) return { ok: false, reason: "Gemini returned no content" };
-
-    const parsed = parseAnswer(text);
-    if (parsed === null) return { ok: false, reason: "Gemini returned something that was not JSON" };
-
-    const cutOff = candidate?.finishReason === "MAX_TOKENS";
-    return {
-      ok: true,
-      fields: coerceTenderAi(parsed),
-      truncated,
-      ...(cutOff ? { note: "The AI's answer ran past its length limit; what it did give was used and the local parser filled the gaps." } : {}),
-      usage: {
-        promptTokens: data?.usageMetadata?.promptTokenCount ?? 0,
-        outputTokens: data?.usageMetadata?.candidatesTokenCount ?? 0,
-      },
+  const ask = async (model: string, last: boolean): Promise<Attempt> => {
+    const controller = new AbortController();
+    const allowed = Math.max(0, Math.min(deadline - Date.now(), last ? Infinity : ATTEMPT_MS));
+    const timer = setTimeout(() => controller.abort(), allowed);
+    const send = async (thinking: boolean) => {
+      const { body, truncated } = request(thinking);
+      const res = await fetch(geminiEndpoint(model), {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      return { res, truncated, data: (await res.json().catch(() => null)) as GeminiResponse | null };
     };
-  } catch (e) {
-    if (e instanceof Error && e.name === "AbortError") {
-      return { ok: false, reason: `Gemini did not answer within ${TIMEOUT_MS / 1000}s` };
+
+    try {
+      let { res, data, truncated } = await send(true);
+      // The thinking setting is the one part of the request that differs
+      // between model generations. Refused, it is dropped and the call made
+      // once more, rather than a whole generation of models being unusable.
+      if (res.status === 400 && /argument/i.test(data?.error?.message ?? "")) {
+        ({ res, data, truncated } = await send(false));
+      }
+
+      if (res.status === 429) return { kind: "next", reason: rateLimitReason(data) };
+      if (!res.ok) {
+        const message = (data?.error?.message ?? "").slice(0, 200);
+        // Not there, or not coping: the next model may be. Anything else,
+        // a bad key say, is true of every model.
+        const kind = res.status === 404 || res.status >= 500 ? "next" : "stop";
+        return { kind, reason: `${res.status}: ${message}` };
+      }
+      if (data?.promptFeedback?.blockReason) {
+        return { kind: "next", reason: `declined the document: ${data.promptFeedback.blockReason}` };
+      }
+      const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+      if (!text.trim()) return { kind: "next", reason: "returned no content" };
+      return { kind: "answered", data: data!, truncated };
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") {
+        return { kind: "next", reason: `did not answer within ${Math.round(allowed / 1000)}s` };
+      }
+      return { kind: "stop", reason: `could not be reached: ${e instanceof Error ? e.message : "call failed"}` };
+    } finally {
+      clearTimeout(timer);
     }
-    return { ok: false, reason: e instanceof Error ? e.message : "Gemini call failed" };
-  } finally {
-    clearTimeout(timer);
+  };
+
+  const models = geminiModels();
+  const failed: { model: string; reason: string }[] = [];
+  let notTried = 0;
+  for (const [i, model] of models.entries()) {
+    if (i > 0 && deadline - Date.now() < MIN_ATTEMPT_MS) {
+      notTried = models.length - i;
+      break;
+    }
+    const attempt = await ask(model, i === models.length - 1);
+    if (attempt.kind === "answered") {
+      const candidate = attempt.data.candidates?.[0];
+      const text = candidate?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+      const parsed = parseAnswer(text);
+      if (parsed === null) {
+        failed.push({ model, reason: "returned something that was not JSON" });
+        continue;
+      }
+      const cutOff = candidate?.finishReason === "MAX_TOKENS";
+      return {
+        ok: true,
+        model,
+        fields: coerceTenderAi(parsed),
+        truncated: attempt.truncated,
+        ...(cutOff ? { note: "The AI's answer ran past its length limit; what it did give was used and the local parser filled the gaps." } : {}),
+        usage: {
+          promptTokens: attempt.data.usageMetadata?.promptTokenCount ?? 0,
+          outputTokens: attempt.data.usageMetadata?.candidatesTokenCount ?? 0,
+        },
+        fallbacks: failed.map((f) => `${f.model}: ${f.reason}`),
+      };
+    }
+    failed.push({ model, reason: attempt.reason });
+    if (attempt.kind === "stop") {
+      notTried = models.length - i - 1;
+      break;
+    }
   }
+
+  // One model: its reason, plainly. A chain: each model's reason in turn,
+  // so the log says which limit was hit where.
+  if (models.length === 1) return { ok: false, reason: `Gemini ${failed[0].reason}` };
+  const rest = notTried > 0 ? `; ${notTried} more not tried, no time left` : "";
+  return { ok: false, reason: `Gemini could not read the document (${failed.map((f) => `${f.model}: ${f.reason}`).join("; ")}${rest})` };
 }

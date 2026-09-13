@@ -5,6 +5,7 @@ import {
   coerceTenderAi,
   mergeTenderExtraction,
   endDateFrom,
+  seatNotes,
   truncateTenderText,
   TENDER_TEXT_CHAR_CAP,
 } from "@/lib/extraction/tender-ai";
@@ -29,6 +30,16 @@ describe("TENDER_SCHEMA", () => {
     expect(requiresEverything(TENDER_SCHEMA)).toBe(true);
     // Upper-case types throughout, which is what the API accepts.
     expect(JSON.stringify(TENDER_SCHEMA)).not.toMatch(/"type":"(string|number|object|array|integer)"/);
+    // No rand value: the field went from the form.
+    expect(TENDER_SCHEMA.properties).not.toHaveProperty("value");
+  });
+
+  it("asks for the brief and for each seat's paragraphs, not only its lists", () => {
+    expect(TENDER_SCHEMA.properties).toHaveProperty("summary");
+    const seat = TENDER_SCHEMA.properties.positions.items.properties;
+    for (const key of ["document_title", "experience", "evaluation", "duration", "notes"]) {
+      expect(seat).toHaveProperty(key);
+    }
   });
 });
 
@@ -38,6 +49,47 @@ describe("buildTenderPrompt", () => {
     expect(prompt).toContain("Business Analyst");
     expect(prompt).toMatch(/Never guess/);
     expect(prompt).toContain("YYYY-MM-DD");
+  });
+
+  it("sends the model to every place a tender keeps its people", () => {
+    const prompt = buildTenderPrompt();
+    for (const place of ["mandatory", "evaluation criteria", "returnable documents", "pricing schedule", "scope of work"]) {
+      expect(prompt).toContain(place);
+    }
+    // The one thing every tender does that the reader must not: a points
+    // band is not a minimum.
+    expect(prompt).toMatch(/points band is not a minimum/);
+    expect(prompt).not.toMatch(/\bvalue\b.*rand/);
+  });
+});
+
+describe("seatNotes", () => {
+  it("composes the document's words on a seat into labelled lines, leaving blanks out", () => {
+    expect(
+      seatNotes({
+        role: "Enterprise Architect",
+        document_title: "Lead Enterprise Architect, Form B2.1",
+        experience: "Leads the EA workstream across all domains.",
+        evaluation: "10 points on the CV and certifications attached to Form B2.1.",
+        duration: "17 person-months",
+        required_qualifications: ["TOGAF 9 certified"],
+        notes: "On site in Pretoria.",
+      }),
+    ).toBe(
+      [
+        "In the document: Lead Enterprise Architect, Form B2.1",
+        "Experience: Leads the EA workstream across all domains.",
+        "Scoring: 10 points on the CV and certifications attached to Form B2.1.",
+        "Duration: 17 person-months",
+        "Qualifications: TOGAF 9 certified",
+        "On site in Pretoria.",
+      ].join("\n"),
+    );
+  });
+
+  it("does not repeat a title that is only the role again, and is nothing when there is nothing", () => {
+    expect(seatNotes({ role: "Project Manager", document_title: "project manager", experience: null, evaluation: null, duration: null, required_qualifications: [], notes: null })).toBeNull();
+    expect(seatNotes({ role: "Project Manager", document_title: null, experience: "Ran cloud migrations.", evaluation: null, duration: null, required_qualifications: [], notes: null })).toBe("Experience: Ran cloud migrations.");
   });
 });
 
@@ -59,7 +111,6 @@ describe("coerceTenderAi", () => {
       reference_number: "RFP 03/2026",
       client: "Government Pensions Administration Agency",
       location: "Pretoria",
-      value: 4500000,
       submission_deadline: "2026-10-15",
       contract_start_date: "2026-11-01",
       contract_end_date: null,
@@ -86,18 +137,68 @@ describe("coerceTenderAi", () => {
     expect(out.required_roles).toEqual(["Business Analyst", "Project Manager"]);
     expect(out.contract_duration_months).toBe(36);
     expect(out.reference_letters_required).toBe(3);
+    // The seat's paragraphs are kept as read and composed into its notes.
+    expect(out.positions[1].notes).toBe("Must be on site");
+    expect(out.positions[1].document_title).toBeNull();
+  });
+
+  it("composes each seat's notes from what the document says about it, and reads the brief", () => {
+    const out = coerceTenderAi({
+      summary: "  SANRAL wants an EA and BPM capability over 24 months.  ",
+      positions: [
+        {
+          role: "enterprise architect",
+          document_title: "Lead Enterprise Architect (Form B2.1)",
+          quantity: 1,
+          min_experience_years: null,
+          required_skills: ["TOGAF"],
+          required_certifications: ["togaf"],
+          required_qualifications: [],
+          experience: "Leads all architecture domains.",
+          evaluation: "10 points; detailed CV and certifications on Form B2.1.",
+          duration: "17 person-months",
+          notes: null,
+        },
+      ],
+    });
+    expect(out.summary).toBe("SANRAL wants an EA and BPM capability over 24 months.");
+    expect(out.positions[0].role).toBe("Enterprise Architect");
+    expect(out.positions[0].notes).toBe(
+      [
+        "In the document: Lead Enterprise Architect (Form B2.1)",
+        "Experience: Leads all architecture domains.",
+        "Scoring: 10 points; detailed CV and certifications on Form B2.1.",
+        "Duration: 17 person-months",
+      ].join("\n"),
+    );
+  });
+
+  it("keeps one seat when the document names the same one twice, and two when they only share a role", () => {
+    const out = coerceTenderAi({
+      positions: [
+        { role: "Project Manager", document_title: "Project Manager, Form B4", quantity: 1, experience: "From the evaluation table." },
+        { role: "project manager", document_title: "Project Manager, Form B4", quantity: 2, experience: "From the pricing schedule." },
+        { role: "Functional Consultant", document_title: "D365 Finance & Operations Functional Consultant (item 4)", quantity: 1 },
+        { role: "Functional Consultant", document_title: "D365 CRM Functional Consultant (item 5)", quantity: 1 },
+      ],
+    });
+    expect(out.positions.map((p) => p.document_title)).toEqual([
+      "Project Manager, Form B4",
+      "D365 Finance & Operations Functional Consultant (item 4)",
+      "D365 CRM Functional Consultant (item 5)",
+    ]);
+    expect(out.positions[0].experience).toBe("From the evaluation table.");
+    expect(out.required_roles).toEqual(["Project Manager", "Functional Consultant"]);
   });
 
   it("drops what it cannot read rather than throwing", () => {
     const out = coerceTenderAi({
-      value: "R 2.5 million",
       submission_deadline: "31 February 2026",
       contract_start_date: "15 March 2026",
       min_experience_years: "five",
       positions: [{ quantity: 2 }, "nonsense", null],
       sectors: "Finance",
     });
-    expect(out.value).toBe(2_500_000);
     expect(out.submission_deadline).toBeNull();
     expect(out.contract_start_date).toBe("2026-03-15");
     expect(out.min_experience_years).toBeNull();
@@ -146,6 +247,9 @@ describe("mergeTenderExtraction", () => {
     // A period becomes an end date.
     expect(merged.contract_end_date).toBe("2028-03-31");
     expect(merged.positions).toBeUndefined();
+    // The local parser has no brief; the model's is carried, and nothing when it gave none.
+    expect(merged.summary).toBeNull();
+    expect(mergeTenderExtraction(local, { ...coerceTenderAi({}), summary: "A brief." }).summary).toBe("A brief.");
   });
 
   it("carries the model's positions, which the heuristics have no notion of", () => {

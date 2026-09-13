@@ -17,13 +17,6 @@ import { RfqUploadZone } from "@/app/(app)/tenders/rfq-upload-zone";
 import { loadDepartmentContext } from "@/lib/departments-repo";
 import { poolStrength } from "@/lib/matching";
 
-function formatValue(value: number | null): string {
-  if (value == null) return "-";
-  if (value >= 1_000_000) return `R${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `R${(value / 1_000).toFixed(0)}k`;
-  return `R${value}`;
-}
-
 function formatDate(iso: string | null): string {
   if (!iso) return "-";
   const d = new Date(iso + "T00:00:00");
@@ -38,7 +31,7 @@ export default async function TendersPage() {
   const [{ data: tenders }, departments] = await Promise.all([
     supabase
       .from("tenders")
-      .select("id, title, client, value, submission_deadline, status, contract_start_date, contract_end_date")
+      .select("id, title, client, submission_deadline, status, contract_start_date, contract_end_date")
       .order("created_at", { ascending: false }),
     loadDepartmentContext(),
   ]);
@@ -143,7 +136,6 @@ export default async function TendersPage() {
                   <TableRow>
                     <TableHead>Tender title</TableHead>
                     <TableHead>Client</TableHead>
-                    <TableHead>Value</TableHead>
                     <TableHead>Deadline</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Match strength</TableHead>
@@ -160,7 +152,6 @@ export default async function TendersPage() {
                           </Link>
                         </TableCell>
                         <TableCell className="text-muted-foreground">{t.client ?? "-"}</TableCell>
-                        <TableCell className="text-foreground">{formatValue(t.value)}</TableCell>
                         <TableCell className="text-foreground">{formatDate(t.submission_deadline)}</TableCell>
                         <TableCell>
                           <div className="flex flex-col items-start gap-1">
@@ -195,7 +186,7 @@ export default async function TendersPage() {
                         <div className="min-w-0">
                           <div className="truncate font-medium text-foreground">{t.title}</div>
                           <div className="truncate text-body-sm text-muted-foreground">
-                            {t.client ?? "-"} · {formatValue(t.value)} · Due {formatDate(t.submission_deadline)}
+                            {t.client ?? "-"} · Due {formatDate(t.submission_deadline)}
                           </div>
                         </div>
                         <div className="flex shrink-0 flex-col items-end gap-1">

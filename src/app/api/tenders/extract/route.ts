@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { extractDocumentText } from "@/lib/extraction/text";
 import { parseRfqText, emptyTenderFields, type ExtractedTenderFields } from "@/lib/extraction/rfq-parser";
-import { extractTenderWithGemini, geminiModel, isGeminiConfigured } from "@/lib/extraction/gemini";
+import { extractTenderWithGemini, geminiModels, isGeminiConfigured } from "@/lib/extraction/gemini";
 import { mergeTenderExtraction } from "@/lib/extraction/tender-ai";
 import { recordAudit } from "@/app/(app)/audit-actions";
 
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
       action: "sent_tender_for_ai_extraction",
       entityType: "tender_upload",
       entityLabel: file.name,
-      detail: { bytes: file.size, chars: rawText.length, provider: "gemini", model: geminiModel(), as_pdf: isPdf },
+      detail: { bytes: file.size, chars: rawText.length, provider: "gemini", model: geminiModels().join(", "), as_pdf: isPdf },
     });
 
     const ai = await extractTenderWithGemini({ text: rawText, pdf: isPdf ? Buffer.from(buffer) : null, filename: file.name });
@@ -91,9 +91,15 @@ export async function POST(request: Request) {
       } satisfies TenderExtraction);
     }
 
+    // Which model read it is worth a line when it was not the first choice:
+    // "why is this one thinner than yesterday's" has an answer then.
+    if (ai.fallbacks.length > 0) {
+      console.warn(`[tender extraction] ${file.name}: read by ${ai.model} after ${ai.fallbacks.join("; ")}`);
+    }
     const notes = [
       ai.truncated ? "The document was longer than the AI could read in one go, so only the first part went to it." : null,
       ai.note ?? null,
+      ai.fallbacks.length > 0 ? `Read by ${ai.model} (${ai.fallbacks.join("; ")}).` : null,
     ].filter((n): n is string => n !== null);
 
     return NextResponse.json({

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil, Briefcase, MapPin, CalendarClock, CalendarRange, Banknote, Clock } from "lucide-react";
+import { ArrowLeft, Pencil, Briefcase, MapPin, CalendarClock, CalendarRange, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { isCurrentUserAdmin } from "@/lib/auth/current-user";
@@ -25,13 +25,6 @@ import { DeliveryPanel } from "@/app/(app)/tenders/[id]/delivery-panel";
 import { SeatCoveragePanel } from "@/app/(app)/tenders/[id]/seat-coverage-panel";
 import { letterCoverage, coverageLabel } from "@/lib/reference-letters";
 import { FileCheck2 } from "lucide-react";
-
-function formatValue(value: number | null): string {
-  if (value == null) return "-";
-  if (value >= 1_000_000) return `R${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `R${(value / 1_000).toFixed(0)}k`;
-  return `R${value}`;
-}
 
 export default async function TenderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -102,7 +95,6 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
   if (tender.min_experience_years != null)
     tags.push({ icon: <Clock className="size-3.5" />, label: `${tender.min_experience_years}+ yrs` });
   if (tender.location) tags.push({ icon: <MapPin className="size-3.5" />, label: tender.location });
-  if (tender.value != null) tags.push({ icon: <Banknote className="size-3.5" />, label: formatValue(tender.value) });
   if (tender.submission_deadline)
     tags.push({ icon: <CalendarClock className="size-3.5" />, label: `Due ${tender.submission_deadline}` });
   // The contract window has been stored since the first migration and shown
@@ -158,6 +150,16 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
           {isAdmin && <DeleteTenderButton tenderId={tender.id} tenderTitle={tender.title} />}
         </div>
       </div>
+
+      {/* The document in a paragraph, read off it by the AI or written on the
+          form. Placed before the team, because "what is this one" comes
+          before "who do we put on it". */}
+      {tender.summary && (
+        <section className="rounded-lg border border-border bg-card p-4 shadow-card">
+          <h2 className="text-label-sm uppercase tracking-wide text-muted-foreground">About this bid</h2>
+          <p className="mt-2 whitespace-pre-wrap text-body-md text-foreground">{tender.summary}</p>
+        </section>
+      )}
 
       {/* Only once the bid is won. Before that the contract does not exist and
           the page is about assembling a team to bid with. */}

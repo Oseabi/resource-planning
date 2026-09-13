@@ -13,7 +13,6 @@ export interface ExtractedTenderFields {
   reference_number: string | null;
   client: string | null;
   location: string | null;
-  value: number | null;
   submission_deadline: string | null; // ISO yyyy-mm-dd
   contract_start_date: string | null; // ISO yyyy-mm-dd
   required_roles: string[];
@@ -28,11 +27,21 @@ export interface ExtractedTenderFields {
 
   contract_end_date?: string | null;
   reference_letters_required?: number | null;
+  /** A brief for the bid team: scope, period, evaluation, what to submit. */
+  summary?: string | null;
   /** The roles to staff, each with the bar the document sets for it. */
   positions?: TenderPosition[];
 }
 
-/** One role the buyer wants staffed, as a tender document states it. */
+/**
+ * One role the buyer wants staffed, as a tender document states it.
+ *
+ * The lists are what matching scores on. The four strings after them are
+ * what a person reads: a tender rarely sets a role out as a list, it sets
+ * it out as a paragraph in a mandatory-requirements table, a line in an
+ * evaluation table with points against it, and a form to attach the CV to.
+ * They are composed into the seat's notes for the form and the tender page.
+ */
 export interface TenderPosition {
   role: string;
   quantity: number;
@@ -41,7 +50,15 @@ export interface TenderPosition {
   required_certifications: string[];
   /** Degrees and diplomas the document requires for the role, as written. */
   required_qualifications: string[];
-  /** Anything else the document says about the seat, verbatim. */
+  /** The role as the document names it, with its form or item reference. */
+  document_title: string | null;
+  /** What the document requires the person to have done or to know, in its words. */
+  experience: string | null;
+  /** How the seat is scored and what must be attached: points, form, bands. */
+  evaluation: string | null;
+  /** How long or how much of the person is wanted, when stated. */
+  duration: string | null;
+  /** Everything above composed for a reader, plus anything else the document asks of the seat. */
   notes: string | null;
 }
 
@@ -51,7 +68,6 @@ export function emptyTenderFields(): ExtractedTenderFields {
     reference_number: null,
     client: null,
     location: null,
-    value: null,
     submission_deadline: null,
     contract_start_date: null,
     required_roles: [],
@@ -227,28 +243,6 @@ export function parseDateToIso(raw: string): string | null {
 }
 
 /**
- * Parse a monetary amount: "R 12,500,000", "R12.5m", "£4.2 million", "$950k",
- * "ZAR 3 000 000". Returns the numeric value (in plain units).
- */
-export function parseMoney(raw: string): number | null {
-  // The currency symbol must not be the tail of a word and the magnitude suffix
-  // must not be the head of one, otherwise "FURTHER 24 MONTHS" parses as
-  // R24 million (the "R" of FURTHER plus the "M" of MONTHS).
-  const m = raw.match(
-    /(?<![A-Za-z])(?:R|ZAR|£|\$|€|USD|GBP|EUR)\s*([\d][\d\s,.']*)(\s*(?:million|mil|bn|billion|[mk])\b)?/i,
-  );
-  if (!m) return null;
-  const numText = m[1].replace(/[\s,']/g, "");
-  let value = Number(numText);
-  if (Number.isNaN(value)) return null;
-  const suffix = (m[2] ?? "").trim().toLowerCase();
-  if (suffix === "k") value *= 1_000;
-  else if (suffix === "m" || suffix === "mil" || suffix === "million") value *= 1_000_000;
-  else if (suffix === "bn" || suffix === "billion") value *= 1_000_000_000;
-  return value;
-}
-
-/**
  * Value of the first line matching any of the label patterns ("Label: value").
  * Labels are tried in order across the whole document, so an earlier pattern in
  * the list always wins over a later one regardless of page order.
@@ -301,7 +295,6 @@ const CLIENT_LABELS = [
   // prose mid-document and produced sentence fragments as the client name.
 ];
 const LOCATION_LABELS = [/^location\b/i, /project location/i, /site location/i, /place of (?:work|performance)/i];
-const VALUE_LABELS = [/estimated (?:contract )?value/i, /contract value/i, /tender value/i, /budget/i, /project value/i];
 
 /**
  * Client from the invitation sentence, e.g.
@@ -339,10 +332,6 @@ function clientFromInvitation(line: string): string | null {
 
   return looksLikeOrganisation(name) ? name : null;
 }
-
-/** Lines mentioning a statutory threshold rather than this tender's value. */
-const THRESHOLD_NOISE_RE =
-  /(preference point|threshold|pppfa|equal to or above|equal to or below|exceeds|less than|more than|rand value of (?:this )?bid is|80\/20|90\/10)/i;
 
 const TITLE_LABELS = [
   /^(?:tender|rfq|rfi|rfp|rfb|bid) (?:title|name|description)\b/i,
@@ -638,16 +627,6 @@ export function parseRfqText(text: string, filename?: string): ExtractedTenderFi
   fields.submission_deadline = deadlineRaw ? parseDateToIso(deadlineRaw) : null;
   const startRaw = labelledValue(all, START_LABELS);
   fields.contract_start_date = startRaw ? parseDateToIso(startRaw) : null;
-
-  // Value: a labelled line is authoritative. Otherwise take the largest figure
-  // from the requirements section only, skipping statutory thresholds, the
-  // preference-points table quotes R50m on every ZA tender regardless of size.
-  // Only a labelled value is trusted. Scanning the document for the largest
-  // amount reliably picks up something else, a statutory threshold, a contract
-  // duration, or background prose ("the fund's assets were over R2.69 trillion").
-  // Most tenders never state a value at all; null is more useful than a guess.
-  const valueRaw = labelledValue(all, VALUE_LABELS, THRESHOLD_NOISE_RE);
-  fields.value = valueRaw ? parseMoney(valueRaw) : null;
 
   // Roles: tender-specific personnel requirements first, then dictionary hits.
   const statedRoles = extractRequiredRoles(core);

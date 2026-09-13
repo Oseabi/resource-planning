@@ -32,9 +32,10 @@ function toForm(f: ExtractedTenderFields): TenderFormFields {
     department_id: null,
     title: f.title ?? "",
     // The AI reads each role with its own quantity, years, skills and
-    // certifications. The local parser gives lists for the bid as a whole,
-    // and each of its roles becomes a one-seat line seeded with those for the
-    // reviewer to trim.
+    // certifications, and its notes already carry what the document says
+    // about the seat. The local parser gives lists for the bid as a whole,
+    // and each of its roles becomes a one-seat line seeded with those for
+    // the reviewer to trim.
     positions: f.positions?.length
       ? f.positions.map((p) => ({
           role: p.role,
@@ -42,9 +43,7 @@ function toForm(f: ExtractedTenderFields): TenderFormFields {
           min_experience_years: p.min_experience_years,
           required_skills: p.required_skills,
           required_certifications: p.required_certifications,
-          notes: [p.required_qualifications.length ? `Qualifications: ${p.required_qualifications.join("; ")}` : null, p.notes]
-            .filter(Boolean)
-            .join("\n") || null,
+          notes: p.notes,
         }))
       : f.required_roles.map((role) => ({
           role,
@@ -56,7 +55,7 @@ function toForm(f: ExtractedTenderFields): TenderFormFields {
     reference_number: f.reference_number,
     client: f.client,
     location: f.location,
-    value: f.value,
+    summary: f.summary ?? null,
     submission_deadline: f.submission_deadline,
     contract_start_date: f.contract_start_date,
     // The AI reads a contract period or end date; the local parser has no
@@ -79,7 +78,7 @@ function toFlags(f: ExtractedTenderFields): TenderExtractedFlags {
     reference_number: !!f.reference_number,
     client: !!f.client,
     location: !!f.location,
-    value: f.value != null,
+    summary: !!f.summary,
     submission_deadline: !!f.submission_deadline,
     contract_start_date: !!f.contract_start_date,
     contract_end_date: !!f.contract_end_date,
@@ -153,8 +152,8 @@ export function RfqUploadZone({
           {busy ? "Reading document..." : "Upload RFQ / RFI"}
         </h3>
         <p className="mx-auto mt-1 max-w-md text-body-sm text-muted-foreground">
-          Drag and drop tender documents here, we&apos;ll parse the PDF or Word file to extract
-          roles, skills, dates, and value, ready for review.
+          Drag and drop tender documents here, we&apos;ll read the PDF or Word file to fill in the
+          roles, the bar each must clear, the dates and a brief, ready for review.
         </p>
         <div className="mt-4">
           <Button variant="outline" onClick={() => inputRef.current?.click()} disabled={busy}>

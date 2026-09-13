@@ -372,7 +372,10 @@ export interface Database {
           reference_number: string | null;
           client: string | null;
           location: string | null;
+          /** Unused since the value field went from the form. Still a column; nothing reads or writes it. */
           value: number | null;
+          /** A brief for the bid team: scope, period, evaluation, what to submit. Read off the document by the AI. */
+          summary: string | null;
           submission_deadline: string | null;
           contract_start_date: string | null;
           /** When the awarded contract finishes. Null means open ended. */
