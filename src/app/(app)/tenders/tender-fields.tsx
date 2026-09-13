@@ -125,7 +125,7 @@ export function TenderFields({
               department is this going to" is a fair question to be able to
               answer before saving. */}
           {departments.length > 0 ? (
-            <Field label="Department" htmlFor="tf-department">
+            <Field label="Department" htmlFor="tf-department" required={!ownDepartmentName}>
               <Select
                 value={value.department_id ?? ""}
                 onValueChange={(v) => set("department_id", v || null)}

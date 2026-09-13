@@ -156,7 +156,7 @@ export function buildTenderPrompt(): string {
     "- title is the tender's own title or description of the services, not the buyer's name. reference_number is the bid or tender number as printed.",
     "- client is the organisation issuing the tender, its full name. location is where the work is to be done, or the buyer's province or city.",
     "- Dates as YYYY-MM-DD. submission_deadline is the closing date for bids. contract_start_date and contract_end_date only when stated; contract_duration_months when the document gives a period instead (36 months, three years).",
-    "- reference_letters_required is how many client reference letters or contactable references a bidder must supply, or null.",
+    "- reference_letters_required: how many client reference letters or contactable references a bidder must supply. Where none is mandatory but the evaluation awards points by the number of reference letters or referenced projects, give the number that earns full points, and say so in the summary. Null only when the document asks for none.",
     "- summary: a brief for the bid team in four to eight plain sentences: what is being procured and its scope, the contract period, how bids are evaluated (the stages, the threshold, the weights, the criteria that carry the most points), what must be submitted for the people proposed (CVs, certifications, forms, reference letters), and the briefing session if there is one. Facts from the document only.",
     "- positions: one entry per distinct role the buyer wants a person for, wherever in the document it is named, the most heavily weighted first. Never merge two roles into one entry and never list a role twice. For each:",
     "  - role: the closest spelling from this list, otherwise the document's own words. A seniority prefix (Lead, Senior, Principal, Junior) on a listed role is still that role unless the list carries the senior spelling; the document's own title goes in document_title. The list: " + ALL_ROLES.join(", "),
@@ -382,7 +382,12 @@ export function mergeTenderExtraction(local: ExtractedTenderFields, ai: TenderAi
     required_certifications:
       ai.required_certifications.length > 0 ? ai.required_certifications : local.required_certifications,
     sectors: ai.sectors.length > 0 ? ai.sectors : local.sectors,
-    min_experience_years: ai.min_experience_years ?? local.min_experience_years,
+    // The one field where the model's null is an answer. The heuristics read
+    // "11+ years = 10 points" off an evaluation table as an eleven-year
+    // minimum, which is exactly what the model was told not to do; once it
+    // has read the roles, its silence on a tender-wide minimum means there
+    // is none, and the page must not print one anyway.
+    min_experience_years: ai.positions.length > 0 ? ai.min_experience_years : (ai.min_experience_years ?? local.min_experience_years),
     summary: ai.summary ?? local.summary ?? null,
     ...(positions ? { positions } : local.positions ? { positions: local.positions } : {}),
   };

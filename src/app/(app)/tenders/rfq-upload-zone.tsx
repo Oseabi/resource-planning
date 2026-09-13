@@ -211,16 +211,33 @@ function RfqReviewDialog({
 
   function submit() {
     setError(null);
+    // The two things the server will refuse, said here before the round
+    // trip. An admin without a department of their own has nothing to fall
+    // back on, so a bid they file has to say where it goes.
+    if (!fields.title.trim()) {
+      setError("Title is required.");
+      return;
+    }
+    if (departments.length > 0 && !fields.department_id && !ownDepartmentName) {
+      setError("Pick a department for this tender.");
+      return;
+    }
     const fd = new FormData();
     fd.set("payload", JSON.stringify(fields));
     fd.set("file", file);
     startTransition(async () => {
-      const result = await createTender(fd);
-      if (result.error) setError(result.error);
-      else {
-        onClose();
-        router.push(`/tenders/${result.id}`);
-        router.refresh();
+      try {
+        const result = await createTender(fd);
+        if (result.error) setError(result.error);
+        else {
+          onClose();
+          router.push(`/tenders/${result.id}`);
+          router.refresh();
+        }
+      } catch (e) {
+        // A save that throws (the network, a body too large) would otherwise
+        // leave the button doing nothing, which is the worst thing it can do.
+        setError(`Could not save the tender: ${e instanceof Error ? e.message : "the request failed"}.`);
       }
     });
   }
@@ -272,11 +289,14 @@ function RfqReviewDialog({
               departments={departments}
               ownDepartmentName={ownDepartmentName}
             />
-            {error && <p className="mt-3 text-body-sm text-destructive">{error}</p>}
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-border p-4">
+        {/* The error sits beside the button that caused it, not at the foot of
+            a form long enough to scroll it out of sight. A refusal nobody can
+            see reads as a button that does nothing. */}
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border p-4">
+          {error && <p className="mr-auto text-body-sm text-destructive">{error}</p>}
           <Button variant="outline" onClick={onClose} disabled={isPending}>
             Cancel
           </Button>
