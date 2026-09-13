@@ -8,6 +8,7 @@ import {
   auditSentence,
   auditCounts,
   usageForUser,
+  lastSignInLabel,
   sessionsForUser,
   actionBreakdown,
   trailForUser,
@@ -234,6 +235,33 @@ describe("usageForUser", () => {
 
   it("has nothing to say about somebody who has never opened the app", () => {
     expect(usageForUser([session({ user_id: "u1" })], "never", NOW)).toBeNull();
+  });
+});
+
+describe("lastSignInLabel", () => {
+  const day = (iso: string) => iso.slice(0, 10);
+  const trailStart = "2026-09-09T12:18:25Z";
+
+  it("prefers the app's own record when there is one", () => {
+    expect(lastSignInLabel("2026-09-11T19:46:00Z", "2026-09-11T19:45:00Z", trailStart, day)).toBe("last seen 2026-09-11");
+  });
+
+  it("does not call somebody who signed in before the trail began a stranger", () => {
+    expect(lastSignInLabel(null, "2026-08-12T11:26:00Z", trailStart, day)).toBe(
+      "last signed in 2026-08-12, before visits were recorded",
+    );
+  });
+
+  it("says when a sign-in after the trail began left no visit behind", () => {
+    expect(lastSignInLabel(null, "2026-09-10T08:00:00Z", trailStart, day)).toBe(
+      "signed in 2026-09-10, but no visit was recorded",
+    );
+  });
+
+  it("is 'never signed in' only when neither record has anything", () => {
+    expect(lastSignInLabel(null, null, trailStart, day)).toBe("never signed in");
+    // Without a trail start every Auth sign-in counts as before it.
+    expect(lastSignInLabel(null, "2026-08-12T11:26:00Z", null, day)).toMatch(/before visits were recorded/);
   });
 });
 

@@ -194,6 +194,31 @@ export function usageForUser(
   return usageByUser(sessions.filter((s) => s.user_id === userId), now)[0] ?? null;
 }
 
+/**
+ * "When did they last log in", from two records that disagree by design.
+ *
+ * The app's own sessions go back to the day the heartbeat was switched on
+ * and no further. Supabase Auth's record of each account goes back to the
+ * account's creation. Somebody who signed in twice in July and not since
+ * has no session and is not "never signed in": the trail just was not
+ * there to see it. Where Auth has a sign-in after the trail began and the
+ * app has no visit for it, that is said too, because it means the page
+ * loaded without the heartbeat and is worth knowing.
+ */
+export function lastSignInLabel(
+  lastSeenAt: string | null,
+  authLastSignInAt: string | null,
+  trailStartedAt: string | null,
+  format: (iso: string) => string,
+): string {
+  if (lastSeenAt) return `last seen ${format(lastSeenAt)}`;
+  if (!authLastSignInAt) return "never signed in";
+  const beforeTrail = !trailStartedAt || authLastSignInAt < trailStartedAt;
+  return beforeTrail
+    ? `last signed in ${format(authLastSignInAt)}, before visits were recorded`
+    : `signed in ${format(authLastSignInAt)}, but no visit was recorded`;
+}
+
 /** Their sessions, newest first, for a page that lists them one by one. */
 export function sessionsForUser(sessions: SessionRow[], userId: string): SessionRow[] {
   return sessions
