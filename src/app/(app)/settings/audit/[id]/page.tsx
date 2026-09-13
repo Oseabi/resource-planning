@@ -3,6 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { ArrowLeft, Clock, LogIn, FilePlus2, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth/current-user";
+import { lastSignInFromAuth } from "@/lib/auth/sign-ins";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/layout/empty-state";
 import { ExportButton } from "@/app/(app)/settings/audit/export-button";
@@ -70,7 +71,7 @@ export default async function PersonAuditPage({
     );
   }
 
-  const [{ data: person }, { data: trail }, { data: sessions }] = await Promise.all([
+  const [{ data: person }, { data: trail }, { data: sessions }, { data: earliest }, authLastSignIn] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, full_name, email, role, department_id, departments(name)")
@@ -85,9 +86,12 @@ export default async function PersonAuditPage({
       .from("user_sessions")
       .select("id, user_id, started_at, last_seen_at, ended_at")
       .eq("user_id", id),
+    supabase.from("audit_log").select("created_at").order("created_at", { ascending: true }).limit(1),
+    lastSignInFromAuth(id),
   ]);
 
   if (!person) notFound();
+  const trailStartedAt = earliest?.[0]?.created_at ?? null;
 
   const rows = (trail ?? []) as AuditRow[];
   const theirSessions = sessionsForUser((sessions ?? []) as SessionRow[], id);
@@ -195,8 +199,17 @@ export default async function PersonAuditPage({
         {theirSessions.length === 0 ? (
           <EmptyState
             icon={LogIn}
-            title="Never signed in"
-            description="This account exists but has not opened the app since sessions started being recorded."
+            title={authLastSignIn ? "No visits recorded" : "Never signed in"}
+            description={
+              authLastSignIn
+                ? `Supabase Auth last saw this account sign in on ${when(authLastSignIn)}. ` +
+                  (trailStartedAt
+                    ? authLastSignIn < trailStartedAt
+                      ? `The app has only recorded visits since ${when(trailStartedAt)}, so that sign-in was before it was looking.`
+                      : `The app has recorded visits since ${when(trailStartedAt)} and has none for that sign-in.`
+                    : "The app has not recorded any visits yet.")
+                : "This account exists but has never signed in, according to both the app and Supabase Auth."
+            }
           />
         ) : (
           <ul className="divide-y divide-border">

@@ -3,10 +3,12 @@ import { redirect } from "next/navigation";
 import { Clock, ShieldAlert, Users, Activity as ActivityIcon, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth/current-user";
+import { lastSignInsFromAuth } from "@/lib/auth/sign-ins";
 import { cn } from "@/lib/utils";
 import { ExportButton } from "@/app/(app)/settings/audit/export-button";
 import {
   usageForUser,
+  lastSignInLabel,
   formatDuration,
   auditSentence,
   auditTone,
@@ -57,7 +59,7 @@ export default async function AuditPage() {
     );
   }
 
-  const [{ data: trail }, { data: sessions }, { data: profiles }] = await Promise.all([
+  const [{ data: trail }, { data: sessions }, { data: profiles }, { data: earliest }, authSignIns] = await Promise.all([
     supabase
       .from("audit_log")
       .select("id, actor_id, actor_email, actor_name, action, entity_type, entity_id, entity_label, created_at")
@@ -69,7 +71,12 @@ export default async function AuditPage() {
       .select("id, full_name, email, role, departments(name)")
       .order("role")
       .order("full_name"),
+    // When the trail began: the line between "before we were looking" and
+    // "we were looking and saw nothing".
+    supabase.from("audit_log").select("created_at").order("created_at", { ascending: true }).limit(1),
+    lastSignInsFromAuth(),
   ]);
+  const trailStartedAt = earliest?.[0]?.created_at ?? null;
 
   const rows = (trail ?? []) as AuditRow[];
   const allSessions = (sessions ?? []) as SessionRow[];
@@ -169,9 +176,8 @@ export default async function AuditPage() {
                     </div>
                     <div className="truncate text-body-sm text-muted-foreground">
                       {profile.email}
-                      {usage?.lastSeenAt
-                        ? ` · last seen ${when(usage.lastSeenAt)}`
-                        : " · never signed in"}
+                      {" · "}
+                      {lastSignInLabel(usage?.lastSeenAt ?? null, authSignIns.get(profile.id) ?? null, trailStartedAt, when)}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
