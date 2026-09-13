@@ -52,6 +52,8 @@ export interface PositionView {
   minExperienceYears: number | null;
   requiredSkills: string[];
   requiredCertifications: string[];
+  /** What the document says about the seat: experience, scoring, duration, qualifications. */
+  notes: string | null;
   filled: number;
   assigned: AssignedCandidate[];
   matches: PositionMatch[];
@@ -251,6 +253,17 @@ export function PositionMatches({
                   </span>
                 ))}
               </div>
+            )}
+
+            {/* The document's own words on the seat, folded away: the card is
+                about who fits it, and this is the answer to "fits what". */}
+            {position.notes && (
+              <details className="border-b border-border px-4 py-2">
+                <summary className="cursor-pointer text-body-sm text-muted-foreground">
+                  What the document asks of this seat
+                </summary>
+                <p className="mt-2 whitespace-pre-wrap text-body-sm text-foreground">{position.notes}</p>
+              </details>
             )}
 
             {/* Who holds the seats */}

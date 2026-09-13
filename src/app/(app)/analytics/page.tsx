@@ -2,13 +2,13 @@ import Link from "next/link";
 import {
   Briefcase,
   Timer,
-  Banknote,
   Trophy,
   Users,
   ShieldCheck,
   AlertTriangle,
   TrendingUp,
   Layers,
+  FileText,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -76,7 +76,7 @@ export default async function AnalyticsPage() {
     supabase.from("job_requirements").select("id, status, created_at, required_skills"),
     supabase
       .from("tenders")
-      .select("id, status, client, value, submission_deadline, sectors, required_skills"),
+      .select("id, status, client, submission_deadline, sectors, required_skills"),
     supabase
       .from("candidates")
       .select(
@@ -284,17 +284,18 @@ export default async function AnalyticsPage() {
         <TabsContent value="tenders" className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Kpi
-              icon={<Banknote className="size-4" />}
-              label="Pipeline value"
-              value={money(perf.pipelineValue)}
+              icon={<FileText className="size-4" />}
+              label="Open bids"
+              value={String(perf.live + perf.submitted)}
               sub={`${perf.live} live · ${perf.submitted} submitted`}
             />
-            <Kpi icon={<Trophy className="size-4" />} label="Value won" value={money(perf.wonValue)} tone="good" />
-            <Kpi icon={<TrendingUp className="size-4" />} label="Value lost" value={money(perf.lostValue)} />
+            <Kpi icon={<Trophy className="size-4" />} label="Won" value={String(perf.won)} tone="good" />
+            <Kpi icon={<TrendingUp className="size-4" />} label="Lost" value={String(perf.lost)} />
             <Kpi
-              icon={<Banknote className="size-4" />}
-              label="Avg deal size"
-              value={perf.avgDealSize != null ? money(perf.avgDealSize) : "-"}
+              icon={<Trophy className="size-4" />}
+              label="Win rate"
+              value={perf.winRate != null ? `${perf.winRate}%` : "-"}
+              sub={perf.won + perf.lost > 0 ? `${perf.won + perf.lost} decided` : "No decided bids yet"}
             />
           </div>
 
@@ -312,9 +313,6 @@ export default async function AnalyticsPage() {
                       {t.client ?? "Untitled bid"}
                     </Link>
                     <div className="flex shrink-0 items-center gap-3">
-                      <span className="text-body-sm text-muted-foreground">
-                        {t.value != null ? money(t.value) : "-"}
-                      </span>
                       <span
                         className={cn(
                           "rounded-lg px-2 py-0.5 text-label-md font-semibold",
@@ -347,7 +345,6 @@ export default async function AnalyticsPage() {
                       <TableHead className="text-right">Won</TableHead>
                       <TableHead className="text-right">Lost</TableHead>
                       <TableHead className="text-right">Win rate</TableHead>
-                      <TableHead className="text-right">Value won</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -360,7 +357,6 @@ export default async function AnalyticsPage() {
                         <TableCell className="text-right">
                           {c.winRate != null ? `${c.winRate}%` : "-"}
                         </TableCell>
-                        <TableCell className="text-right">{money(c.value)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

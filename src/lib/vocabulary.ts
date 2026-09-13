@@ -82,8 +82,24 @@ const softwarePack: VocabularyPack = {
     "Functional Analyst",
     "Systems Analyst",
     "Business Analyst",
+    // Seniority the tenders score separately: SANRAL wants a Senior
+    // Business Analyst and a Business Analyst as two seats with different
+    // points, and a list without the senior one had it spelled
+    // "Functional Analyst" so as not to repeat a role.
+    "Senior Business Analyst",
     "Database Administrator",
     "Security Engineer",
+    "Security Specialist",
+    // The Microsoft practice's roles as an RFQ names them: a Dynamics 365
+    // functional or technical consultant, a Power Platform developer, an
+    // integration developer, an Azure administrator, a network engineer.
+    "Functional Consultant",
+    "Technical Consultant",
+    "Power Platform Developer",
+    "Integration Developer",
+    "Web Developer",
+    "Systems Administrator",
+    "Network Engineer",
     "Engineering Manager",
     "Technical Lead",
     "Scrum Master",

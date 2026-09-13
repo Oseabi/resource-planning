@@ -162,14 +162,14 @@ function tenderLines(f: ExtractedTenderFields): string[] {
     `  location ${show(f.location)}`,
     `  deadline ${show(f.submission_deadline)}`,
     `  contract ${show(f.contract_start_date)} to ${show(f.contract_end_date)}`,
-    `  value    ${show(f.value)}`,
     `  minExp   ${show(f.min_experience_years)} | ref letters ${show(f.reference_letters_required)}`,
     `  roles    ${show(f.required_roles)}`,
     `  skills   ${f.required_skills.length} | certs ${f.required_certifications.length} | sectors ${show(f.sectors)}`,
-    ...(f.positions ?? []).map(
-      (p) =>
-        `  seat     ${p.quantity} x ${p.role} | ${p.min_experience_years ?? "-"} yrs | skills ${p.required_skills.length} | certs ${p.required_certifications.length} | quals ${p.required_qualifications.length}${p.notes ? " | " + p.notes.slice(0, 60) : ""}`,
-    ),
+    ...(f.summary ? ["  summary  " + f.summary.replace(/\n/g, "\n           ")] : []),
+    ...(f.positions ?? []).flatMap((p) => [
+      `  seat     ${p.quantity} x ${p.role} | ${p.min_experience_years ?? "-"} yrs | skills ${p.required_skills.join(", ") || "-"} | certs ${p.required_certifications.join(", ") || "-"}`,
+      ...(p.notes ? p.notes.split("\n").map((l) => `             ${l}`) : []),
+    ]),
   ];
 }
 
@@ -193,7 +193,7 @@ async function benchTender(file: string) {
   if (!ai.ok) return [...lines, `  ai       FAILED after ${took}s: ${ai.reason}`];
 
   lines.push(
-    `  ai       ok in ${took}s, ${ai.usage?.promptTokens ?? "?"} tokens in, ${ai.usage?.outputTokens ?? "?"} out${ai.truncated ? ", text was truncated" : ""}${ai.note ? `, ${ai.note}` : ""}`,
+    `  ai       ${ai.model} ok in ${took}s, ${ai.usage?.promptTokens ?? "?"} tokens in, ${ai.usage?.outputTokens ?? "?"} out${ai.truncated ? ", text was truncated" : ""}${ai.note ? `, ${ai.note}` : ""}${ai.fallbacks.length ? `, after ${ai.fallbacks.join("; ")}` : ""}`,
   );
   lines.push("  --- merged (local + ai) ---");
   lines.push(...tenderLines(mergeTenderExtraction(f, ai.fields)));

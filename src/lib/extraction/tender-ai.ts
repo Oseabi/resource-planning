@@ -20,7 +20,7 @@
 
 import { ALL_ROLES, ALL_SKILLS, ALL_TECHNICAL_SKILLS, ALL_CERTIFICATIONS, ALL_SECTORS } from "@/lib/vocabulary";
 import { canonicalise } from "@/lib/extraction/ai-fields";
-import { parseDateToIso, parseMoney, type ExtractedTenderFields, type TenderPosition } from "@/lib/extraction/rfq-parser";
+import { parseDateToIso, type ExtractedTenderFields, type TenderPosition } from "@/lib/extraction/rfq-parser";
 
 // -------------------------------------------------------------------------
 // What leaves the building
@@ -61,7 +61,6 @@ export const TENDER_SCHEMA = {
     reference_number: str,
     client: str,
     location: str,
-    value: { type: "NUMBER", nullable: true },
     submission_deadline: str,
     contract_start_date: str,
     contract_end_date: str,
@@ -71,20 +70,37 @@ export const TENDER_SCHEMA = {
     sectors: strList,
     required_skills: strList,
     required_certifications: strList,
+    summary: str,
     positions: {
       type: "ARRAY",
       items: {
         type: "OBJECT",
         properties: {
           role: { type: "STRING" },
+          document_title: str,
           quantity: { type: "INTEGER", nullable: true },
           min_experience_years: { type: "NUMBER", nullable: true },
           required_skills: strList,
           required_certifications: strList,
           required_qualifications: strList,
+          experience: str,
+          evaluation: str,
+          duration: str,
           notes: str,
         },
-        required: ["role", "quantity", "min_experience_years", "required_skills", "required_certifications", "required_qualifications", "notes"],
+        required: [
+          "role",
+          "document_title",
+          "quantity",
+          "min_experience_years",
+          "required_skills",
+          "required_certifications",
+          "required_qualifications",
+          "experience",
+          "evaluation",
+          "duration",
+          "notes",
+        ],
       },
     },
   },
@@ -93,7 +109,6 @@ export const TENDER_SCHEMA = {
     "reference_number",
     "client",
     "location",
-    "value",
     "submission_deadline",
     "contract_start_date",
     "contract_end_date",
@@ -103,6 +118,7 @@ export const TENDER_SCHEMA = {
     "sectors",
     "required_skills",
     "required_certifications",
+    "summary",
     "positions",
   ],
 } as const;
@@ -111,25 +127,77 @@ export const TENDER_SCHEMA = {
 // The prompt
 // -------------------------------------------------------------------------
 
+/**
+ * The prompt is mostly directions to where a tender keeps its people.
+ *
+ * No two tenders are laid out alike, and the roles are rarely in one place:
+ * a mandatory-requirements table says the bidder "must provide" an Azure
+ * administrator with a named certification, an evaluation table scores a
+ * lead architect at ten points on a CV attached to Form B2.1, a pricing
+ * schedule lists a resource category per role, and the scope of work names
+ * a project manager in passing. Told where to look, the model reads all of
+ * them; left to itself it reads the first and stops.
+ */
 export function buildTenderPrompt(): string {
   return [
-    "You are reading a South African tender document (an RFP, RFQ, RFI or bid) for a staffing company that bids to supply people to the buyer.",
-    "Extract what the bid team needs as JSON matching the schema. Rules:",
+    "You are reading a South African tender document (an RFP, RFQ, RFI, RFT or bid) for a staffing company that bids to supply the people the buyer asks for.",
+    "Read the whole document, tables included, and extract what the bid team needs as JSON matching the schema.",
+    "",
+    "Where to look. Tenders differ, and the people the buyer wants are seldom in one place. Read all of these before answering:",
+    "- the invitation, advertisement or cover page: title, bid number, buyer, closing date, briefing session;",
+    "- the terms of reference, scope of work or specification: what is being bought, the contract period, where the work is done;",
+    "- the mandatory, compulsory, pre-qualification or gate requirements: roles the bidder must provide, with the CV, certification and years each must show;",
+    "- the technical or functional evaluation criteria and their scoring tables: roles scored by points, the form each is submitted on, what must be attached, the points per role and the bands of years that earn them;",
+    "- the returnable documents and the forms themselves: a form headed Proposed Team, or one that says to attach the CV of a named role, names a role;",
+    "- the pricing schedule or resource rate table: a row per resource category names a role, and a quantity or person-months column says how many and for how long.",
+    "",
+    "Rules:",
     "- If something is not stated, return null or an empty list. Never guess and never invent.",
     "- title is the tender's own title or description of the services, not the buyer's name. reference_number is the bid or tender number as printed.",
     "- client is the organisation issuing the tender, its full name. location is where the work is to be done, or the buyer's province or city.",
-    "- value is the estimated or budgeted contract value in rand as a plain number, or null when the document gives none. Never a bidder's price.",
     "- Dates as YYYY-MM-DD. submission_deadline is the closing date for bids. contract_start_date and contract_end_date only when stated; contract_duration_months when the document gives a period instead (36 months, three years).",
     "- reference_letters_required is how many client reference letters or contactable references a bidder must supply, or null.",
-    "- positions: one entry per role the buyer wants staffed, most important first, with how many people (quantity, null when not stated), the minimum years of experience the document sets for that role, and the skills, certifications and qualifications it sets for that role specifically. A resource schedule, a table of key personnel, or a list of required competencies each give these. Do not repeat tender-wide requirements on every role.",
-    "- Spell roles exactly as they appear in this list where one fits, otherwise use the document's own words:",
-    ALL_ROLES.join(", "),
+    "- summary: a brief for the bid team in four to eight plain sentences: what is being procured and its scope, the contract period, how bids are evaluated (the stages, the threshold, the weights, the criteria that carry the most points), what must be submitted for the people proposed (CVs, certifications, forms, reference letters), and the briefing session if there is one. Facts from the document only.",
+    "- positions: one entry per distinct role the buyer wants a person for, wherever in the document it is named, the most heavily weighted first. Never merge two roles into one entry and never list a role twice. For each:",
+    "  - role: the closest spelling from this list, otherwise the document's own words. A seniority prefix (Lead, Senior, Principal, Junior) on a listed role is still that role unless the list carries the senior spelling; the document's own title goes in document_title. The list: " + ALL_ROLES.join(", "),
+    "  - document_title: the role exactly as the document names it, with its form, item or criterion reference where it has one (Lead Enterprise Architect, Form B2.1; Compulsory requirement 4).",
+    "  - quantity: how many people, or null when not stated.",
+    "  - min_experience_years: the minimum years the document requires for that role (a minimum of, at least, not less than, the lower figure of a range), or null. A points band is not a minimum: never take a points value or a band boundary as the years.",
+    "  - required_skills, required_certifications, required_qualifications: what the document sets for that role specifically. Certifications by their names (AZ-104, TOGAF, PMP). Do not repeat tender-wide requirements on every role.",
+    "  - experience: what the document requires the person to have done or to know, in the document's words, in at most three sentences: the technologies, domains and kinds of project it names.",
+    "  - evaluation: how the seat is scored and what must be attached, compressed: the points it carries, the criterion or form it falls under, the bands (15 points: 10+ years = 15, 7 to <10 = 12, 5 to <7 = 8, 3 to <5 = 4), and whether it is a mandatory gate. Null where the document does not score the seat.",
+    "  - duration: how long or how much of the person is wanted, when stated (17 person-months; full time for 24 months; as required at an hourly rate).",
+    "  - notes: anything else the document asks of the seat (a clearance, on-site work, a language, a level of qualification), or null.",
     "- required_skills and required_certifications are the ones the document sets for the bid as a whole. min_experience_years is the tender-wide minimum, or null.",
-    "- Years of experience, for a role or for the bid, are only what the document requires: a minimum of, at least, not less than, or a stated range like 8 to 10 years (take the lower figure). A table that awards points for more years is an evaluation, not a requirement: never take a points value or a band boundary from such a table as the years.",
-    "- Where a role in the document has its own title (Senior Infrastructure Architect, Junior Developer) and you spell it as one from the list, put the document's own title in that position's notes.",
     "- sectors: the buyer's sector and the sector of the work, from this list where one fits: " + ALL_SECTORS.join(", ") + ".",
-    "- Ignore the standard forms (SBD 1, SBD 4, SBD 6.1, tax and B-BBEE declarations) and the pricing schedule except where they state the closing date, the reference number or the client.",
+    "- Ignore the standard forms (SBD 1, SBD 4, SBD 6.1, tax and B-BBEE declarations) except where they state the closing date, the reference number or the client. Preference points, B-BBEE and company-experience criteria are not roles.",
   ].join("\n");
+}
+
+/**
+ * The seat's paragraph for a reader, from the strings the model read off the
+ * document. One labelled line each, blank ones left out, so the notes field
+ * on the form reads as a short brief rather than a form.
+ */
+export function seatNotes(p: {
+  role: string;
+  document_title: string | null;
+  experience: string | null;
+  evaluation: string | null;
+  duration: string | null;
+  required_qualifications: string[];
+  notes: string | null;
+}): string | null {
+  const title = p.document_title && p.document_title.toLowerCase() !== p.role.toLowerCase() ? p.document_title : null;
+  const lines = [
+    title ? `In the document: ${title}` : null,
+    p.experience ? `Experience: ${p.experience}` : null,
+    p.evaluation ? `Scoring: ${p.evaluation}` : null,
+    p.duration ? `Duration: ${p.duration}` : null,
+    p.required_qualifications.length > 0 ? `Qualifications: ${p.required_qualifications.join("; ")}` : null,
+    p.notes,
+  ].filter((l): l is string => !!l);
+  return lines.length > 0 ? lines.join("\n") : null;
 }
 
 // -------------------------------------------------------------------------
@@ -196,6 +264,7 @@ export interface TenderAiFields extends ExtractedTenderFields {
   contract_end_date: string | null;
   contract_duration_months: number | null;
   reference_letters_required: number | null;
+  summary: string | null;
   positions: TenderPosition[];
 }
 
@@ -215,20 +284,34 @@ export function coerceTenderAi(json: unknown): TenderAiFields {
       const item = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
       const role = asString(item.role);
       if (!role) return null;
-      return {
+      const seat = {
         role: canonicalise([role], ALL_ROLES)[0],
         quantity: asCount(item.quantity) || 1,
         min_experience_years: asYears(item.min_experience_years),
         required_skills: canonicalise(asStringList(item.required_skills), [...ALL_TECHNICAL_SKILLS, ...ALL_SKILLS]),
         required_certifications: canonicalise(asStringList(item.required_certifications), ALL_CERTIFICATIONS),
         required_qualifications: asStringList(item.required_qualifications),
+        document_title: asString(item.document_title),
+        experience: asString(item.experience),
+        evaluation: asString(item.evaluation),
+        duration: asString(item.duration),
         notes: asString(item.notes),
       };
+      return { ...seat, notes: seatNotes(seat) };
     })
     .filter((p): p is TenderPosition => p !== null);
 
-  const money = r.value;
-  const value = typeof money === "string" ? parseMoney(money) : asNumber(money);
+  // The same seat read twice, from the evaluation table and again from the
+  // pricing schedule, is one seat, and the first, fuller entry is kept. Two
+  // seats that share a listed role but not a title (a Finance & Operations
+  // functional consultant and a CRM one) are two people, and both stay.
+  const seen = new Set<string>();
+  const distinct = positions.filter((p) => {
+    const key = `${p.role}|${p.document_title ?? ""}`.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 
   return {
     title: asString(r.title),
@@ -236,18 +319,18 @@ export function coerceTenderAi(json: unknown): TenderAiFields {
     reference_number: asString(r.reference_number)?.replace(/\s*([-/])\s*/g, "$1") ?? null,
     client: asString(r.client),
     location: asString(r.location),
-    value: value !== null && value > 0 ? value : null,
     submission_deadline: asIsoDate(r.submission_deadline),
     contract_start_date: asIsoDate(r.contract_start_date),
     contract_end_date: asIsoDate(r.contract_end_date),
     contract_duration_months: asCount(r.contract_duration_months),
     reference_letters_required: asCount(r.reference_letters_required),
-    required_roles: [...new Set(positions.map((p) => p.role))],
+    required_roles: [...new Set(distinct.map((p) => p.role))],
     required_skills: canonicalise(asStringList(r.required_skills), [...ALL_TECHNICAL_SKILLS, ...ALL_SKILLS]),
     required_certifications: canonicalise(asStringList(r.required_certifications), ALL_CERTIFICATIONS),
     sectors: canonicalise(asStringList(r.sectors), ALL_SECTORS),
     min_experience_years: asYears(r.min_experience_years),
-    positions,
+    summary: asString(r.summary),
+    positions: distinct,
   };
 }
 
@@ -286,7 +369,6 @@ export function mergeTenderExtraction(local: ExtractedTenderFields, ai: TenderAi
     reference_number: ai.reference_number ?? local.reference_number,
     client: ai.client ?? local.client,
     location: ai.location ?? local.location,
-    value: ai.value ?? local.value,
     submission_deadline: ai.submission_deadline ?? local.submission_deadline,
     contract_start_date: ai.contract_start_date ?? local.contract_start_date,
     contract_end_date:
@@ -301,6 +383,7 @@ export function mergeTenderExtraction(local: ExtractedTenderFields, ai: TenderAi
       ai.required_certifications.length > 0 ? ai.required_certifications : local.required_certifications,
     sectors: ai.sectors.length > 0 ? ai.sectors : local.sectors,
     min_experience_years: ai.min_experience_years ?? local.min_experience_years,
+    summary: ai.summary ?? local.summary ?? null,
     ...(positions ? { positions } : local.positions ? { positions: local.positions } : {}),
   };
 }

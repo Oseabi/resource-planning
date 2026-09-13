@@ -20,7 +20,6 @@ COLUMNS = [
     ("reference_number", 20, False, "SCM/2026/0148"),
     ("client", 24, False, "City of Cape Town"),
     ("location", 16, False, "Cape Town"),
-    ("value", 14, False, 12500000),
     ("submission_deadline", 20, False, "2026-10-15"),
     ("contract_start_date", 20, False, "2027-01-04"),
     ("contract_end_date", 20, False, "2029-12-31"),
@@ -62,8 +61,6 @@ for idx, (name, width, required, example) in enumerate(COLUMNS, start=1):
     # between a clean import and a hundred rejected rows.
     if name in DATE_COLUMNS:
         cell.number_format = "@"
-    if name == "value":
-        cell.number_format = "#,##0"
 
 ws.row_dimensions[1].height = 30
 ws.row_dimensions[2].height = 32
@@ -163,8 +160,6 @@ GUIDE = [
      "SCM/2026/0148"),
     ("client", "No", "The organisation putting the work out.", "City of Cape Town"),
     ("location", "No", "Where the work happens.", "Cape Town"),
-    ("value", "No", "Rand value. Digits only, no R and no spaces. Leave blank if not published.",
-     "12500000"),
     ("submission_deadline", "No", "When the bid is due. See the date note below.", "2026-10-15"),
     ("contract_start_date", "No", "When the work would start if we win it.", "2027-01-04"),
     ("contract_end_date", "No", "When it would finish. Leave blank if open ended.", "2029-12-31"),

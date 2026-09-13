@@ -132,7 +132,7 @@ export function PositionsEditor({
               <div className="space-y-1">
                 <Label className="text-label-sm">Notes</Label>
                 <Textarea
-                  rows={2}
+                  rows={position.notes ? Math.min(8, position.notes.split("\n").length + 1) : 2}
                   value={position.notes ?? ""}
                   onChange={(e) => update(i, { notes: e.target.value || null })}
                   placeholder="Qualifications, clearances, anything else the document asks of this role..."

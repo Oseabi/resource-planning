@@ -21,7 +21,6 @@ export const IMPORT_COLUMNS = [
   "reference_number",
   "client",
   "location",
-  "value",
   "submission_deadline",
   "contract_start_date",
   "contract_end_date",
@@ -61,7 +60,6 @@ export interface ParsedTender {
   reference_number: string | null;
   client: string | null;
   location: string | null;
-  value: number | null;
   submission_deadline: string | null;
   contract_start_date: string | null;
   contract_end_date: string | null;
@@ -119,22 +117,6 @@ export function parseImportDate(raw: string): { date: string | null; error: stri
     return { date: null, error: `"${v}" is not a real date` };
   }
   return { date, error: null };
-}
-
-/** Rand amounts as a register writes them: "R 12 500 000", "12,500,000". */
-export function parseMoney(raw: string): { amount: number | null; error: string | null } {
-  const v = raw.trim();
-  if (!v) return { amount: null, error: null };
-
-  // Non-breaking spaces come from Excel and are invisible in the file.
-  const stripped = v
-    .replace(/[Rr]\s*/, "")
-    .replace(/[\s  ]/g, "")
-    .replace(/,/g, "");
-  if (!/^\d+(\.\d+)?$/.test(stripped)) {
-    return { amount: null, error: `"${v}" is not a number this can read` };
-  }
-  return { amount: Number(stripped), error: null };
 }
 
 /** Pipe-separated everywhere, so there is one rule rather than a conditional one. */
@@ -392,9 +374,6 @@ export function readRows(
       reasons.push("the contract ends before it starts");
     }
 
-    const money = parseMoney(cell("value"));
-    if (money.error) reasons.push(`value: ${money.error}`);
-
     const years = parseCount(cell("min_experience_years"));
     if (years.error) reasons.push(`min_experience_years: ${years.error}`);
 
@@ -440,7 +419,6 @@ export function readRows(
       reference_number: cell("reference_number").trim() || null,
       client: cell("client").trim() || null,
       location: cell("location").trim() || null,
-      value: money.amount,
       submission_deadline: deadline.date,
       contract_start_date: start.date,
       contract_end_date: end.date,
@@ -590,7 +568,6 @@ const WRITABLE = [
   "reference_number",
   "client",
   "location",
-  "value",
   "submission_deadline",
   "contract_start_date",
   "contract_end_date",

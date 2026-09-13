@@ -22,7 +22,6 @@ export interface TenderRow {
   id: string;
   status: string;
   client: string | null;
-  value: number | null;
   submission_deadline: string | null;
   sectors: string[];
 }
@@ -181,15 +180,15 @@ export interface TenderPerformance {
   draft: number;
   /** Percentage of decided bids that were won; null when nothing is decided yet. */
   winRate: number | null;
-  wonValue: number;
-  lostValue: number;
-  pipelineValue: number;
-  avgDealSize: number | null;
 }
 
+/**
+ * Counts only. Tenders carry no rand value: the documents rarely state one
+ * and the team never entered it, so the money figures this once reported
+ * were zeros dressed as totals.
+ */
 export function tenderPerformance(tenders: TenderRow[]): TenderPerformance {
   const by = (s: string) => tenders.filter((t) => t.status === s);
-  const sum = (rows: TenderRow[]) => rows.reduce((acc, t) => acc + (t.value ?? 0), 0);
 
   const won = by("won");
   const lost = by("lost");
@@ -204,10 +203,6 @@ export function tenderPerformance(tenders: TenderRow[]): TenderPerformance {
     submitted: submitted.length,
     draft: by("draft").length,
     winRate: decided > 0 ? Math.round((won.length / decided) * 100) : null,
-    wonValue: sum(won),
-    lostValue: sum(lost),
-    pipelineValue: sum([...live, ...submitted]),
-    avgDealSize: won.length > 0 ? Math.round(sum(won) / won.length) : null,
   };
 }
 
@@ -217,7 +212,6 @@ export interface ClientPerformance {
   won: number;
   lost: number;
   winRate: number | null;
-  value: number;
 }
 
 /** Bid record per client, worst-performing surfaced by the caller as needed. */
@@ -227,12 +221,9 @@ export function winRateByClient(tenders: TenderRow[]): ClientPerformance[] {
   for (const t of tenders) {
     const client = t.client?.trim() || "-";
     const row =
-      map.get(client) ?? { client, bids: 0, won: 0, lost: 0, winRate: null, value: 0 };
+      map.get(client) ?? { client, bids: 0, won: 0, lost: 0, winRate: null };
     row.bids += 1;
-    if (t.status === "won") {
-      row.won += 1;
-      row.value += t.value ?? 0;
-    }
+    if (t.status === "won") row.won += 1;
     if (t.status === "lost") row.lost += 1;
     map.set(client, row);
   }
@@ -249,7 +240,6 @@ export interface DeadlineRisk {
   id: string;
   client: string | null;
   daysLeft: number;
-  value: number | null;
 }
 
 /**
@@ -271,7 +261,6 @@ export function deadlinesAtRisk(
         id: t.id,
         client: t.client,
         daysLeft: Math.round((due - start) / MS_PER_DAY),
-        value: t.value,
       };
     })
     .filter((t) => Number.isFinite(t.daysLeft) && t.daysLeft <= withinDays)

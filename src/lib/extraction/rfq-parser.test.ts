@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseRfqText, parseDateToIso, parseMoney, parseMinExperience } from "@/lib/extraction/rfq-parser";
+import { parseRfqText, parseDateToIso, parseMinExperience } from "@/lib/extraction/rfq-parser";
 
 const SAMPLE_RFQ = `Request for Quotation: D365 Finance Implementation Partner
 Issued by: Gauteng Provincial Treasury
@@ -39,20 +39,6 @@ describe("parseDateToIso", () => {
   });
 });
 
-describe("parseMoney", () => {
-  it("parses grouped amounts", () => {
-    expect(parseMoney("R 12,500,000")).toBe(12_500_000);
-  });
-  it("parses suffixed amounts", () => {
-    expect(parseMoney("£4.2m")).toBe(4_200_000);
-    expect(parseMoney("$950k")).toBe(950_000);
-    expect(parseMoney("R2.5 million")).toBe(2_500_000);
-  });
-  it("returns null when no amount", () => {
-    expect(parseMoney("no budget stated")).toBeNull();
-  });
-});
-
 describe("parseMinExperience", () => {
   it("reads 'minimum N years' phrasings", () => {
     expect(parseMinExperience("Candidates require a minimum of 5 years experience")).toBe(5);
@@ -76,8 +62,7 @@ describe("parseRfqText", () => {
     expect(f.location).toContain("Johannesburg");
   });
 
-  it("extracts value and dates", () => {
-    expect(f.value).toBe(12_500_000);
+  it("extracts the dates", () => {
     expect(f.submission_deadline).toBe("2026-08-15");
     expect(f.contract_start_date).toBe("2026-10-01");
   });
@@ -92,7 +77,7 @@ describe("parseRfqText", () => {
 
   it("degrades gracefully on unstructured text", () => {
     const empty = parseRfqText("We would like to talk about maybe working together.");
-    expect(empty.value).toBeNull();
+    expect(empty.client).toBeNull();
     expect(empty.submission_deadline).toBeNull();
     expect(empty.required_roles).toEqual([]);
   });

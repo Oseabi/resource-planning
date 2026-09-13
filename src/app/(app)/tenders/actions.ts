@@ -30,7 +30,8 @@ export interface TenderFormFields {
   reference_number: string | null;
   client: string | null;
   location: string | null;
-  value: number | null;
+  /** A brief for the bid team: scope, period, evaluation, what to submit. */
+  summary: string | null;
   submission_deadline: string | null;
   contract_start_date: string | null;
   contract_end_date: string | null;
