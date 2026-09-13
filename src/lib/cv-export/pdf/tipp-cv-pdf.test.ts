@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { getDocumentProxy } from "unpdf";
-import { renderTippCvPdf, type CvPdfContext } from "@/lib/cv-export/pdf/tipp-cv-pdf";
+import { renderTippCvPdf, cvPdfGuides, type CvPdfContext } from "@/lib/cv-export/pdf/tipp-cv-pdf";
 import { lineKinds } from "@/lib/cv-record";
 import { tablesFromPdfPages, pdfItemsFrom, type PdfPageItems } from "@/lib/extraction/pdf-tables";
 import { parseTippTables } from "@/lib/extraction/tipp-tables";
@@ -143,6 +143,48 @@ describe("renderTippCvPdf", () => {
     expect(second.client).toBeNull();
     expect(second.end_date).toBe("April 2021");
   }, 30_000);
+
+  it("keeps a skills cell too tall for a page whole and readable, in slices that read back as one cell", async () => {
+    // Forty flat skills and no matrix, as a record read off the older
+    // template comes: one cell taller than a page. Drawn as one unbreakable
+    // row it ran off the foot of the page with the heading lost above it.
+    const flat = Array.from({ length: 40 }, (_, i) => `• Enterprise Architecture Framework Number ${i + 1} (EAF${i + 1});`);
+    const { parsed, text, pages } = await readBack(
+      await renderTippCvPdf(candidate({ skill_matrix: [], technical_skills: flat.slice(0, 20), skills: flat.slice(20) }), CONTEXT),
+    );
+    expect(pages).toBeGreaterThanOrEqual(4);
+    expect(text).toContain("SKILLSET");
+    // No bullet glyphs inside the cell, and every skill present, once.
+    expect(text).not.toMatch(/Framework Number \d+ \(EAF\d+\); •/);
+    const names = parsed.skill_matrix?.flatMap((c) => c.skills.map((sk) => sk.name)) ?? [];
+    for (const i of [1, 15, 27, 40]) {
+      expect(names.filter((n) => n === `Enterprise Architecture Framework Number ${i} (EAF${i})`)).toHaveLength(1);
+    }
+  }, 40_000);
+
+  it("closes a box or a row that the page breaker cut, on both sides of the break", async () => {
+    const description = Array.from({ length: 90 }, (_, i) => `• Duty number ${i + 1} of a long list`).join("\n");
+    const flat = Array.from({ length: 40 }, (_, i) => `Skill number ${i + 1} of a long cell;`);
+    const source = candidate({
+      skill_matrix: [],
+      technical_skills: flat,
+      work_experience: [{ ...candidate().work_experience[0], description }],
+    });
+    const guides = await cvPdfGuides(source, CONTEXT);
+    const lines = [...guides.values()].flat();
+    // The duties box runs over at least one page: a line at the foot of one
+    // page and a line at the head of the next, each the width of the box.
+    expect(lines.length).toBeGreaterThanOrEqual(2);
+    for (const line of lines) {
+      expect(line.left).toBeCloseTo(72, 0);
+      expect(line.width).toBeCloseTo(451, 0);
+      expect(line.top).toBeGreaterThan(70);
+      expect(line.top).toBeLessThan(790);
+    }
+    const tops = lines.map((l) => Math.round(l.top));
+    expect(tops).toContain(76); // the head of a page, four points above the first line
+    expect(tops.some((t) => t >= 700)).toBe(true); // the foot of a page
+  }, 40_000);
 
   it("leaves out PROJECTS and ACHIEVEMENTS when the record has none, and never prints undefined", async () => {
     const { text, parsed } = await readBack(

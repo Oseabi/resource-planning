@@ -114,10 +114,16 @@ const EMPLOYMENT_LABEL_COLUMN = 157;
 /** Three-column tables: company / position / duration and the like. */
 const COLUMNS_3 = [157, 176, 118];
 
+/** Where the page's content starts and stops, below the header and above the foot. */
+const PAGE_TOP = 80;
+const PAGE_BOTTOM = 60;
+/** A box or row that carries on from the page before gets its edge drawn this far above its first line. */
+const CONTINUATION_GAP = 4;
+
 const s = StyleSheet.create({
   page: {
-    paddingTop: 72,
-    paddingBottom: 60,
+    paddingTop: PAGE_TOP,
+    paddingBottom: PAGE_BOTTOM,
     paddingLeft: 72,
     paddingRight: 72,
     fontFamily: "Gothic",
@@ -201,7 +207,11 @@ function yearsText(years: number | null | undefined): string {
 function skillsetRows(source: CvSource): { category: string; skills: string; years: string }[] {
   const matrix = source.skill_matrix ?? [];
   if (matrix.length === 0) {
-    const flat = [...source.technical_skills, ...source.skills];
+    // A record read off the older template keeps the bullet its skills cell
+    // was typed with; printed joined with semicolons, the bullets have to go.
+    const flat = [...source.technical_skills, ...source.skills]
+      .map((sk) => sk.replace(/^[\s•▪●◦‣∙·*-]+/, "").replace(/[\s;,]+$/, "").trim())
+      .filter(Boolean);
     return flat.length ? [{ category: "Skills", skills: flat.join("; "), years: "" }] : [];
   }
   return matrix.map((row) => {
@@ -248,20 +258,139 @@ function Section({ title, keepWithNext = true }: { title: string; keepWithNext?:
   );
 }
 
-/** The border styles for a cell at a given place in the grid. */
-function edges(col: number, cols: number, last: boolean) {
-  return [s.cell, ...(col === cols - 1 ? [s.lastCell] : []), ...(last ? [s.lastRow] : [])];
+/**
+ * The border styles for a cell at a given place in the grid. A cell that
+ * carries on a row from the slice above draws no top edge, so the slices
+ * read as one cell.
+ */
+function edges(col: number, cols: number, last: boolean, continued: boolean, continues = false) {
+  return [
+    s.cell,
+    // No edge and no padding at a join, so the slices read as one cell.
+    ...(continued ? [{ borderTopWidth: 0, paddingTop: 0 }] : []),
+    ...(continues ? [{ paddingBottom: 0 }] : []),
+    ...(col === cols - 1 ? [s.lastCell] : []),
+    ...(last ? [s.lastRow] : []),
+  ];
 }
 
 /** A cell's paragraphs: one line each, as the PROJECTS table lists its projects. */
 type Cell = string | string[];
 
-function TableRow({ cells, widths, last }: { cells: Cell[]; widths: number[]; last: boolean }) {
+// A table row is never split by the page breaker: a row is three cells side
+// by side, and the breaker splits a row's cells one at a time, so the short
+// ones stay behind and the tall one carries on alone at the left edge. A row
+// too tall for the space is cut into slices here instead, at the joins of its
+// text, each slice a row of its own that fits with room to spare and draws
+// no line between itself and the one before.
+
+/** Roughly how many characters of the body face fit on a line of a cell this wide. Low on purpose: a slice guessed too tall is the failure that matters. */
+function charsPerLine(width: number): number {
+  return Math.max(10, Math.floor((width - 12) / 4.6));
+}
+
+/** Lines a paragraph takes in a cell, by greedy word wrap at the average glyph width. */
+function linesOf(text: string, width: number): number {
+  const cap = charsPerLine(width);
+  let lines = 1;
+  let used = 0;
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (used > 0 && used + 1 + word.length > cap) {
+      lines += Math.max(1, Math.ceil(word.length / cap));
+      used = word.length % cap;
+    } else {
+      used += (used > 0 ? 1 : 0) + word.length;
+    }
+  }
+  return lines;
+}
+
+/**
+ * The most lines a slice may hold, and the fewer the first slice of a row
+ * that has to be cut may hold. The first travels with the heading and the
+ * column header as one piece, and kept small that piece fits in what is
+ * left of most pages rather than carrying the heading over and leaving a
+ * quarter of a page blank. The joins between slices cost nothing to look
+ * at, so a row that fits whole is never cut.
+ */
+const MAX_SLICE_LINES = 10;
+const FIRST_SLICE_LINES = 4;
+
+/** How many lines the k-th piece of a cut row may hold. */
+const cap = (k: number) => (k === 0 ? FIRST_SLICE_LINES : MAX_SLICE_LINES);
+
+/** A paragraph cut at its joins into pieces: at "; " first, then at sentence ends, then anywhere. */
+function paragraphPieces(text: string, width: number): string[] {
+  if (linesOf(text, width) <= MAX_SLICE_LINES) return [text];
+  for (const joint of [/(?<=;)\s+/, /(?<=[.,])\s+/, /\s+/]) {
+    const parts = text.split(joint).filter(Boolean);
+    if (parts.length < 2) continue;
+    const out: string[] = [];
+    let current = "";
+    for (const part of parts) {
+      const joined = current ? `${current} ${part}` : part;
+      if (current && linesOf(joined, width) > cap(out.length)) {
+        out.push(current);
+        current = part;
+      } else {
+        current = joined;
+      }
+    }
+    if (current) out.push(current);
+    if (out.every((piece, k) => linesOf(piece, width) <= cap(k))) return out;
+  }
+  return [text];
+}
+
+/** A list cut between its items into pieces. */
+function listPieces(items: string[], width: number): string[][] {
+  const total = items.reduce((sum, item) => sum + linesOf(item, width - 18), 0);
+  if (total <= MAX_SLICE_LINES) return [items];
+  const out: string[][] = [];
+  let current: string[] = [];
+  let lines = 0;
+  for (const item of items) {
+    const n = linesOf(item, width - 18);
+    if (current.length > 0 && lines + n > cap(out.length)) {
+      out.push(current);
+      current = [];
+      lines = 0;
+    }
+    current.push(item);
+    lines += n;
+  }
+  if (current.length > 0) out.push(current);
+  return out.length > 0 ? out : [[]];
+}
+
+/** A row as the slices it is drawn in: one for most rows, several for a row too tall to keep whole. */
+function rowSlices(cells: Cell[], widths: number[]): Cell[][] {
+  const perCell = cells.map((c, i) => (Array.isArray(c) ? listPieces(c, widths[i]) : paragraphPieces(c, widths[i])));
+  const count = Math.max(1, ...perCell.map((p) => p.length));
+  return Array.from({ length: count }, (_, k) => perCell.map((p, i) => p[k] ?? (Array.isArray(cells[i]) ? [] : "")));
+}
+
+function RowSlice({
+  id,
+  cells,
+  widths,
+  last,
+  continued,
+  continues,
+}: {
+  /** Names the slice for the guides: "row-" for a row's first slice, "row-continued-" for the rest. */
+  id: string;
+  cells: Cell[];
+  widths: number[];
+  last: boolean;
+  continued: boolean;
+  continues: boolean;
+}) {
   const cols = widths.length;
   return (
-    <View style={s.row} wrap={false}>
+    <View style={s.row} wrap={false} id={id}>
       {cells.map((c, i) => (
-        <View key={i} style={[...edges(i, cols, last), { width: widths[i] }]}>
+        <View key={i} style={[...edges(i, cols, last, continued, continues), { width: widths[i] }]}>
           {Array.isArray(c) ? (
             // A list in a cell is bulleted, as the PROJECTS table is on the issued CVs.
             c.map((item, j) => (
@@ -281,28 +410,48 @@ function TableRow({ cells, widths, last }: { cells: Cell[]; widths: number[]; la
 
 /**
  * A section heading with its table. The heading, the column header and the
- * first row are one unbreakable piece, so a page never ends on a heading
- * with an empty table under it, nor on a column header with no row.
+ * first slice of the first row are one unbreakable piece, so a page never
+ * ends on a heading with an empty table under it, nor on a column header
+ * with no row.
  */
 function Table({ title, widths, header, rows }: { title: string; widths: number[]; header: string[]; rows: Cell[][] }) {
   const cols = widths.length;
-  const [first, ...rest] = rows;
+  const name = title.toLowerCase().replace(/[^a-z]+/g, "-");
+  const slices = rows.flatMap((cells, r) =>
+    rowSlices(cells, widths).map((slice, k, all) => ({
+      id: `${k > 0 ? "row-continued" : "row"}-${name}-${r}-${k}`,
+      cells: slice,
+      continued: k > 0,
+      continues: k < all.length - 1,
+      last: r === rows.length - 1 && k === all.length - 1,
+    })),
+  );
+  const [first, ...rest] = slices;
   return (
     <View style={s.table}>
       <View wrap={false}>
         <Section title={title} keepWithNext={false} />
         <View style={s.row} wrap={false}>
           {header.map((h, i) => (
-            <View key={i} style={[...edges(i, cols, rows.length === 0), s.columnHeader, { width: widths[i] }]}>
+            <View key={i} style={[...edges(i, cols, slices.length === 0, false), s.columnHeader, { width: widths[i] }]}>
               <Text>{h}</Text>
             </View>
           ))}
         </View>
-        {first && <TableRow cells={first} widths={widths} last={rest.length === 0} />}
+        {first && <RowSlice {...first} widths={widths} />}
       </View>
-      {rest.map((cells, r) => (
-        <TableRow key={r} cells={cells} widths={widths} last={r === rest.length - 1} />
+      {rest.map((slice, r) => (
+        <RowSlice key={r} {...slice} widths={widths} />
       ))}
+    </View>
+  );
+}
+
+/** A bordered box that may run over a page: the page breaker splits it, and the guides close the two halves. */
+function Box({ id, children }: { id: string; children: React.ReactNode }) {
+  return (
+    <View style={s.box} id={`box-${id}`}>
+      {children}
     </View>
   );
 }
@@ -313,7 +462,8 @@ function Lines({ text }: { text: string | null | undefined }) {
     <>
       {lineKinds(text).map((line, i) =>
         line.kind === "heading" ? (
-          <Text key={i} style={[s.subHeading, i > 0 ? { marginTop: 8 } : {}]}>
+          // Never the last line on a page: it asks for room for two bullets under it.
+          <Text key={i} style={[s.subHeading, i > 0 ? { marginTop: 8 } : {}]} minPresenceAhead={24}>
             {line.text}
           </Text>
         ) : (
@@ -386,7 +536,121 @@ function Cover({ source, context }: { source: CvSource; context: CvPdfContext })
   );
 }
 
-function CvDocument({ source, context }: { source: CvSource; context: CvPdfContext }) {
+/** A line to draw on one page: where a box or a row that the page breaker cut is closed off. */
+interface Guide {
+  top: number;
+  left: number;
+  width: number;
+}
+
+/** What the page breaker made of the document, as react-pdf reports it after rendering. */
+interface LayoutNode {
+  type?: string;
+  box?: { top?: number; left?: number; width?: number; height?: number };
+  style?: { borderTopWidth?: number; borderBottomWidth?: number };
+  props?: { id?: string; fixed?: boolean };
+  children?: LayoutNode[];
+}
+
+/** The nodes in the flow, without the header and the guides, which sit on every page. */
+const flow = (node: LayoutNode): LayoutNode[] => (node.children ?? []).filter((c) => !c.props?.fixed);
+
+/**
+ * The chain from a page down its first (or last) child in the flow, each
+ * with its position on the page. Child boxes are placed relative to their
+ * parent, so the tops are summed on the way down.
+ */
+function chain(page: LayoutNode, side: "first" | "last"): { node: LayoutNode; top: number; left: number }[] {
+  const out: { node: LayoutNode; top: number; left: number }[] = [];
+  let node: LayoutNode | undefined = page;
+  let top = 0;
+  let left = 0;
+  while (node) {
+    const kids = flow(node);
+    const next: LayoutNode | undefined = side === "first" ? kids[0] : kids[kids.length - 1];
+    if (!next) break;
+    top += next.box?.top ?? 0;
+    left += next.box?.left ?? 0;
+    out.push({ node: next, top, left });
+    node = next;
+  }
+  return out;
+}
+
+const isBox = (n: LayoutNode) => /^box-/.test(n.props?.id ?? "");
+const isRow = (n: LayoutNode) => /^row(-continued)?-/.test(n.props?.id ?? "");
+const isContinuedRow = (n: LayoutNode) => /^row-continued-/.test(n.props?.id ?? "");
+
+/**
+ * Where the page breaker cut a box or a row, and what to draw to close it.
+ *
+ * react-pdf splits a bordered box at the foot of a page by taking the bottom
+ * edge off the first half and the top edge off the second, so the box runs
+ * off one page and starts the next with no line at all, and the same happens
+ * between a row and the slice that continues it. Word closes a cell on both
+ * sides of the break, which is what the issued CVs look like. This reads the
+ * rendered layout, finds the halves at the top and foot of each page, and
+ * hands back the lines that close them; the second render draws those lines
+ * as fixed marks that take no room, so the pages break exactly as before.
+ */
+function guidesFor(layout: LayoutNode): Map<number, Guide[]> {
+  const pages = layout.children ?? [];
+  const guides = new Map<number, Guide[]>();
+  const add = (page: number, guide: Guide) => guides.set(page, [...(guides.get(page) ?? []), guide]);
+
+  pages.forEach((page, i) => {
+    const number = i + 1;
+    // A box cut at the top of this page: close it above its first line.
+    for (const { node, top, left } of chain(page, "first")) {
+      const cut = isBox(node) && node.style?.borderTopWidth === 0;
+      if (cut || isContinuedRow(node)) {
+        add(number, { top: top - CONTINUATION_GAP, left, width: node.box?.width ?? 0 });
+        break;
+      }
+    }
+    // A box cut at the foot: close it where the page's content stops. A row
+    // whose next slice opens the following page is closed the same way.
+    const nextOpensWithRow = pages[i + 1] ? chain(pages[i + 1], "first").some(isContinuedRowEntry) : false;
+    for (const { node, top, left } of chain(page, "last")) {
+      const cut = isBox(node) && node.style?.borderBottomWidth === 0;
+      if (cut || (isRow(node) && nextOpensWithRow)) {
+        add(number, { top: top + (node.box?.height ?? 0), left, width: node.box?.width ?? 0 });
+        break;
+      }
+    }
+  });
+  return guides;
+}
+
+const isContinuedRowEntry = (entry: { node: LayoutNode }) => isContinuedRow(entry.node);
+
+function Guides({ guides }: { guides: Map<number, Guide[]> }) {
+  return (
+    <View
+      fixed
+      style={{ position: "absolute", top: 0, left: 0, width: 595.28, height: 841.89 }}
+      render={({ pageNumber }: { pageNumber: number }) => (
+        <>
+          {(guides.get(pageNumber) ?? []).map((g, i) => (
+            <View key={i} style={{ position: "absolute", top: g.top, left: g.left, width: g.width, height: 0.75, backgroundColor: "#000000" }} />
+          ))}
+        </>
+      )}
+    />
+  );
+}
+
+function CvDocument({
+  source,
+  context,
+  guides,
+  onLayout,
+}: {
+  source: CvSource;
+  context: CvPdfContext;
+  guides?: Map<number, Guide[]>;
+  onLayout?: (layout: LayoutNode) => void;
+}) {
   const dob = source.date_of_birth?.trim() ?? "";
   const headerRows: [string, string][] = [
     ["FULL NAME (S)", source.full_name ?? ""],
@@ -420,9 +684,17 @@ function CvDocument({ source, context }: { source: CvSource; context: CvPdfConte
   const achievements = source.achievements?.trim() ?? "";
 
   return (
-    <Document title="Candidate Resume" author={context.generatedBy} creator="TiPP Focus Resource Planning">
+    <Document
+      title="Candidate Resume"
+      author={context.generatedBy}
+      creator="TiPP Focus Resource Planning"
+      // The layout comes back on a field the typings do not name. Pinned to
+      // this version of react-pdf; the guides test catches a change.
+      onRender={(result: unknown) => onLayout?.((result as { _INTERNAL__LAYOUT__DATA_?: LayoutNode })._INTERNAL__LAYOUT__DATA_ ?? {})}
+    >
       <Page size="A4" style={s.page}>
         <Header />
+        {guides && <Guides guides={guides} />}
         <Cover source={source} context={context} />
 
         {/* The header table: one box, a divider, no rules between rows. */}
@@ -440,13 +712,13 @@ function CvDocument({ source, context }: { source: CvSource; context: CvPdfConte
         </View>
 
         <Section title="CANDIDATE OVERVIEW" />
-        <View style={s.box}>
+        <Box id="overview">
           {summary.map((p, i) => (
             <Text key={i} style={s.paragraph}>
               {p}
             </Text>
           ))}
-        </View>
+        </Box>
 
         <Table title="CAREER SUMMARY" widths={COLUMNS_3} header={["COMPANY", "POSITION", "DURATION"]} rows={career} />
 
@@ -469,9 +741,9 @@ function CvDocument({ source, context }: { source: CvSource; context: CvPdfConte
         {achievements && (
           <>
             <Section title="ACHIEVEMENTS" />
-            <View style={s.box}>
+            <Box id="achievements">
               <Lines text={achievements} />
-            </View>
+            </Box>
           </>
         )}
 
@@ -500,7 +772,7 @@ function CvDocument({ source, context }: { source: CvSource; context: CvPdfConte
                 ))}
               </View>
               {/* A column, not a row, so a long list splits across pages. */}
-              <View style={[s.cell, s.lastCell, s.lastRow, { width: CONTENT_WIDTH }]}>
+              <View style={[s.cell, s.lastCell, s.lastRow, { width: CONTENT_WIDTH }]} id={`box-duties-${i}`}>
                 <Text style={s.employmentValue}>Duties:</Text>
                 <Lines text={job.description} />
               </View>
@@ -512,8 +784,26 @@ function CvDocument({ source, context }: { source: CvSource; context: CvPdfConte
   );
 }
 
-/** The candidate as a TiPP Focus CV, as PDF bytes. */
+/**
+ * The candidate as a TiPP Focus CV, as PDF bytes.
+ *
+ * Rendered twice: once to learn where the page breaker cut a box or a row,
+ * and once more with the lines that close those cuts drawn in. The lines
+ * are fixed marks outside the flow, so the second render breaks its pages
+ * exactly where the first did.
+ */
 export async function renderTippCvPdf(source: CvSource, context: CvPdfContext): Promise<Buffer> {
   registerFonts();
-  return renderToBuffer(<CvDocument source={source} context={context} />);
+  let layout: LayoutNode = {};
+  await renderToBuffer(<CvDocument source={source} context={context} onLayout={(l) => (layout = l)} />);
+  return renderToBuffer(<CvDocument source={source} context={context} guides={guidesFor(layout)} />);
 }
+
+/** For the tests: the lines the first render asks the second to draw. */
+export async function cvPdfGuides(source: CvSource, context: CvPdfContext): Promise<Map<number, Guide[]>> {
+  registerFonts();
+  let layout: LayoutNode = {};
+  await renderToBuffer(<CvDocument source={source} context={context} onLayout={(l) => (layout = l)} />);
+  return guidesFor(layout);
+}
+

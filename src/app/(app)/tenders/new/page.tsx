@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { TenderForm } from "@/app/(app)/tenders/tender-form";
 import { EMPTY_TENDER } from "@/app/(app)/tenders/tender-fields";
 import { loadDepartmentContext } from "@/lib/departments-repo";
+import { defaultTenderDepartment } from "@/lib/departments";
 
 export default async function NewTenderPage() {
   const departments = await loadDepartmentContext();
@@ -21,7 +22,7 @@ export default async function NewTenderPage() {
       </div>
       <TenderForm
         mode="create"
-        initial={EMPTY_TENDER}
+        initial={{ ...EMPTY_TENDER, department_id: defaultTenderDepartment(departments.options, departments.ownDepartmentName) }}
         departments={departments.options}
         ownDepartmentName={departments.ownDepartmentName}
       />

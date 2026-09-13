@@ -15,7 +15,7 @@ import {
 import { TenderFields, type TenderExtractedFlags } from "@/app/(app)/tenders/tender-fields";
 import { createTender, type TenderFormFields } from "@/app/(app)/tenders/actions";
 import type { ExtractedTenderFields } from "@/lib/extraction/rfq-parser";
-import type { DepartmentOption } from "@/lib/departments";
+import { defaultTenderDepartment, type DepartmentOption } from "@/lib/departments";
 
 interface RfqExtraction {
   fields: ExtractedTenderFields;
@@ -204,7 +204,10 @@ function RfqReviewDialog({
   ownDepartmentName: string | null;
 }) {
   const router = useRouter();
-  const [fields, setFields] = useState<TenderFormFields>(() => toForm(extraction.fields));
+  const [fields, setFields] = useState<TenderFormFields>(() => ({
+    ...toForm(extraction.fields),
+    department_id: defaultTenderDepartment(departments, ownDepartmentName),
+  }));
   const [flags] = useState<TenderExtractedFlags>(() => toFlags(extraction.fields));
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
