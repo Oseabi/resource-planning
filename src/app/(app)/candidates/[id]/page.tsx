@@ -15,6 +15,8 @@ import { missingTemplateFields, type CvSource } from "@/lib/cv-export/build-tipp
 import { CandidateCvView, Card, Chips } from "@/app/(app)/candidates/[id]/cv-view";
 import { CvDownloadButton } from "@/app/(app)/candidates/[id]/cv-download-button";
 import { DeleteCandidateButton } from "@/app/(app)/candidates/[id]/delete-candidate-button";
+import { DepartmentChips } from "@/components/departments/department-chip";
+import { loadDepartmentContext } from "@/lib/departments-repo";
 
 export default async function CandidateProfilePage({
   params,
@@ -26,7 +28,7 @@ export default async function CandidateProfilePage({
 
   // isCurrentUserAdmin is request-cached: the layout has already resolved it, so
   // this adds no round-trip.
-  const [{ data: candidate }, isAdmin, { data: placements }, activity, deployments] =
+  const [{ data: candidate }, isAdmin, { data: placements }, activity, deployments, departments] =
     await Promise.all([
       supabase.from("candidates").select("*").eq("id", id).single(),
       isCurrentUserAdmin(),
@@ -35,6 +37,7 @@ export default async function CandidateProfilePage({
       supabase.rpc("candidate_commitments").eq("candidate_id", id),
       loadActivity("candidate", id),
       loadDeployments(supabase, id),
+      loadDepartmentContext(),
     ]);
 
   if (!candidate) notFound();
@@ -61,11 +64,19 @@ export default async function CandidateProfilePage({
             {candidate.current_role ?? "No role set"}
             {candidate.location ? ` · ${candidate.location}` : ""}
           </p>
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <StatusBadge status={candidate.status} />
             <AvailabilityBadge availability={candidate.availability} />
             {candidate.years_experience != null && (
               <span className="text-body-sm text-muted-foreground">{candidate.years_experience} yrs experience</span>
+            )}
+            {/* Where they are filed. A person filed nowhere is said so, with the
+                way to fix it, rather than left looking like everyone else. */}
+            <DepartmentChips ids={candidate.department_ids ?? []} departments={departments.all} emptyLabel="No department" />
+            {(candidate.department_ids ?? []).length === 0 && (
+              <Link href={`/candidates/${id}/edit`} className="text-body-sm text-primary underline">
+                File under a department
+              </Link>
             )}
           </div>
         </div>
@@ -77,6 +88,7 @@ export default async function CandidateProfilePage({
             candidateId={candidate.id}
             candidateName={candidate.full_name}
             missingFields={missingForTemplate}
+            brandName={departments.active?.name ?? null}
           />
           <Button variant="outline" size="sm" render={<Link href={`/candidates/${id}/edit`} />} nativeButton={false}>
             <Pencil className="size-4" />

@@ -10,6 +10,7 @@ import type { ProfileRole } from "@/lib/supabase/database.types";
 import { ACCOUNT_MANAGER_KEY } from "@/lib/settings";
 import { isEmailConfigured, sendInviteEmail } from "@/lib/email/resend";
 import { signInLinkFor } from "@/lib/auth/sign-in-links";
+import { isHexColour } from "@/lib/department-theme";
 
 export type CreateUserState = {
   error: string | null;
@@ -338,4 +339,44 @@ export async function updateAccountManager(input: { name: string; email: string;
   });
 
   revalidatePath("/settings/users");
+}
+
+/**
+ * A department's name and colour.
+ *
+ * The name prints everywhere the department is named, the CV cover
+ * included; the colour is what the department's people see the app in.
+ * Admin-only and audited, since a colour changes every screen for a
+ * quarter of the company at once. The slug never changes: imports and the
+ * lens cookie key off it.
+ */
+export async function updateDepartment(id: string, input: { name: string; colour: string }) {
+  await requireAdmin();
+
+  const name = input.name.trim();
+  const colour = input.colour.trim().toUpperCase();
+  if (!name) throw new Error("A department needs a name.");
+  if (!isHexColour(colour)) throw new Error("The colour must be six hex digits, like #DC9204.");
+
+  const admin = createAdminClient();
+  const { data: before } = await admin.from("departments").select("name, colour").eq("id", id).single();
+  if (!before) throw new Error("That department no longer exists.");
+
+  const { error } = await admin.from("departments").update({ name, colour }).eq("id", id);
+  if (error) {
+    // The one refusal a person can cause: two departments with the same name.
+    throw new Error(/departments_name_key/.test(error.message) ? "Another department already has that name." : error.message);
+  }
+
+  await recordAudit({
+    action: "updated",
+    entityType: "department",
+    entityId: id,
+    entityLabel: before.name,
+    detail: { from: { name: before.name, colour: before.colour }, to: { name, colour } },
+  });
+
+  revalidatePath("/settings/users");
+  // The colour and the name are on every page under the layout.
+  revalidatePath("/", "layout");
 }

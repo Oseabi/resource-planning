@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { EditCandidateForm } from "@/app/(app)/candidates/[id]/edit/edit-candidate-form";
 import type { CandidateFormFields } from "@/app/(app)/candidates/actions";
+import { loadDepartmentContext } from "@/lib/departments-repo";
 
 export default async function EditCandidatePage({
   params,
@@ -12,7 +13,10 @@ export default async function EditCandidatePage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: candidate } = await supabase.from("candidates").select("*").eq("id", id).single();
+  const [{ data: candidate }, departments] = await Promise.all([
+    supabase.from("candidates").select("*").eq("id", id).single(),
+    loadDepartmentContext(),
+  ]);
 
   if (!candidate) notFound();
 
@@ -38,6 +42,7 @@ export default async function EditCandidatePage({
     sectors: candidate.sectors,
     languages: candidate.languages,
     resource_categories: candidate.resource_categories,
+    department_ids: candidate.department_ids ?? [],
     linkedin_url: candidate.linkedin_url,
     portfolio_url: candidate.portfolio_url,
     work_experience: candidate.work_experience,
@@ -71,6 +76,7 @@ export default async function EditCandidatePage({
         candidateId={id}
         initial={initial}
         currentCvName={candidate.cv_original_filename}
+        departments={departments.all}
       />
     </div>
   );

@@ -24,6 +24,7 @@ import { ConfirmTeamBanner } from "@/app/(app)/tenders/[id]/confirm-team-banner"
 import { DeliveryPanel } from "@/app/(app)/tenders/[id]/delivery-panel";
 import { SeatCoveragePanel } from "@/app/(app)/tenders/[id]/seat-coverage-panel";
 import { letterCoverage, coverageLabel, eligibleLetters } from "@/lib/reference-letters";
+import { loadDepartmentContext } from "@/lib/departments-repo";
 import { FileCheck2 } from "lucide-react";
 
 export default async function TenderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -33,7 +34,7 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
   // The tender and its match rows are independent, so they go out together
   // rather than one after the other. isCurrentUserAdmin is request-cached, the
   // layout has already resolved it, so it adds no round-trip.
-  const [{ data: tender }, isAdmin, positionData, activity, { data: referenceLetters }] = await Promise.all([
+  const [{ data: tender }, isAdmin, positionData, activity, { data: referenceLetters }, departments] = await Promise.all([
     supabase.from("tenders").select("*").eq("id", id).single(),
     isCurrentUserAdmin(),
     loadPositionViews(supabase, "tender", id),
@@ -43,6 +44,7 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
     supabase
       .from("reference_letters")
       .select("id, client, contract_value, work_completed_on, sectors, contact_name, contact_email, contact_phone"),
+    loadDepartmentContext(),
   ]);
   if (!tender) notFound();
 
@@ -251,6 +253,8 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
           parentType="tender"
           conflicts={conflictsByCandidate}
           candidatePool={positionData.candidatePool}
+          parentDepartmentId={tender.department_id}
+          departments={departments.all}
         />
       </div>
 

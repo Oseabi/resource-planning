@@ -213,6 +213,45 @@ describe("cvFilename", () => {
     expect(cvFilename("Dr Ayanda Cele (PhD)")).toBe("TippFocus - Dr Ayanda Cele PhD.pdf");
     expect(cvFilename("")).toBe("TippFocus - candidate.pdf");
   });
+
+  it("names the department the document goes out under", () => {
+    expect(cvFilename("Nomsa Khumalo", "pdf", "Tipp Construction")).toBe("Tipp Construction - Nomsa Khumalo.pdf");
+    expect(cvFilename("Nomsa Khumalo", "docx", "Tipp-Con (Construction)")).toBe("TippCon Construction - Nomsa Khumalo.docx");
+    expect(cvFilename("Nomsa Khumalo", "pdf", null)).toBe("TippFocus - Nomsa Khumalo.pdf");
+  });
+});
+
+describe("the department's brand on the document", () => {
+  const BRAND = { name: "Tipp Construction", colour: "#DC9204" };
+
+  it("repaints every heading rule in the department's colour and leaves the rest of the file alone", () => {
+    const plain = new PizZip(buildTippCv(candidate(), CONTEXT));
+    const branded = new PizZip(buildTippCv(candidate(), { ...CONTEXT, brand: BRAND }));
+    const plainXml = plain.file("word/document.xml")!.asText();
+    const brandedXml = branded.file("word/document.xml")!.asText();
+
+    const rules = (xml: string, colour: string) => (xml.match(new RegExp(`w:sz="18" w:space="0" w:color="${colour}"`, "g")) ?? []).length;
+    expect(rules(plainXml, "0F4761")).toBeGreaterThanOrEqual(7);
+    expect(rules(brandedXml, "0F4761")).toBe(0);
+    expect(rules(brandedXml, "DC9204")).toBe(rules(plainXml, "0F4761"));
+    expect(branded.file("word/styles.xml")!.asText()).toBe(plain.file("word/styles.xml")!.asText());
+  });
+
+  it("prints the department under the title on the cover, and nothing there without one", async () => {
+    const { value: branded } = await mammoth.extractRawText({ buffer: buildTippCv(candidate(), { ...CONTEXT, brand: BRAND }) });
+    expect(branded).toMatch(/Candidate Resume\s+Tipp Construction\s+Nomsa Khumalo/);
+    const { value: plain } = await mammoth.extractRawText({ buffer: buildTippCv(candidate(), CONTEXT) });
+    expect(plain).toMatch(/Candidate Resume\s+Nomsa Khumalo/);
+    expect(plain).not.toContain("Tipp Construction");
+  });
+
+  it("still reads back as the template", async () => {
+    const buffer = buildTippCv(candidate(), { ...CONTEXT, brand: BRAND });
+    const { value: html } = await mammoth.convertToHtml({ buffer });
+    const parsed = parseTippTables(tablesFromHtml(html));
+    expect(parsed?.full_name).toBe("Nomsa Khumalo");
+    expect(parsed?.work_experience).toHaveLength(2);
+  });
 });
 
 /**

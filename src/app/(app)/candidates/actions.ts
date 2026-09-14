@@ -23,6 +23,8 @@ import {
   cleanSkillMatrix,
   cleanCertificates,
 } from "@/lib/cv-record";
+import { knownDepartmentIds, type DepartmentOption } from "@/lib/departments";
+import { loadDepartmentContext } from "@/lib/departments-repo";
 
 type CandidateUpdate = Database["public"]["Tables"]["candidates"]["Update"];
 
@@ -53,6 +55,8 @@ export interface CandidateFormFields {
   sectors: string[];
   languages: string[];
   resource_categories: string[];
+  /** The business units this person is filed under; may be several, may be none. */
+  department_ids: string[];
   linkedin_url: string | null;
   portfolio_url: string | null;
   work_experience: WorkExperience[];
@@ -129,8 +133,12 @@ function parsePayload(formData: FormData): { fields: CandidateFormFields; force:
   return { fields, force };
 }
 
-/** Map the form contract to candidate table columns (shared by insert + update). */
-function toCandidateColumns(fields: CandidateFormFields): CandidateUpdate & { full_name: string } {
+/**
+ * Map the form contract to candidate table columns (shared by insert + update).
+ * The departments are the ones that exist, once each: the trigger in the
+ * database would refuse anything else, and this says so before it gets there.
+ */
+function toCandidateColumns(fields: CandidateFormFields, departments: DepartmentOption[]): CandidateUpdate & { full_name: string } {
   // The structured tables are what the template prints; the flat lists are
   // what matching scores. The lists are derived from the tables on every
   // save, as a union, so neither has to be typed twice.
@@ -158,6 +166,7 @@ function toCandidateColumns(fields: CandidateFormFields): CandidateUpdate & { fu
     sectors: fields.sectors,
     languages: fields.languages,
     resource_categories: fields.resource_categories,
+    department_ids: knownDepartmentIds(fields.department_ids, departments),
     linkedin_url: fields.linkedin_url,
     portfolio_url: fields.portfolio_url,
     work_experience: fields.work_experience,
@@ -210,10 +219,11 @@ export async function saveCandidate(formData: FormData): Promise<SaveCandidateSt
     }
   }
 
+  const { all: departments } = await loadDepartmentContext();
   const { data, error } = await supabase
     .from("candidates")
     .insert({
-      ...toCandidateColumns(fields),
+      ...toCandidateColumns(fields, departments),
       cv_file_path: cvPath,
       cv_original_filename: cvName,
       created_by: user.id,
@@ -264,7 +274,8 @@ export async function updateCandidate(formData: FormData): Promise<SaveCandidate
     if (dup) return { status: "duplicate", match: dup };
   }
 
-  const updates: CandidateUpdate = toCandidateColumns(fields);
+  const { all: departments } = await loadDepartmentContext();
+  const updates: CandidateUpdate = toCandidateColumns(fields, departments);
 
   const file = formData.get("file");
   if (file instanceof File && file.size > 0) {

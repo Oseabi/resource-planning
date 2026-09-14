@@ -16,6 +16,9 @@ export interface CurrentProfile {
   departmentId: string | null;
   /** Carried so the chrome can say which department a page is showing. */
   departmentName: string | null;
+  departmentSlug: string | null;
+  /** The department's accent, #RRGGBB, which the chrome wears. */
+  departmentColour: string | null;
 }
 
 /**
@@ -47,11 +50,26 @@ export const getCurrentProfile = cache(async (): Promise<CurrentProfile | null> 
   // The department is joined rather than fetched separately: this query already
   // runs once per request, and every caller that wants the id also wants the
   // name to put on screen.
-  const { data: profile } = await supabase
+  let { data: profile, error } = await supabase
     .from("profiles")
-    .select("full_name, role, must_change_password, department_id, departments(name)")
+    .select("full_name, role, must_change_password, department_id, departments(name, slug, colour)")
     .eq("id", user.id)
     .single();
+
+  // A profile query that fails degrades everybody to a recruiter with no
+  // department, admins included, and nothing on screen says why. The one
+  // failure this code can cause itself is the colour column not being there
+  // yet (migration 0024), so that case is tried again without it and named
+  // in the log, rather than quietly locking the admin out of their own screens.
+  if (error && /colour/.test(error.message)) {
+    console.warn("[profile] departments.colour is missing: run migration 0024_department_branding.sql");
+    ({ data: profile, error } = await supabase
+      .from("profiles")
+      .select("full_name, role, must_change_password, department_id, departments(name, slug)")
+      .eq("id", user.id)
+      .single()
+      .then((r) => ({ data: r.data ? { ...r.data, departments: r.data.departments ? { ...r.data.departments, colour: null } : null } : null, error: r.error })));
+  }
 
   const role = (profile?.role ?? "user") as ProfileRole;
 
@@ -66,6 +84,8 @@ export const getCurrentProfile = cache(async (): Promise<CurrentProfile | null> 
     isManager: role === "admin" || role === "manager",
     departmentId: profile?.department_id ?? null,
     departmentName: profile?.departments?.name ?? null,
+    departmentSlug: profile?.departments?.slug ?? null,
+    departmentColour: profile?.departments?.colour ?? null,
   };
 });
 

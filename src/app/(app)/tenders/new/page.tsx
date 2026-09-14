@@ -22,7 +22,10 @@ export default async function NewTenderPage() {
       </div>
       <TenderForm
         mode="create"
-        initial={{ ...EMPTY_TENDER, department_id: defaultTenderDepartment(departments.options, departments.ownDepartmentName) }}
+        initial={{
+          ...EMPTY_TENDER,
+          department_id: defaultTenderDepartment(departments.options, departments.ownDepartmentName, departments.lens?.id ?? null),
+        }}
         departments={departments.options}
         ownDepartmentName={departments.ownDepartmentName}
       />

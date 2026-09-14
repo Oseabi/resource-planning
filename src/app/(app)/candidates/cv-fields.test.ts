@@ -44,6 +44,14 @@ describe("fieldsFromExtraction", () => {
     expect(f.notes).toBeNull();
   });
 
+  it("files the new person where the uploader says, since no CV names a business unit", () => {
+    expect(fieldsFromExtraction(extraction({ full_name: "T" })).department_ids).toEqual([]);
+    expect(fieldsFromExtraction(extraction({ full_name: "T" }), { department_ids: ["d4"] }).department_ids).toEqual(["d4"]);
+    // A replaced CV never moves somebody between departments.
+    const merged = mergeExtractionIntoFields({ ...EMPTY_CANDIDATE, department_ids: ["d1"] }, extraction({ full_name: "T" }));
+    expect(merged.fields.department_ids).toEqual(["d1"]);
+  });
+
   it("flags exactly what the document filled", () => {
     const flags = flagsFromExtraction(extraction({ full_name: "T", availability_note: "Immediately" }));
     expect(flags.full_name).toBe(true);

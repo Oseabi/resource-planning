@@ -143,7 +143,7 @@ export async function loadPositionViews(
     const { data: candidates } = await supabase
       .from("candidates")
       .select(
-        "id, full_name, current_role, status, additional_roles, skills, technical_skills, certifications, years_experience, availability",
+        "id, full_name, current_role, status, additional_roles, skills, technical_skills, certifications, years_experience, availability, department_ids",
       )
       .in("id", candidateIds);
     for (const c of candidates ?? []) {
@@ -162,6 +162,7 @@ export async function loadPositionViews(
         certifications: c.certifications,
         years_experience: c.years_experience,
         availability: c.availability,
+        department_ids: c.department_ids ?? [],
       };
     }
   }

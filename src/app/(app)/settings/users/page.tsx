@@ -16,6 +16,7 @@ import { RoleSelect } from "@/app/(app)/settings/users/role-select";
 import { DeleteUserDialog } from "@/app/(app)/settings/users/delete-user-dialog";
 import { DepartmentSelect } from "@/app/(app)/settings/users/department-select";
 import { AccountManagerCard } from "@/app/(app)/settings/users/account-manager-card";
+import { DepartmentsCard } from "@/app/(app)/settings/users/departments-card";
 import { loadAccountManager } from "@/lib/settings";
 import { isEmailConfigured } from "@/lib/email/resend";
 
@@ -44,7 +45,7 @@ export default async function UsersSettingsPage() {
       .from("profiles")
       .select("id, full_name, email, role, department_id, must_change_password, created_at")
       .order("created_at", { ascending: false }),
-    supabase.from("departments").select("id, name, slug").order("sort_order"),
+    supabase.from("departments").select("id, name, slug, colour").order("sort_order"),
     loadAccountManager(),
   ]);
 
@@ -57,7 +58,7 @@ export default async function UsersSettingsPage() {
           <h1 className="text-display font-semibold text-foreground">User Management</h1>
           <p className="mt-1 text-body-lg text-muted-foreground">
             Manage platform access, roles, and accounts for your team. A person&apos;s department
-            decides which tenders they can see; admins see all four.
+            decides which tenders they can see and colours their screen; admins see all four.
           </p>
         </div>
         <CreateUserDialog departments={allDepartments} emailConfigured={isEmailConfigured()} />
@@ -162,7 +163,8 @@ export default async function UsersSettingsPage() {
         </ul>
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6 space-y-6">
+        <DepartmentsCard departments={allDepartments} />
         <AccountManagerCard initial={accountManager} />
       </div>
     </div>

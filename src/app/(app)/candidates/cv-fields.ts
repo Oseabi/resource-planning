@@ -25,8 +25,15 @@ function derivedCategories(f: ExtractedCandidateFields): string[] {
   });
 }
 
-/** A new record from a CV: everything the document said, and the system's defaults for the rest. */
-export function fieldsFromExtraction(r: ExtractionResult): CandidateFormFields {
+/**
+ * A new record from a CV: everything the document said, and the system's
+ * defaults for the rest. The departments come from whoever is uploading,
+ * since no CV says which business unit its owner belongs to.
+ */
+export function fieldsFromExtraction(
+  r: ExtractionResult,
+  defaults: { department_ids: string[] } = { department_ids: [] },
+): CandidateFormFields {
   const f = r.fields;
   return {
     full_name: f.full_name ?? "",
@@ -55,6 +62,7 @@ export function fieldsFromExtraction(r: ExtractionResult): CandidateFormFields {
     sectors: f.sectors,
     languages: f.languages,
     resource_categories: derivedCategories(f),
+    department_ids: defaults.department_ids,
     linkedin_url: f.linkedin_url,
     portfolio_url: f.portfolio_url,
     work_experience: f.work_experience,

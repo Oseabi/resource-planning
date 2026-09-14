@@ -13,6 +13,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { VOCABULARY } from "@/lib/vocabulary";
 import { CATEGORY_NAMES } from "@/lib/resource-categories";
+import type { DepartmentBrand } from "@/lib/departments";
+import { DepartmentDot } from "@/components/departments/department-chip";
 
 const STATUS_LABELS: Record<string, string> = {
   all: "Any status",
@@ -21,7 +23,14 @@ const STATUS_LABELS: Record<string, string> = {
   placed: "Placed",
 };
 
-export function CandidatesFilters() {
+export function CandidatesFilters({
+  departments = [],
+  defaultDepartmentId = null,
+}: {
+  departments?: DepartmentBrand[];
+  /** What the list shows when the address names no department: the person's own. */
+  defaultDepartmentId?: string | null;
+} = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -39,11 +48,17 @@ export function CandidatesFilters() {
 
   function update(key: string, value: string | null) {
     const next = new URLSearchParams(params.toString());
-    if (value && value !== "all") next.set(key, value);
+    // "all" is a real choice for the department, since leaving it out means
+    // the person's own; for everything else it means no filter.
+    if (value && (value !== "all" || key === "department")) next.set(key, value);
     else next.delete(key);
     next.delete("page"); // reset pagination on any filter change
     router.push(`${pathname}?${next.toString()}`);
   }
+
+  const departmentValue = params.get("department") ?? defaultDepartmentId ?? "all";
+  const departmentLabel = (v: string) =>
+    v === "none" ? "No department yet" : (departments.find((d) => d.id === v)?.name ?? "All departments");
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -56,6 +71,33 @@ export function CandidatesFilters() {
           className="pl-9"
         />
       </div>
+
+      {departments.length > 0 && (
+        <Select value={departmentValue} onValueChange={(v) => update("department", v)}>
+          <SelectTrigger className="w-full sm:w-48" aria-label="Department">
+            <SelectValue placeholder="All departments">
+              {(v) => (
+                <span className="inline-flex items-center gap-2">
+                  <DepartmentDot colour={departments.find((d) => d.id === String(v))?.colour ?? null} />
+                  {departmentLabel(String(v))}
+                </span>
+              )}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All departments</SelectItem>
+            {departments.map((d) => (
+              <SelectItem key={d.id} value={d.id}>
+                <span className="inline-flex items-center gap-2">
+                  <DepartmentDot colour={d.colour} />
+                  {d.name}
+                </span>
+              </SelectItem>
+            ))}
+            <SelectItem value="none">No department yet</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
 
       <Select
         value={params.get("role") ?? "all"}

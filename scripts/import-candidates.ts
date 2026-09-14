@@ -2,6 +2,7 @@
  * Load a candidate roster into the system.
  *
  *   npx tsx scripts/import-candidates.ts <file.csv> [--as <email>] [--apply]
+ *                                        [--department "Tipp Consulting"]
  *                                        [--only <email,email>] [--skip-invalid]
  *                                        [--accept-roles "Actuary,Town Planner"]
  *   npx tsx scripts/import-candidates.ts --template
@@ -44,6 +45,7 @@ import {
   type CandidateRowPlan,
 } from "@/lib/candidate-import";
 import { ALL_ROLES } from "@/lib/vocabulary";
+import { resolveImportDepartment } from "@/lib/departments";
 
 function readEnv(): Record<string, string> {
   const file = path.resolve(".env.local");
@@ -137,8 +139,23 @@ async function main() {
     .filter(Boolean);
   const index = buildRoleIndex([...ALL_ROLES], seatRoles, accepted);
 
+  // Departments are named on the sheet, or given once for the whole file
+  // with --department; a row that names none is filed there, or nowhere.
+  const { data: departmentRows } = await db.from("departments").select("id, name, slug").order("sort_order");
+  const departments = departmentRows ?? [];
+  let defaultDepartmentId: string | null = null;
+  const departmentFlag = flag("department");
+  if (departmentFlag) {
+    const resolved = resolveImportDepartment(departmentFlag, null, departments);
+    if (resolved.error || !resolved.departmentId) {
+      console.error(`--department: ${resolved.error}`);
+      process.exit(1);
+    }
+    defaultDepartmentId = resolved.departmentId;
+  }
+
   const table = parseCsv(fs.readFileSync(file, "utf8"));
-  const { parsed, problems, unknownRoles } = readCandidateRows(table, index);
+  const { parsed, problems, unknownRoles } = readCandidateRows(table, index, { departments, defaultDepartmentId });
 
   const only = flag("only")?.split(",").map((v) => v.trim().toLowerCase());
   const selected = only
@@ -169,6 +186,7 @@ async function main() {
     operator: operatorEmail ?? "not set, dry run only",
     apply,
     unknownRoles,
+    departments,
   });
 
   console.log(report);
@@ -211,6 +229,7 @@ async function main() {
         sectors: p.row.sectors,
         languages: p.row.languages,
         resource_categories: p.row.resource_categories,
+        department_ids: p.row.department_ids,
         available_from: p.row.available_from,
         notes: p.row.notes,
         created_by: operatorId,

@@ -186,6 +186,17 @@ describe("renderTippCvPdf", () => {
     expect(tops.some((t) => t >= 700)).toBe(true); // the foot of a page
   }, 40_000);
 
+  it("carries the department's name on the cover and still reads back as the template", async () => {
+    const { hadCover, coverAsOf, text, parsed } = await readBack(
+      await renderTippCvPdf(candidate(), { ...CONTEXT, brand: { name: "Tipp Construction", colour: "#DC9204" } }),
+    );
+    expect(hadCover).toBe(true);
+    expect(coverAsOf).toBe("12 September 2026");
+    expect(text).toMatch(/Candidate Resume\s+Tipp Construction\s+Nomsa Khumalo/);
+    expect(parsed.full_name).toBe("Nomsa Khumalo");
+    expect(parsed.work_experience).toHaveLength(2);
+  }, 30_000);
+
   it("leaves out PROJECTS and ACHIEVEMENTS when the record has none, and never prints undefined", async () => {
     const { text, parsed } = await readBack(
       await renderTippCvPdf(candidate({ projects: [], achievements: null, designated_group: null }), CONTEXT),

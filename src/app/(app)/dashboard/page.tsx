@@ -20,6 +20,7 @@ import { expiryStatus, daysUntilExpiry } from "@/lib/oem-letters";
 import { ExpiryBadge } from "@/app/(app)/oem-letters/expiry-badge";
 import { deliveryState, contractWindowLabel } from "@/lib/delivery";
 import { DeliveryStateBadge } from "@/app/(app)/tenders/tender-badges";
+import { loadDepartmentContext } from "@/lib/departments-repo";
 
 /** Bids inside this many days are the ones worth looking at this morning. */
 const DEADLINE_WINDOW_DAYS = 14;
@@ -28,6 +29,13 @@ const ALL_DEADLINES = 3650;
 
 export default async function DashboardPage() {
   const supabase = await createClient();
+  // An admin looking through one department gets that department's bids on
+  // the dashboard too; the pool numbers stay company wide.
+  const { lens } = await loadDepartmentContext();
+  let tenderQuery = supabase
+    .from("tenders")
+    .select("id, title, client, status, submission_deadline, sectors, required_skills, contract_start_date, contract_end_date");
+  if (lens) tenderQuery = tenderQuery.eq("department_id", lens.id);
 
   // Two placement reads, because they answer two different questions. The bench
   // forecast asks when people come free, which is a question about the shared
@@ -41,11 +49,7 @@ export default async function DashboardPage() {
     { data: commitments },
     { data: ownPlacements },
   ] = await Promise.all([
-      supabase
-        .from("tenders")
-        .select(
-          "id, title, client, status, value, submission_deadline, sectors, required_skills, contract_start_date, contract_end_date",
-        ),
+      tenderQuery,
       supabase.from("oem_letters").select("id, title, oem_vendor, categories, expiry_date"),
       supabase
         .from("candidates")

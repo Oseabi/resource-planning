@@ -7,6 +7,7 @@ import { missingTemplateFields, type CvSource } from "@/lib/cv-export/missing-fi
 import { durationOf } from "@/lib/cv-record";
 import { formatLongDate, parseLongDate } from "@/lib/dates";
 import type { AccountManager } from "@/lib/supabase/database.types";
+import type { CvBrand } from "@/lib/cv-export/brand";
 
 export { missingTemplateFields };
 export type { CvSource };
@@ -29,9 +30,22 @@ export interface CvContext {
   asOf: Date;
   /** Written into the file's properties as its author. */
   generatedBy: string;
+  /**
+   * The department the document goes out under: its name on the cover and
+   * in the file name, its colour on the rules. Nothing for the plain TiPP
+   * Focus document, which is what an admin with no department gets.
+   */
+  brand?: CvBrand | null;
 }
 
 const TEMPLATE_PATH = path.join(process.cwd(), "src", "lib", "cv-export", "tipp-focus-template.docx");
+
+/**
+ * The rule under every section heading, exactly as scripts/build-cv-template.mjs
+ * writes it: the one string a branded document repaints. The colour is the
+ * issued template's teal-navy, which the plain document keeps.
+ */
+export const HEADING_RULE_XML = '<w:bottom w:val="single" w:sz="18" w:space="0" w:color="0F4761"/>';
 
 /** How the app's availability values read on a CV. */
 const AVAILABILITY_TEXT: Record<string, string> = {
@@ -91,6 +105,9 @@ function skillsetRows(source: CvSource) {
 
 /** Map a candidate onto the template's tags. Exported for its unit tests. */
 export function toTemplateData(source: CvSource, context: CvContext) {
+  // Zero or one lines under "Candidate Resume": the paragraph loops over
+  // it, so the plain document has no blank line where the name would go.
+  const brand_line = context.brand ? [context.brand.name] : [];
   const career = source.work_experience.map((entry) => ({
     company: entry.company ?? "",
     role: entry.title ?? "",
@@ -126,6 +143,7 @@ export function toTemplateData(source: CvSource, context: CvContext) {
   const dateOfBirth = formatLongDate(parseLongDate(dob)) ?? dob;
 
   return {
+    brand_line,
     full_name: source.full_name ?? "",
     position: source.current_role ?? "",
     as_of_date: formatLongDate(context.asOf.toISOString().slice(0, 10)) ?? "",
@@ -166,10 +184,12 @@ export function toTemplateData(source: CvSource, context: CvContext) {
   };
 }
 
-/** A filename that will not surprise anyone in a bid folder. */
-export function cvFilename(fullName: string, format: "pdf" | "docx" = "pdf"): string {
-  const safe = (fullName || "candidate").replace(/[^A-Za-z0-9 ]+/g, "").trim() || "candidate";
-  return `TippFocus - ${safe}.${format}`;
+/** A filename that will not surprise anyone in a bid folder: the department, then the person. */
+export function cvFilename(fullName: string, format: "pdf" | "docx" = "pdf", brandName?: string | null): string {
+  const clean = (text: string) => text.replace(/[^A-Za-z0-9 ]+/g, "").replace(/\s+/g, " ").trim();
+  const safe = clean(fullName || "") || "candidate";
+  const prefix = clean(brandName ?? "") || "TippFocus";
+  return `${prefix} - ${safe}.${format}`;
 }
 
 /**
@@ -207,5 +227,14 @@ export function buildTippCv(source: CvSource, context: CvContext): Buffer {
 
   doc.render(toTemplateData(source, context));
 
-  return doc.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" });
+  // The rules take the department's colour after the render, by replacing
+  // the exact border the build script wrote and nothing else: styles.xml is
+  // untouched, and a document with no brand is the template's own.
+  const rendered = doc.getZip();
+  if (context.brand) {
+    const xml = rendered.file("word/document.xml")?.asText() ?? "";
+    rendered.file("word/document.xml", xml.split(HEADING_RULE_XML).join(HEADING_RULE_XML.replace("0F4761", context.brand.colour.replace("#", "").toUpperCase())));
+  }
+
+  return rendered.generate({ type: "nodebuffer", compression: "DEFLATE" });
 }

@@ -11,6 +11,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { filenameFromDisposition } from "@/lib/cv-export/filename";
 
 type CvFormat = "pdf" | "docx";
 
@@ -28,10 +29,13 @@ export function TippCvButton({
   candidateId,
   candidateName,
   missingFields,
+  brandName = null,
 }: {
   candidateId: string;
   candidateName: string;
   missingFields: string[];
+  /** The department the document goes out under, which names the button. */
+  brandName?: string | null;
 }) {
   const [busy, setBusy] = useState<CvFormat | null>(null);
   const [confirming, setConfirming] = useState<CvFormat | null>(null);
@@ -59,7 +63,8 @@ export function TippCvButton({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `TippFocus - ${candidateName}.${format}`;
+      // The route names the file after the department; the fallback is the plain name.
+      a.download = filenameFromDisposition(res.headers.get("content-disposition"), `TippFocus - ${candidateName}.${format}`);
       a.click();
       URL.revokeObjectURL(url);
       setConfirming(null);
@@ -77,7 +82,7 @@ export function TippCvButton({
     <>
       <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => start("pdf")}>
         {busy === "pdf" ? <Loader2 className="size-4 animate-spin" /> : <FileDown className="size-4" />}
-        TiPP Focus CV
+        {brandName ?? "TiPP Focus"} CV
       </Button>
       <Button
         variant="ghost"

@@ -12,14 +12,20 @@ import {
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/layout/empty-state";
 import { RequirementStatusBadge } from "@/app/(app)/job-requirements/requirement-badges";
+import { loadDepartmentContext } from "@/lib/departments-repo";
 
 export default async function JobRequirementsPage() {
   const supabase = await createClient();
 
-  const { data: requirements } = await supabase
+  // RLS scopes the list to the caller's department; an admin looking
+  // through one department sees that department's alone.
+  const { lens } = await loadDepartmentContext();
+  let query = supabase
     .from("job_requirements")
     .select("id, title, client, required_role, status, created_at")
     .order("created_at", { ascending: false });
+  if (lens) query = query.eq("department_id", lens.id);
+  const { data: requirements } = await query;
 
   const rows = requirements ?? [];
 

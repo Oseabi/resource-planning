@@ -12,10 +12,17 @@ import {
 } from "@/app/(app)/candidates/candidate-fields";
 import { saveCandidate, type CandidateFormFields, type DuplicateMatch } from "@/app/(app)/candidates/actions";
 import type { ExtractionResult } from "@/lib/extraction/types";
+import type { DepartmentBrand } from "@/lib/departments";
 
-export function NewCandidateForm() {
+export function NewCandidateForm({
+  departments = [],
+  defaultDepartmentIds = [],
+}: {
+  departments?: DepartmentBrand[];
+  defaultDepartmentIds?: string[];
+} = {}) {
   const router = useRouter();
-  const [fields, setFields] = useState<CandidateFormFields>(EMPTY_CANDIDATE);
+  const [fields, setFields] = useState<CandidateFormFields>({ ...EMPTY_CANDIDATE, department_ids: defaultDepartmentIds });
   const [flags, setFlags] = useState<ExtractedFlags>({});
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
@@ -144,7 +151,7 @@ export function NewCandidateForm() {
       )}
 
       <div className="rounded-md border border-border bg-card p-5">
-        <CandidateFields value={fields} onChange={setFields} extracted={flags} />
+        <CandidateFields value={fields} onChange={setFields} extracted={flags} departments={departments} />
       </div>
 
       {error && <p className="text-body-sm text-destructive">{error}</p>}

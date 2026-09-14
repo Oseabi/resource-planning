@@ -27,6 +27,7 @@ import type { CsvTable } from "@/lib/csv";
 import { parseImportDate, parseList, resolveRole, type RoleIndex } from "@/lib/tender-import";
 import { deriveCategories, CATEGORY_NAMES } from "@/lib/resource-categories";
 import type { CandidateAvailability, CandidateStatus } from "@/lib/supabase/database.types";
+import { resolveImportDepartment, departmentName, type DepartmentOption } from "@/lib/departments";
 
 /**
  * Columns the CV fills in. On a candidate who already has a CV on file these
@@ -59,10 +60,18 @@ export const MANUAL_COLUMNS = [
   "available_from",
   "status",
   "resource_categories",
+  "department_ids",
   "notes",
 ] as const;
 
 export const CANDIDATE_COLUMNS = [...CV_COLUMNS, ...MANUAL_COLUMNS] as const;
+
+/**
+ * What a roster may call a column, mapped to the column it is. A sheet says
+ * "departments" and names them; the record holds their ids under
+ * department_ids, and the plan compares like with like.
+ */
+export const HEADER_ALIASES: Record<string, string> = { departments: "department_ids" };
 
 const REQUIRED_COLUMNS = ["full_name"] as const;
 const LIST_COLUMNS = [
@@ -74,6 +83,7 @@ const LIST_COLUMNS = [
   "sectors",
   "languages",
   "resource_categories",
+  "department_ids",
 ] as const;
 
 const AVAILABILITIES: CandidateAvailability[] = ["available", "notice_period", "unavailable"];
@@ -124,6 +134,8 @@ export interface ParsedCandidate {
   available_from: string | null;
   status: CandidateStatus | null;
   resource_categories: string[];
+  /** The departments named on the row, as ids, or the operator's default when blank. */
+  department_ids: string[];
   notes: string | null;
   /** Role spellings corrected, always printed. */
   roleNotes: string[];
@@ -254,12 +266,56 @@ function resolveCandidateRole(
   return { role, note: via === "alias" ? `"${input.trim()}" read as "${role}"` : null, error: null };
 }
 
+export interface ImportDepartments {
+  departments: DepartmentOption[];
+  /** Where a row that names no department is filed. Null files it nowhere. */
+  defaultDepartmentId?: string | null;
+}
+
+/**
+ * The departments a row names, as ids. Names or slugs, pipe separated, each
+ * one checked: a department that does not exist is a reason to refuse the
+ * row rather than a guess, since the importer runs with the service role and
+ * nothing underneath would notice.
+ */
+export function parseDepartments(
+  raw: string,
+  options: ImportDepartments,
+): { ids: string[]; error: string | null } {
+  const names = parseList(raw);
+  if (names.length === 0) {
+    return { ids: options.defaultDepartmentId ? [options.defaultDepartmentId] : [], error: null };
+  }
+  const ids: string[] = [];
+  for (const name of names) {
+    const resolved = resolveImportDepartment(name, null, options.departments);
+    if (resolved.error || !resolved.departmentId) return { ids: [], error: resolved.error ?? `"${name}" is not a department` };
+    if (!ids.includes(resolved.departmentId)) ids.push(resolved.departmentId);
+  }
+  return { ids, error: null };
+}
+
+/** The table with every aliased header spelled the way the columns are. */
+function withCanonicalHeaders(table: CsvTable): CsvTable {
+  const rename = (h: string) => HEADER_ALIASES[h] ?? h;
+  return {
+    ...table,
+    headers: table.headers.map(rename),
+    rows: table.rows.map((row) => ({
+      ...row,
+      cells: Object.fromEntries(Object.entries(row.cells).map(([k, v]) => [rename(k), v])),
+    })),
+  };
+}
+
 export function readCandidateRows(
-  table: CsvTable,
+  rawTable: CsvTable,
   index: RoleIndex,
+  options: ImportDepartments = { departments: [], defaultDepartmentId: null },
 ): { parsed: ParsedCandidate[]; problems: RowProblem[]; unknownRoles: string[] } {
   const problems: RowProblem[] = [];
   const unknownRoles = new Set<string>();
+  const table = withCanonicalHeaders(rawTable);
 
   const known = new Set<string>(CANDIDATE_COLUMNS);
   const unknown = table.headers.filter((h) => h && !known.has(h));
@@ -359,6 +415,9 @@ export function readCandidateRows(
       warnings.push("on notice with no available_from, so they read as free today");
     }
 
+    const departments = parseDepartments(cell("department_ids"), options);
+    if (departments.error) reasons.push(`departments: ${departments.error}`);
+
     if (reasons.length > 0) {
       problems.push({ line: row.line, name: fullName || "(no name)", reasons });
       continue;
@@ -403,6 +462,7 @@ export function readCandidateRows(
       available_from: availableFrom.date,
       status: status.status,
       resource_categories: categories,
+      department_ids: departments.ids,
       notes: cell("notes").trim() || null,
       roleNotes,
       warnings,
@@ -645,11 +705,17 @@ export interface ReportMeta {
   operator: string;
   apply: boolean;
   unknownRoles?: string[];
+  /** So the report names departments rather than printing their ids. */
+  departments?: DepartmentOption[];
 }
 
-const show = (v: unknown): string => {
+const show = (v: unknown, meta?: ReportMeta, column?: string): string => {
   if (v === null || v === undefined || v === "") return "blank";
-  if (Array.isArray(v)) return v.length === 0 ? "blank" : v.join(" | ");
+  if (Array.isArray(v)) {
+    if (v.length === 0) return "blank";
+    const named = column === "department_ids" && meta?.departments ? v.map((id) => departmentName(String(id), meta.departments!) ?? String(id)) : v;
+    return named.join(" | ");
+  }
   return String(v);
 };
 
@@ -712,14 +778,14 @@ export function formatCandidatePlan(plan: CandidatePlan, meta: ReportMeta): stri
     const via = p.matchedOn === "name" ? "  matched on name alone" : "";
     out.push(`row ${p.row.line}  UPDATE  "${p.targetName}"${via}  -> candidate ${p.targetId}`);
     for (const c of p.changes) {
-      out.push(`        ${c.column.padEnd(20)} ${show(c.from)} -> ${show(c.to)}`);
+      out.push(`        ${c.column.padEnd(20)} ${show(c.from, meta, c.column)} -> ${show(c.to, meta, c.column)}`);
     }
     for (const column of p.leftAlone) {
       out.push(`        ${column.padEnd(20)} left alone, blank in the roster`);
     }
     for (const c of p.declined) {
-      out.push(`        ${c.column.padEnd(20)} kept from the CV: ${show(c.from)}`);
-      out.push(`        ${"".padEnd(20)}   the roster says ${show(c.to)}, edit it in the app if the CV is wrong`);
+      out.push(`        ${c.column.padEnd(20)} kept from the CV: ${show(c.from, meta, c.column)}`);
+      out.push(`        ${"".padEnd(20)}   the roster says ${show(c.to, meta, c.column)}, edit it in the app if the CV is wrong`);
     }
     for (const note of p.row.roleNotes) out.push(`        note                 ${note}`);
     for (const w of p.row.warnings) out.push(`        warn                 ${w}`);

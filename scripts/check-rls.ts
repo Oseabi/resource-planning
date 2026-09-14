@@ -232,6 +232,26 @@ async function main() {
   else if ((trailSize ?? 0) === 0) skip("the trail is empty, so the read check proves nothing");
   else pass(`cannot read the trail, though ${trailSize} entries exist`);
 
+  // ------------------------------------------------------------------ 6 ---
+  console.log("\n6. Department branding");
+  // The colour is read by everybody's chrome and written only from the
+  // settings screen; a candidate's departments are a label everybody reads.
+  const { data: colours, error: colourError } = await asThem.from("departments").select("slug, colour");
+  if (colourError) fail(`cannot read department colours: ${colourError.message}`);
+  else pass(`reads the colours of ${colours?.length ?? 0} departments`);
+
+  const { data: recoloured } = await asThem
+    .from("departments")
+    .update({ colour: "#000000" })
+    .neq("slug", "__none__")
+    .select("id");
+  if (!recoloured || recoloured.length === 0) pass("cannot change a department's colour");
+  else fail(`RECOLOURED ${recoloured.length} department(s) as a non-admin`);
+
+  const { error: filedError } = await asThem.from("candidates").select("department_ids").limit(1);
+  if (filedError) fail(`cannot read where candidates are filed: ${filedError.message}`);
+  else pass("reads the departments candidates are filed under");
+
   if (probe) {
     await admin.from("candidates").delete().eq("id", probe.id);
     console.log("\nremoved the probe candidate");
