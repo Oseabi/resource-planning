@@ -1,17 +1,34 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { getCurrentProfile } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recordAudit } from "@/app/(app)/audit-actions";
 import type { ProfileRole } from "@/lib/supabase/database.types";
 import { ACCOUNT_MANAGER_KEY } from "@/lib/settings";
+import { isEmailConfigured, sendInviteEmail } from "@/lib/email/resend";
+import { signInLinkFor } from "@/lib/auth/sign-in-links";
 
 export type CreateUserState = {
   error: string | null;
+  /** Shown only when the admin typed the password, so there is something to hand over. */
   credentials?: { email: string; password: string; appUrl: string };
+  /** The invitation email: where it went, or why it did not go. */
+  invitation?: { to: string; sent: boolean; note: string | null };
 };
 
+/**
+ * Create an account and invite its owner.
+ *
+ * With email configured, the person gets one link that signs them in and
+ * asks them to choose a password; the admin need not set one at all, and
+ * a random one stands in behind the scenes. Without email, or when the
+ * admin types a password anyway, the details are shown once for the admin
+ * to pass on themselves, which is how every account was made before the
+ * app could send mail.
+ */
 export async function createEmployeeAccount(
   _prevState: CreateUserState,
   formData: FormData,
@@ -20,15 +37,23 @@ export async function createEmployeeAccount(
 
   const fullName = String(formData.get("full_name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
+  const typedPassword = String(formData.get("password") ?? "");
   const role = (formData.get("role") as ProfileRole) ?? "user";
   // "none" is the select's stand-in for null, since it cannot hold one.
   const departmentRaw = String(formData.get("department_id") ?? "none");
   const departmentId = departmentRaw === "none" ? null : departmentRaw;
 
-  if (!fullName || !email || password.length < 8) {
-    return { error: "Name, email, and an 8+ character password are required." };
+  const canEmail = isEmailConfigured();
+  if (!fullName || !email) return { error: "Name and email are required." };
+  if (typedPassword.length > 0 && typedPassword.length < 8) {
+    return { error: "A password needs at least 8 characters." };
   }
+  if (!typedPassword && !canEmail) {
+    return { error: "Email is not configured, so set an initial password to hand over yourself." };
+  }
+  // Never shown, never needed: the invitation link signs them in and the
+  // set-password page replaces it.
+  const password = typedPassword || randomBytes(24).toString("base64url");
 
   const admin = createAdminClient();
   const { data: created, error: createError } = await admin.auth.admin.createUser({
@@ -54,23 +79,40 @@ export async function createEmployeeAccount(
     return { error: "Account created but profile setup failed. Please contact support." };
   }
 
+  // The invitation, when the app can send mail. A failure here is said in
+  // the dialog and in the trail, never swallowed: an account that exists
+  // and an owner who never heard of it is the worst outcome.
+  let invitation: CreateUserState["invitation"];
+  if (canEmail) {
+    const link = await signInLinkFor(email, "magiclink");
+    if ("error" in link) {
+      invitation = { to: email, sent: false, note: `Could not make the sign-in link: ${link.error}` };
+    } else {
+      const inviter = (await getCurrentProfile())?.fullName?.trim() || "An admin";
+      const result = await sendInviteEmail({ to: email, fullName, invitedBy: inviter, link: link.link });
+      invitation =
+        result.configured && result.ok
+          ? { to: email, sent: true, note: null }
+          : { to: email, sent: false, note: result.configured ? `Could not send the email: ${result.error}` : "Email is not configured." };
+    }
+  }
+
   await recordAudit({
     action: "created",
     entityType: "profile",
     entityId: created.user.id,
     entityLabel: `${fullName} (${email})`,
-    detail: { role, department_id: departmentId },
+    detail: { role, department_id: departmentId, invitation_emailed: invitation?.sent ?? false },
   });
 
   revalidatePath("/settings/users");
 
   return {
     error: null,
-    credentials: {
-      email,
-      password,
-      appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "",
-    },
+    ...(typedPassword || !invitation?.sent
+      ? { credentials: { email, password, appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "" } }
+      : {}),
+    ...(invitation ? { invitation } : {}),
   };
 }
 

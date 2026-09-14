@@ -47,6 +47,61 @@ async function sendEmail({ to, subject, html }: SendEmailArgs): Promise<SendResu
   }
 }
 
+/** Text as it goes into an HTML email, with nothing in it read as markup. */
+const escapeHtml = (text: string) =>
+  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+const button = (href: string, label: string) =>
+  `<a href="${escapeHtml(href)}" style="background:#004ac6;color:#fff;padding:8px 14px;border-radius:4px;text-decoration:none">${label}</a>`;
+
+const footer = `<p style="margin:0;color:#737686;font-size:12px">Sent by Resource Planning · Staffing Intelligence</p>`;
+
+export interface InviteEmailArgs {
+  to: string;
+  fullName: string;
+  /** Who is inviting them, so the email is from a person they know and not a system. */
+  invitedBy: string;
+  link: string;
+}
+
+/** The invitation a new account gets: one link that signs them in and asks them to choose a password. */
+export async function sendInviteEmail({ to, fullName, invitedBy, link }: InviteEmailArgs): Promise<SendResult> {
+  const subject = `${invitedBy} has invited you to Resource Planning`;
+  const html = `
+    <div style="font-family:Inter,Arial,sans-serif;color:#131b2e;line-height:1.5">
+      <h2 style="margin:0 0 8px">Welcome, ${escapeHtml(fullName)}</h2>
+      <p style="margin:0 0 12px;color:#434655">
+        ${escapeHtml(invitedBy)} has set up an account for you on TiPP Focus Resource Planning.
+        The button below signs you in and asks you to choose a password.
+      </p>
+      <p style="margin:0 0 16px">${button(link, "Choose a password and sign in")}</p>
+      <p style="margin:0 0 16px;color:#434655;font-size:13px">
+        The link works once and for a limited time. If it has expired, open the sign-in page and use
+        Forgot password with this email address to get a fresh one.
+      </p>
+      ${footer}
+    </div>`;
+  return sendEmail({ to, subject, html });
+}
+
+/** The reset a person asks for from the sign-in page. */
+export async function sendPasswordResetEmail({ to, link }: { to: string; link: string }): Promise<SendResult> {
+  const subject = "Reset your Resource Planning password";
+  const html = `
+    <div style="font-family:Inter,Arial,sans-serif;color:#131b2e;line-height:1.5">
+      <h2 style="margin:0 0 8px">Reset your password</h2>
+      <p style="margin:0 0 12px;color:#434655">
+        Somebody asked to reset the password for this account. If that was you, the button below
+        signs you in and lets you choose a new one. If it was not, nothing changes and you can
+        ignore this email.
+      </p>
+      <p style="margin:0 0 16px">${button(link, "Choose a new password")}</p>
+      <p style="margin:0 0 16px;color:#434655;font-size:13px">The link works once and for a limited time.</p>
+      ${footer}
+    </div>`;
+  return sendEmail({ to, subject, html });
+}
+
 export interface MatchAlertArgs {
   to: string;
   candidateName: string;
