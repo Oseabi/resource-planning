@@ -382,6 +382,12 @@ export interface Database {
           contract_end_date: string | null;
           /** Client reference letters this tender asks for. Null means not yet read off the RFQ. */
           reference_letters_required: number | null;
+          /** What the letters must show: the kind of work, what each must carry, how the count is scored. */
+          reference_letters_note: string | null;
+          /** Only work completed within this many years counts. Null means no limit stated. */
+          reference_letters_within_years: number | null;
+          /** Only referenced projects worth at least this much, in rand, count. Null means no floor stated. */
+          reference_letters_min_value: number | null;
           required_roles: string[];
           required_skills: string[];
           required_certifications: string[];

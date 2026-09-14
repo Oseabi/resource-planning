@@ -27,6 +27,12 @@ export interface ExtractedTenderFields {
 
   contract_end_date?: string | null;
   reference_letters_required?: number | null;
+  /** What the reference letters must show, in the document's words. */
+  reference_letters_note?: string | null;
+  /** Only work completed within this many years counts as a reference. */
+  reference_letters_within_years?: number | null;
+  /** Only referenced projects worth at least this much, in rand, count. */
+  reference_letters_min_value?: number | null;
   /** A brief for the bid team: scope, period, evaluation, what to submit. */
   summary?: string | null;
   /** The roles to staff, each with the bar the document sets for it. */

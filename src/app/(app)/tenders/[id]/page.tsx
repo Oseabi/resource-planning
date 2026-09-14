@@ -23,7 +23,7 @@ import { findBidConflicts } from "@/app/(app)/assignment-actions";
 import { ConfirmTeamBanner } from "@/app/(app)/tenders/[id]/confirm-team-banner";
 import { DeliveryPanel } from "@/app/(app)/tenders/[id]/delivery-panel";
 import { SeatCoveragePanel } from "@/app/(app)/tenders/[id]/seat-coverage-panel";
-import { letterCoverage, coverageLabel } from "@/lib/reference-letters";
+import { letterCoverage, coverageLabel, eligibleLetters } from "@/lib/reference-letters";
 import { FileCheck2 } from "lucide-react";
 
 export default async function TenderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -88,7 +88,19 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
   const strength = poolStrength(matches.map((m) => m.score));
 
   const delivery = deliveryState(tender);
-  const letters = letterCoverage(tender.reference_letters_required, referenceLetters ?? []);
+  // Counted on the letters the buyer would accept: recent enough and big
+  // enough, as the tender puts it. A letter with no date or value stays in.
+  const letters = letterCoverage(
+    tender.reference_letters_required,
+    eligibleLetters(referenceLetters ?? [], {
+      withinYears: tender.reference_letters_within_years,
+      minValue: tender.reference_letters_min_value,
+    }),
+  );
+  const letterTerms = [
+    tender.reference_letters_within_years ? `work completed within the last ${tender.reference_letters_within_years} years` : null,
+    tender.reference_letters_min_value ? `projects of R${Math.round(tender.reference_letters_min_value).toLocaleString("en-ZA")} or more` : null,
+  ].filter((t): t is string => t !== null);
 
   const tags: { icon: React.ReactNode; label: string }[] = [];
   for (const r of tender.required_roles.slice(0, 4)) tags.push({ icon: <Briefcase className="size-3.5" />, label: r });
@@ -191,7 +203,10 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
             )}
           >
             <FileCheck2 className="size-4 shrink-0 text-muted-foreground" />
-            <span>Reference letters: {coverageLabel(letters)}</span>
+            <span>
+              Reference letters: {coverageLabel(letters)}
+              {letterTerms.length > 0 && <span className="text-muted-foreground">, counting {letterTerms.join(" and ")}</span>}
+            </span>
             {letters.uncontactable > 0 && (
               <span className="rounded-lg bg-muted px-2 py-0.5 text-label-md font-medium text-muted-foreground">
                 {letters.uncontactable} with no contact details
@@ -200,6 +215,10 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
             <Link href="/reference-letters" className="ml-auto underline">
               All letters
             </Link>
+            {/* What to go and find, in the document's words. */}
+            {tender.reference_letters_note && (
+              <p className="basis-full whitespace-pre-wrap text-body-sm text-muted-foreground">{tender.reference_letters_note}</p>
+            )}
           </div>
         )}
         {tender.status !== "lost" && (
