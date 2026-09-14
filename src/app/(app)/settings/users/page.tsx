@@ -17,6 +17,7 @@ import { DeleteUserDialog } from "@/app/(app)/settings/users/delete-user-dialog"
 import { DepartmentSelect } from "@/app/(app)/settings/users/department-select";
 import { AccountManagerCard } from "@/app/(app)/settings/users/account-manager-card";
 import { loadAccountManager } from "@/lib/settings";
+import { isEmailConfigured } from "@/lib/email/resend";
 
 export default async function UsersSettingsPage() {
   const supabase = await createClient();
@@ -59,7 +60,7 @@ export default async function UsersSettingsPage() {
             decides which tenders they can see; admins see all four.
           </p>
         </div>
-        <CreateUserDialog departments={allDepartments} />
+        <CreateUserDialog departments={allDepartments} emailConfigured={isEmailConfigured()} />
       </div>
 
       <div className="mt-6 rounded-lg border border-border bg-card shadow-card">

@@ -1,7 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password"];
+// /auth/confirm is where a sign-in link from an email lands, before there
+// is a session to check: sent to /login instead, the link could never work.
+const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/auth/confirm"];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });

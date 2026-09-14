@@ -30,7 +30,14 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
 };
 
-export function CreateUserDialog({ departments = [] }: { departments?: DepartmentOption[] }) {
+export function CreateUserDialog({
+  departments = [],
+  emailConfigured = false,
+}: {
+  departments?: DepartmentOption[];
+  /** Whether the app can send the invitation itself. Without it the admin hands the details over. */
+  emailConfigured?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [state, formAction, isPending] = useActionState(createEmployeeAccount, { error: null });
@@ -54,34 +61,45 @@ export function CreateUserDialog({ departments = [] }: { departments?: Departmen
         Invite New User
       </DialogTrigger>
       <DialogContent>
-        {state.credentials ? (
+        {state.credentials || state.invitation ? (
           <>
             <DialogHeader>
-              <DialogTitle>Account created</DialogTitle>
+              <DialogTitle>{state.invitation?.sent ? "Invitation sent" : "Account created"}</DialogTitle>
               <DialogDescription>
-                Copy these details now and share them with the employee yourself. This password
-                won&apos;t be shown again.
+                {state.invitation?.sent
+                  ? `An email has gone to ${state.invitation.to} with a link that signs them in and asks them to choose a password. It works once and for a limited time; if it expires, Forgot password on the sign-in page sends a fresh one.`
+                  : "Copy these details now and share them with the employee yourself. This password won't be shown again."}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-2 rounded-md border border-border bg-muted p-4 text-body-sm">
-              <div>
-                <span className="text-muted-foreground">App URL: </span>
-                {state.credentials.appUrl}
+            {/* Said in red rather than as a missing email nobody notices. */}
+            {state.invitation && !state.invitation.sent && (
+              <p className="text-body-sm text-destructive">
+                The invitation was not emailed. {state.invitation.note}
+              </p>
+            )}
+            {state.credentials && (
+              <div className="space-y-2 rounded-md border border-border bg-muted p-4 text-body-sm">
+                <div>
+                  <span className="text-muted-foreground">App URL: </span>
+                  {state.credentials.appUrl}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Email: </span>
+                  {state.credentials.email}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Password: </span>
+                  {state.credentials.password}
+                </div>
               </div>
-              <div>
-                <span className="text-muted-foreground">Email: </span>
-                {state.credentials.email}
-              </div>
-              <div>
-                <span className="text-muted-foreground">Password: </span>
-                {state.credentials.password}
-              </div>
-            </div>
+            )}
             <DialogFooter>
-              <Button variant="outline" onClick={handleCopy}>
-                {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-                {copied ? "Copied" : "Copy details"}
-              </Button>
+              {state.credentials && (
+                <Button variant="outline" onClick={handleCopy}>
+                  {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                  {copied ? "Copied" : "Copy details"}
+                </Button>
+              )}
               <Button onClick={() => handleOpenChange(false)}>Done</Button>
             </DialogFooter>
           </>
@@ -90,8 +108,9 @@ export function CreateUserDialog({ departments = [] }: { departments?: Departmen
             <DialogHeader>
               <DialogTitle>Invite new user</DialogTitle>
               <DialogDescription>
-                Set their initial password yourself, they&apos;ll be required to change it on
-                first login.
+                {emailConfigured
+                  ? "They get an email with a link that signs them in and asks them to choose a password. Set a password here only if you would rather hand the details over yourself."
+                  : "Email is not set up on this system, so set their initial password yourself and pass it on. They will be asked to change it on first sign-in."}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -104,8 +123,8 @@ export function CreateUserDialog({ departments = [] }: { departments?: Departmen
                 <Input id="email" name="email" type="email" required />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="password">Initial password</Label>
-                <Input id="password" name="password" type="text" required minLength={8} />
+                <Label htmlFor="password">{emailConfigured ? "Initial password (optional)" : "Initial password"}</Label>
+                <Input id="password" name="password" type="text" required={!emailConfigured} minLength={8} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="role">Role</Label>
@@ -153,7 +172,7 @@ export function CreateUserDialog({ departments = [] }: { departments?: Departmen
             </div>
             <DialogFooter>
               <Button type="submit" disabled={isPending}>
-                {isPending ? "Creating..." : "Create account"}
+                {isPending ? (emailConfigured ? "Inviting..." : "Creating...") : emailConfigured ? "Send invitation" : "Create account"}
               </Button>
             </DialogFooter>
           </form>
