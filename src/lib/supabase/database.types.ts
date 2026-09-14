@@ -17,6 +17,12 @@ export type AssignmentStatus = "proposed" | "placed";
 export type ActivityEntityType = "candidate" | "tender" | "job_requirement" | "oem_letter";
 /** A note is written by a person; an event is recorded by the system. */
 export type ActivityKind = "note" | "event";
+/**
+ * Mirrors reference_letters_kind_check. A reference is a client vouching for
+ * delivered work; an award is an award, appointment or offer letter; a
+ * confirmation says a supplier is on the books without speaking to the work.
+ */
+export type ReferenceLetterKind = "reference" | "award" | "confirmation";
 
 export interface WorkExperience {
   title: string;
@@ -326,6 +332,10 @@ export interface Database {
           contact_phone: string | null;
           reference_number: string | null;
           notes: string | null;
+          /** Where it is filed, by practice area. Null is unfiled. */
+          folder: string | null;
+          /** Only a reference counts toward a tender's requirement. */
+          kind: ReferenceLetterKind;
           file_path: string | null;
           original_filename: string | null;
           created_by: string | null;

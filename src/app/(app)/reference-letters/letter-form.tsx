@@ -24,10 +24,13 @@ export function ReferenceLetterForm({
   letterId,
   initial,
   currentFileName,
+  folders,
 }: {
   letterId?: string;
   initial?: ReferenceLetterFormFields;
   currentFileName?: string | null;
+  /** The folders already in use, offered as the letter is filed. */
+  folders: string[];
 }) {
   const router = useRouter();
   const [fields, setFields] = useState<ReferenceLetterFormFields>(
@@ -61,7 +64,7 @@ export function ReferenceLetterForm({
   return (
     <div className="space-y-5">
       <div className="rounded-lg border border-border bg-card p-5 shadow-card">
-        <ReferenceLetterFields value={fields} onChange={setFields} />
+        <ReferenceLetterFields value={fields} onChange={setFields} folders={folders} />
 
         <div className="mt-5 space-y-1.5">
           <Label>Signed letter</Label>

@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil, FileCheck2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Pencil, FileCheck2, AlertTriangle, Folder } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { isCurrentUserAdmin } from "@/lib/auth/current-user";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/availability";
-import { isContactable } from "@/lib/reference-letters";
+import { isContactable, letterKindLabel, UNFILED } from "@/lib/reference-letters";
+import { KindChip } from "@/app/(app)/reference-letters/kind-chip";
 import { CvDownloadButton } from "@/app/(app)/candidates/[id]/cv-download-button";
 import { DeleteReferenceLetterButton } from "@/app/(app)/reference-letters/[id]/delete-button";
 
@@ -49,11 +50,16 @@ export default async function ReferenceLetterPage({
           <h1 className="mt-1 text-display font-semibold text-foreground">
             {letter.project_title}
           </h1>
-          {letter.reference_number && (
-            <p className="mt-1 font-mono text-body-sm text-muted-foreground">
-              Ref. {letter.reference_number}
-            </p>
-          )}
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-body-sm text-muted-foreground">
+            <KindChip kind={letter.kind} />
+            <span className="inline-flex items-center gap-1.5">
+              <Folder className="size-3.5" />
+              {letter.folder ?? UNFILED}
+            </span>
+            {letter.reference_number && (
+              <span className="font-mono">Ref. {letter.reference_number}</span>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {letter.file_path && (
@@ -77,10 +83,26 @@ export default async function ReferenceLetterPage({
         </div>
       </div>
 
+      {/* Proof of a contract is not a client vouching for the work. Said up
+          front, because it is the one letter a bid writer must not count. */}
+      {letter.kind !== "reference" && (
+        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-4">
+          <FileCheck2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <div>
+            <p className="text-body-md font-medium text-foreground">{letterKindLabel(letter.kind)}</p>
+            <p className="text-body-sm text-muted-foreground">
+              {letter.kind === "award"
+                ? "An award, appointment or offer letter: proof that the contract was won, with nobody vouching for the work. It sits on file for a bid pack and does not count toward a tender's reference requirement."
+                : "A client confirming an appointment or supplier status without speaking to the work. It sits on file for a bid pack and does not count toward a tender's reference requirement."}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* A reference nobody can ring does not answer a tender that asks for
           contactable references, so it is said plainly rather than left for
           somebody to notice while assembling a bid pack. */}
-      {!contactable && (
+      {letter.kind === "reference" && !contactable && (
         <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
           <div>
@@ -107,6 +129,8 @@ export default async function ReferenceLetterPage({
         <dl className="divide-y divide-border">
           <Row label="Client" value={letter.client} />
           <Row label="Project" value={letter.project_title} />
+          <Row label="Kind" value={letterKindLabel(letter.kind)} />
+          <Row label="Folder" value={letter.folder ?? UNFILED} />
           <Row label="Contract value" value={formatValue(letter.contract_value)} />
           <Row
             label="Work period"

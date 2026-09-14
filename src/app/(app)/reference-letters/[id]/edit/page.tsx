@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { folderNames } from "@/lib/reference-letters";
 import { ReferenceLetterForm } from "@/app/(app)/reference-letters/letter-form";
 
 export default async function EditReferenceLetterPage({
@@ -11,11 +12,10 @@ export default async function EditReferenceLetterPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: letter } = await supabase
-    .from("reference_letters")
-    .select("*")
-    .eq("id", id)
-    .single();
+  const [{ data: letter }, { data: filed }] = await Promise.all([
+    supabase.from("reference_letters").select("*").eq("id", id).single(),
+    supabase.from("reference_letters").select("folder").not("folder", "is", null),
+  ]);
   if (!letter) notFound();
 
   return (
@@ -31,6 +31,7 @@ export default async function EditReferenceLetterPage({
       <ReferenceLetterForm
         letterId={id}
         currentFileName={letter.original_filename}
+        folders={folderNames(filed ?? [])}
         initial={{
           client: letter.client,
           project_title: letter.project_title,
@@ -45,6 +46,8 @@ export default async function EditReferenceLetterPage({
           contact_phone: letter.contact_phone,
           reference_number: letter.reference_number,
           notes: letter.notes,
+          folder: letter.folder,
+          kind: letter.kind,
         }}
       />
     </div>
