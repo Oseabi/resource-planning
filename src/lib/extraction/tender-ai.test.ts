@@ -6,6 +6,7 @@ import {
   mergeTenderExtraction,
   endDateFrom,
   seatNotes,
+  referenceLetterNote,
   truncateTenderText,
   TENDER_TEXT_CHAR_CAP,
 } from "@/lib/extraction/tender-ai";
@@ -32,6 +33,14 @@ describe("TENDER_SCHEMA", () => {
     expect(JSON.stringify(TENDER_SCHEMA)).not.toMatch(/"type":"(string|number|object|array|integer)"/);
     // No rand value: the field went from the form.
     expect(TENDER_SCHEMA.properties).not.toHaveProperty("value");
+  });
+
+  it("asks what the reference letters must show, not only how many", () => {
+    const letters = TENDER_SCHEMA.properties.reference_letters;
+    expect(letters.type).toBe("OBJECT");
+    for (const key of ["kind", "within_years", "min_value", "must_include", "scoring"]) {
+      expect(letters.properties).toHaveProperty(key);
+    }
   });
 
   it("asks for the brief and for each seat's paragraphs, not only its lists", () => {
@@ -61,7 +70,26 @@ describe("buildTenderPrompt", () => {
     expect(prompt).toMatch(/points band is not a minimum/);
     // Reference letters that earn points rather than gate the bid still count.
     expect(prompt).toMatch(/number that earns full points/);
-    expect(prompt).not.toMatch(/\bvalue\b.*rand/);
+    expect(prompt).not.toMatch(/estimated or budgeted contract value/);
+  });
+});
+
+describe("referenceLetterNote", () => {
+  it("composes what the letters must show into labelled lines, and is nothing when the document says nothing", () => {
+    expect(
+      referenceLetterNote({
+        kind: "Microsoft Azure managed services",
+        must_include: "the client, the nature of the services and a contactable person",
+        scoring: "10 points: 5 or more projects = 10, 4 = 8, 3 = 6, 2 = 4, 1 = 2",
+      }),
+    ).toBe(
+      [
+        "Work referenced: Microsoft Azure managed services",
+        "Each letter must include: the client, the nature of the services and a contactable person",
+        "Scoring: 10 points: 5 or more projects = 10, 4 = 8, 3 = 6, 2 = 4, 1 = 2",
+      ].join("\n"),
+    );
+    expect(referenceLetterNote({ kind: null, must_include: null, scoring: null })).toBeNull();
   });
 });
 
@@ -175,6 +203,31 @@ describe("coerceTenderAi", () => {
     );
   });
 
+  it("reads the terms the reference letters must meet, and drops a points value read as years", () => {
+    const out = coerceTenderAi({
+      reference_letters_required: 3,
+      reference_letters: {
+        kind: "ERP implementation work of a similar nature",
+        within_years: 10,
+        min_value: "R 5 000 000",
+        must_include: "company letterhead, the date, a telephone number and an email address",
+        scoring: null,
+      },
+    });
+    expect(out.reference_letters_required).toBe(3);
+    expect(out.reference_letters_within_years).toBe(10);
+    expect(out.reference_letters_min_value).toBe(5_000_000);
+    expect(out.reference_letters_note).toBe(
+      "Work referenced: ERP implementation work of a similar nature\nEach letter must include: company letterhead, the date, a telephone number and an email address",
+    );
+    // Twenty is the points the criterion carries, not a number of years.
+    const off = coerceTenderAi({ reference_letters: { within_years: 20, min_value: 0 } });
+    expect(off.reference_letters_within_years).toBeNull();
+    expect(off.reference_letters_min_value).toBeNull();
+    expect(off.reference_letters_note).toBeNull();
+    expect(coerceTenderAi({ reference_letters: "none" }).reference_letters_note).toBeNull();
+  });
+
   it("keeps one seat when the document names the same one twice, and two when they only share a role", () => {
     const out = coerceTenderAi({
       positions: [
@@ -251,6 +304,11 @@ describe("mergeTenderExtraction", () => {
     expect(merged.positions).toBeUndefined();
     // The local parser has no brief; the model's is carried, and nothing when it gave none.
     expect(merged.summary).toBeNull();
+    expect(merged.reference_letters_note).toBeNull();
+    expect(merged.reference_letters_within_years).toBeNull();
+    expect(
+      mergeTenderExtraction(local, { ...coerceTenderAi({}), reference_letters_within_years: 5, reference_letters_note: "Work referenced: EA" }),
+    ).toMatchObject({ reference_letters_within_years: 5, reference_letters_note: "Work referenced: EA" });
     expect(mergeTenderExtraction(local, { ...coerceTenderAi({}), summary: "A brief." }).summary).toBe("A brief.");
   });
 

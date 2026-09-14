@@ -39,6 +39,9 @@ export const EMPTY_TENDER: TenderFormFields = {
   contract_start_date: null,
   contract_end_date: null,
   reference_letters_required: null,
+  reference_letters_note: null,
+  reference_letters_within_years: null,
+  reference_letters_min_value: null,
   required_roles: [],
   required_skills: [],
   required_certifications: [],
@@ -115,9 +118,29 @@ export function TenderFields({
               a bid is disqualified before anybody reads the team. Zero is a real
               answer, so it is kept distinct from blank, which means not yet read
               off the RFQ. */}
-          <Field label="Reference letters required" htmlFor="tf-refletters">
+          <Field label="Reference letters required" htmlFor="tf-refletters" highlight={extracted.reference_letters_required}>
             <Input id="tf-refletters" type="number" min={0} step="1" value={value.reference_letters_required ?? ""} onChange={(e) => set("reference_letters_required", e.target.value === "" ? null : Number(e.target.value))} placeholder="e.g. 3" />
           </Field>
+          {/* The number alone let a bid read as covered by letters the buyer
+              would not accept. These narrow which letters count, and the note
+              says what to go and find. */}
+          <Field label="Work completed within the last (years)" htmlFor="tf-refyears" highlight={extracted.reference_letters_within_years}>
+            <Input id="tf-refyears" type="number" min={1} step="1" value={value.reference_letters_within_years ?? ""} onChange={(e) => set("reference_letters_within_years", e.target.value === "" ? null : Number(e.target.value))} placeholder="e.g. 5" />
+          </Field>
+          <Field label="Minimum contract value per reference (R)" htmlFor="tf-refvalue" highlight={extracted.reference_letters_min_value}>
+            <Input id="tf-refvalue" type="number" min={0} step="1" value={value.reference_letters_min_value ?? ""} onChange={(e) => set("reference_letters_min_value", e.target.value === "" ? null : Number(e.target.value))} placeholder="e.g. 5000000" />
+          </Field>
+          <div className="sm:col-span-2">
+            <Field label="What the reference letters must show" htmlFor="tf-refnote" highlight={extracted.reference_letters_note}>
+              <Textarea
+                id="tf-refnote"
+                rows={value.reference_letters_note ? 4 : 2}
+                value={value.reference_letters_note ?? ""}
+                onChange={(e) => set("reference_letters_note", e.target.value || null)}
+                placeholder="The kind of work referenced, what each letter must carry, how the count is scored..."
+              />
+            </Field>
+          </div>
           {/* An admin chooses; a manager's bid lands in their own department
               without the form asking, which is right almost every time and
               takes a required field off a form filled in under deadline

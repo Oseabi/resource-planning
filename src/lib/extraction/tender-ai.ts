@@ -66,6 +66,17 @@ export const TENDER_SCHEMA = {
     contract_end_date: str,
     contract_duration_months: { type: "NUMBER", nullable: true },
     reference_letters_required: { type: "INTEGER", nullable: true },
+    reference_letters: {
+      type: "OBJECT",
+      properties: {
+        kind: str,
+        within_years: { type: "NUMBER", nullable: true },
+        min_value: { type: "NUMBER", nullable: true },
+        must_include: str,
+        scoring: str,
+      },
+      required: ["kind", "within_years", "min_value", "must_include", "scoring"],
+    },
     min_experience_years: { type: "NUMBER", nullable: true },
     sectors: strList,
     required_skills: strList,
@@ -114,6 +125,7 @@ export const TENDER_SCHEMA = {
     "contract_end_date",
     "contract_duration_months",
     "reference_letters_required",
+    "reference_letters",
     "min_experience_years",
     "sectors",
     "required_skills",
@@ -157,6 +169,7 @@ export function buildTenderPrompt(): string {
     "- client is the organisation issuing the tender, its full name. location is where the work is to be done, or the buyer's province or city.",
     "- Dates as YYYY-MM-DD. submission_deadline is the closing date for bids. contract_start_date and contract_end_date only when stated; contract_duration_months when the document gives a period instead (36 months, three years).",
     "- reference_letters_required: how many client reference letters or contactable references a bidder must supply. Where none is mandatory but the evaluation awards points by the number of reference letters or referenced projects, give the number that earns full points, and say so in the summary. Null only when the document asks for none.",
+    "- reference_letters: what those letters must show, from the criterion or form that asks for them. kind: the work a referenced project must have been, in the document's words (Microsoft Azure managed services; an EA and BPM transformation of similar size and complexity). within_years: how recent the work must be, as a number of years, or null. min_value: the smallest contract value a referenced project may have, in rand, or null. must_include: what each letter or its project summary must carry (company letterhead, dates, the contract value, a contactable person with a phone number and email, an appointment letter or purchase order). scoring: how the count is scored, compressed (20 points: 4 or more projects = 20, 3 = 15, 2 = 10, 1 = 5), or that it is a mandatory gate. Null where the document does not say.",
     "- summary: a brief for the bid team in four to eight plain sentences: what is being procured and its scope, the contract period, how bids are evaluated (the stages, the threshold, the weights, the criteria that carry the most points), what must be submitted for the people proposed (CVs, certifications, forms, reference letters), and the briefing session if there is one. Facts from the document only.",
     "- positions: one entry per distinct role the buyer wants a person for, wherever in the document it is named, the most heavily weighted first. Never merge two roles into one entry and never list a role twice. For each:",
     "  - role: the closest spelling from this list, otherwise the document's own words. A seniority prefix (Lead, Senior, Principal, Junior) on a listed role is still that role unless the list carries the senior spelling; the document's own title goes in document_title. The list: " + ALL_ROLES.join(", "),
@@ -164,7 +177,7 @@ export function buildTenderPrompt(): string {
     "  - quantity: how many people, or null when not stated.",
     "  - min_experience_years: the minimum years the document requires for that role (a minimum of, at least, not less than, the lower figure of a range), or null. A points band is not a minimum: never take a points value or a band boundary as the years.",
     "  - required_skills, required_certifications, required_qualifications: what the document sets for that role specifically. Certifications by their names (AZ-104, TOGAF, PMP). Do not repeat tender-wide requirements on every role.",
-    "  - experience: what the document requires the person to have done or to know, in the document's words, in at most three sentences: the technologies, domains and kinds of project it names.",
+    "  - experience: what the document requires the person to have done or to know, in the document's words, in at most three sentences: the technologies, domains and kinds of project it names. Where the document sets nothing for the person, say what the scope of work has that role deliver, in its words, so the seat still says what the work is.",
     "  - evaluation: how the seat is scored and what must be attached, compressed: the points it carries, the criterion or form it falls under, the bands (15 points: 10+ years = 15, 7 to <10 = 12, 5 to <7 = 8, 3 to <5 = 4), and whether it is a mandatory gate. Null where the document does not score the seat.",
     "  - duration: how long or how much of the person is wanted, when stated (17 person-months; full time for 24 months; as required at an hourly rate).",
     "  - notes: anything else the document asks of the seat (a clearance, on-site work, a language, a level of qualification), or null.",
@@ -264,9 +277,32 @@ export interface TenderAiFields extends ExtractedTenderFields {
   contract_end_date: string | null;
   contract_duration_months: number | null;
   reference_letters_required: number | null;
+  reference_letters_note: string | null;
+  reference_letters_within_years: number | null;
+  reference_letters_min_value: number | null;
   summary: string | null;
   positions: TenderPosition[];
 }
+
+/**
+ * What the reference letters must show, for a reader: the kind of work,
+ * what each letter must carry, how the count is scored. One labelled line
+ * each, blank ones left out.
+ */
+export function referenceLetterNote(r: { kind: string | null; must_include: string | null; scoring: string | null }): string | null {
+  const lines = [
+    r.kind ? `Work referenced: ${r.kind}` : null,
+    r.must_include ? `Each letter must include: ${r.must_include}` : null,
+    r.scoring ? `Scoring: ${r.scoring}` : null,
+  ].filter((l): l is string => !!l);
+  return lines.length > 0 ? lines.join("\n") : null;
+}
+
+/** A rand amount the model read: a positive number, or null. */
+const asMoney = (v: unknown): number | null => {
+  const n = asNumber(v);
+  return n !== null && n > 0 ? Math.round(n) : null;
+};
 
 /**
  * Turn whatever came back into fields the app can use.
@@ -313,6 +349,8 @@ export function coerceTenderAi(json: unknown): TenderAiFields {
     return true;
   });
 
+  const letters = (r.reference_letters && typeof r.reference_letters === "object" ? r.reference_letters : {}) as Record<string, unknown>;
+
   return {
     title: asString(r.title),
     // "A- ICT 03- 2026" is a line-wrapped "A-ICT 03-2026".
@@ -324,6 +362,15 @@ export function coerceTenderAi(json: unknown): TenderAiFields {
     contract_end_date: asIsoDate(r.contract_end_date),
     contract_duration_months: asCount(r.contract_duration_months),
     reference_letters_required: asCount(r.reference_letters_required),
+    reference_letters_note: referenceLetterNote({
+      kind: asString(letters.kind),
+      must_include: asString(letters.must_include),
+      scoring: asString(letters.scoring),
+    }),
+    // Recency the way asYears reads it: a figure over fifteen is a points
+    // value, not a number of years.
+    reference_letters_within_years: asYears(letters.within_years) !== null ? Math.round(asYears(letters.within_years)!) : null,
+    reference_letters_min_value: asMoney(letters.min_value),
     required_roles: [...new Set(distinct.map((p) => p.role))],
     required_skills: canonicalise(asStringList(r.required_skills), [...ALL_TECHNICAL_SKILLS, ...ALL_SKILLS]),
     required_certifications: canonicalise(asStringList(r.required_certifications), ALL_CERTIFICATIONS),
@@ -377,6 +424,9 @@ export function mergeTenderExtraction(local: ExtractedTenderFields, ai: TenderAi
       local.contract_end_date ??
       null,
     reference_letters_required: ai.reference_letters_required ?? local.reference_letters_required ?? null,
+    reference_letters_note: ai.reference_letters_note ?? local.reference_letters_note ?? null,
+    reference_letters_within_years: ai.reference_letters_within_years ?? local.reference_letters_within_years ?? null,
+    reference_letters_min_value: ai.reference_letters_min_value ?? local.reference_letters_min_value ?? null,
     required_roles: ai.required_roles.length > 0 ? ai.required_roles : local.required_roles,
     required_skills: ai.required_skills.length > 0 ? ai.required_skills : local.required_skills,
     required_certifications:
