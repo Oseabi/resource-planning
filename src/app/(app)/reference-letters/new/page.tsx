@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { folderNames } from "@/lib/reference-letters";
 import { ReferenceLetterForm } from "@/app/(app)/reference-letters/letter-form";
 
-export default function NewReferenceLetterPage() {
+export default async function NewReferenceLetterPage() {
+  const supabase = await createClient();
+  const { data: filed } = await supabase.from("reference_letters").select("folder").not("folder", "is", null);
   return (
     <div className="space-y-6">
       <Link
@@ -19,7 +23,7 @@ export default function NewReferenceLetterPage() {
           requirement.
         </p>
       </div>
-      <ReferenceLetterForm />
+      <ReferenceLetterForm folders={folderNames(filed ?? [])} />
     </div>
   );
 }

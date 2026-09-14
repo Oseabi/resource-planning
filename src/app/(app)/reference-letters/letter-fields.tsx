@@ -3,7 +3,17 @@
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { TagInput } from "@/components/ui/tag-input";
+import { ComboboxInput } from "@/components/ui/combobox-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { CATEGORY_NAMES } from "@/lib/resource-categories";
+import { LETTER_KINDS, letterKindLabel } from "@/lib/reference-letters";
+import type { ReferenceLetterKind } from "@/lib/supabase/database.types";
 import type { ReferenceLetterFormFields } from "@/app/(app)/reference-letters/actions";
 
 export const EMPTY_REFERENCE_LETTER: ReferenceLetterFormFields = {
@@ -20,15 +30,21 @@ export const EMPTY_REFERENCE_LETTER: ReferenceLetterFormFields = {
   contact_phone: null,
   reference_number: null,
   notes: null,
+  folder: null,
+  kind: "reference",
 };
 
 export function ReferenceLetterFields({
   value,
   onChange,
+  folders,
 }: {
   value: ReferenceLetterFormFields;
   onChange: (next: ReferenceLetterFormFields) => void;
+  /** The folders already in use, offered as the letter is filed. */
+  folders: string[];
 }) {
+  const kind = LETTER_KINDS.find((k) => k.value === value.kind) ?? LETTER_KINDS[0];
   function set<K extends keyof ReferenceLetterFormFields>(
     key: K,
     val: ReferenceLetterFormFields[K],
@@ -100,6 +116,42 @@ export function ReferenceLetterFields({
             onChange={(e) => set("issue_date", e.target.value || null)}
           />
         </Field>
+      </div>
+
+      <div>
+        <h3 className="text-label-sm uppercase tracking-wide text-muted-foreground">Filing</h3>
+        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {/* An award letter proves the contract; nobody in it vouches for the
+              work. Said on the field, because the difference decides whether the
+              letter counts toward a tender's requirement. */}
+          <Field label="Kind of letter" htmlFor="rl-kind">
+            <Select value={value.kind} onValueChange={(v) => set("kind", (v ?? "reference") as ReferenceLetterKind)}>
+              <SelectTrigger id="rl-kind" className="w-full">
+                <SelectValue>{(v) => letterKindLabel(v as ReferenceLetterKind)}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {LETTER_KINDS.map((k) => (
+                  <SelectItem key={k.value} value={k.value}>
+                    {k.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-body-sm text-muted-foreground">{kind.hint}</p>
+          </Field>
+          <Field label="Folder" htmlFor="rl-folder">
+            <ComboboxInput
+              id="rl-folder"
+              value={value.folder}
+              onChange={(v) => set("folder", v)}
+              suggestions={folders}
+              placeholder="e.g. Enterprise Architecture"
+            />
+            <p className="text-body-sm text-muted-foreground">
+              Where it is filed, by practice area. Pick a folder in use or type a new one.
+            </p>
+          </Field>
+        </div>
       </div>
 
       <div>

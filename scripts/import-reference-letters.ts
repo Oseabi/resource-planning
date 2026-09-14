@@ -10,8 +10,10 @@
  * The manifest is a JSON array, one entry per letter, in the shape of the
  * reference letter form (client, project_title, categories, sectors,
  * contract_value, work_started_on, work_completed_on, issue_date, contact_*,
- * reference_number, notes) plus "file", the PDF on disk, and
- * "original_filename", the name to show for it. Dates are ISO (YYYY-MM-DD).
+ * reference_number, notes, folder, kind) plus "file", the PDF on disk, and
+ * "original_filename", the name to show for it. Dates are ISO (YYYY-MM-DD);
+ * kind is reference, award or confirmation and defaults to reference; folder
+ * is optional.
  * The manifest itself stays out of the repo: it carries client contact
  * details, and a letter is loaded once.
  *
@@ -29,6 +31,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { CATEGORY_NAMES } from "@/lib/resource-categories";
+import { isReferenceLetterKind } from "@/lib/reference-letters";
+import type { ReferenceLetterKind } from "@/lib/supabase/database.types";
 
 interface LetterEntry {
   file: string;
@@ -46,6 +50,8 @@ interface LetterEntry {
   contact_phone: string | null;
   reference_number: string | null;
   notes: string | null;
+  folder?: string | null;
+  kind?: ReferenceLetterKind;
 }
 
 // Shares the OEM letters bucket, as the form does; see reference-letters/actions.ts.
@@ -105,6 +111,7 @@ function problems(entry: LetterEntry): string[] {
     out.push(`contract_value is not a non-negative number: ${String(entry.contract_value)}`);
   }
   if (!Array.isArray(entry.categories) || !Array.isArray(entry.sectors)) out.push("categories and sectors must be arrays");
+  if (entry.kind != null && !isReferenceLetterKind(entry.kind)) out.push(`kind is not reference, award or confirmation: ${String(entry.kind)}`);
   return out;
 }
 
@@ -195,6 +202,8 @@ async function main() {
   plan.forEach(({ entry, skip }, i) => {
     const contactable = Boolean(trimmed(entry.contact_email) || trimmed(entry.contact_phone));
     const bits = [
+      entry.kind ?? "reference",
+      trimmed(entry.folder) ?? "unfiled",
       entry.issue_date ?? "undated",
       money(entry.contract_value),
       contactable ? "contactable" : "NO CONTACT",
@@ -246,6 +255,8 @@ async function main() {
         contact_phone: trimmed(entry.contact_phone),
         reference_number: trimmed(entry.reference_number),
         notes: trimmed(entry.notes),
+        folder: trimmed(entry.folder),
+        kind: entry.kind ?? "reference",
         file_path: storagePath,
         original_filename: sanitizeFilename(entry.original_filename),
         created_by: operator.id,

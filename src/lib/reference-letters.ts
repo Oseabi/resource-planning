@@ -16,11 +16,13 @@
  */
 
 import { today } from "@/lib/availability";
+import type { ReferenceLetterKind } from "@/lib/supabase/database.types";
 
 /** The parts of a letter this module reasons about. */
 export interface ReferenceLetterFacts {
   id: string;
   client: string;
+  kind: ReferenceLetterKind;
   contract_value: number | null;
   work_completed_on: string | null;
   sectors: string[];
@@ -29,13 +31,70 @@ export interface ReferenceLetterFacts {
   contact_phone: string | null;
 }
 
+/**
+ * What a letter is, in the order the form offers them. An award letter proves
+ * a contract was won and a confirmation proves a supplier is on the books;
+ * neither has a client vouching for the work, which is what a tender means
+ * by a reference, so only the first kind answers a requirement.
+ */
+export const LETTER_KINDS: { value: ReferenceLetterKind; label: string; hint: string }[] = [
+  { value: "reference", label: "Reference letter", hint: "A client vouching for work delivered. Counts toward a tender's requirement." },
+  { value: "award", label: "Award letter", hint: "An award, appointment or offer to contract. Proof of the contract, not a reference." },
+  { value: "confirmation", label: "Confirmation letter", hint: "A client confirming an appointment or supplier status without speaking to the work." },
+];
+
+export function letterKindLabel(kind: ReferenceLetterKind): string {
+  return LETTER_KINDS.find((k) => k.value === kind)?.label ?? "Reference letter";
+}
+
+export function isReferenceLetterKind(value: unknown): value is ReferenceLetterKind {
+  return LETTER_KINDS.some((k) => k.value === value);
+}
+
+/** What an unfiled letter's folder reads as. */
+export const UNFILED = "Unfiled";
+
+/**
+ * Letters by folder, folders in name order with the unfiled ones last, each
+ * folder keeping the order the letters arrived in. A bid writer looks for
+ * "the EA references", so the list reads the way the archive was kept.
+ */
+export function groupByFolder<T extends { folder: string | null }>(
+  letters: T[],
+): { folder: string | null; letters: T[] }[] {
+  const groups = new Map<string | null, T[]>();
+  for (const letter of letters) {
+    const key = letter.folder?.trim() || null;
+    const group = groups.get(key);
+    if (group) group.push(letter);
+    else groups.set(key, [letter]);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => {
+      if (a === null) return 1;
+      if (b === null) return -1;
+      return a.localeCompare(b);
+    })
+    .map(([folder, items]) => ({ folder, letters: items }));
+}
+
+/** The folder names in use, for the form to offer. */
+export function folderNames(letters: { folder: string | null }[]): string[] {
+  return [...new Set(letters.map((l) => l.folder?.trim()).filter((f): f is string => Boolean(f)))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+}
+
 export type LetterCoverageState = "met" | "short" | "unknown";
 
 export interface LetterCoverage {
   required: number | null;
+  /** Reference letters, the only kind a requirement is counted on. */
   onFile: number;
-  /** Letters nobody could actually ring. Tenders ask for contactable references. */
+  /** References nobody could actually ring. Tenders ask for contactable references. */
   uncontactable: number;
+  /** Award and confirmation letters that passed the same filters: on file, not counted. */
+  supporting: number;
   shortfall: number;
   state: LetterCoverageState;
 }
@@ -87,11 +146,17 @@ export function letterCoverage(
   required: number | null,
   letters: ReferenceLetterFacts[],
 ): LetterCoverage {
-  const contactable = letters.filter(isContactable);
-  const onFile = letters.length;
+  // An award letter proves the contract and a confirmation proves the
+  // supplier; neither is a client vouching for the work, which is what the
+  // tender is asking for, so they are counted beside the references and
+  // never as them.
+  const references = letters.filter((l) => l.kind === "reference");
+  const supporting = letters.length - references.length;
+  const contactable = references.filter(isContactable);
+  const onFile = references.length;
 
   if (required === null) {
-    return { required: null, onFile, uncontactable: onFile - contactable.length, shortfall: 0, state: "unknown" };
+    return { required: null, onFile, uncontactable: onFile - contactable.length, supporting, shortfall: 0, state: "unknown" };
   }
 
   // Counted on contactable letters, because that is what the tender asks for.
@@ -100,6 +165,7 @@ export function letterCoverage(
     required,
     onFile,
     uncontactable: onFile - contactable.length,
+    supporting,
     shortfall,
     state: shortfall === 0 ? "met" : "short",
   };
@@ -114,4 +180,12 @@ export function coverageLabel(coverage: LetterCoverage): string {
   }
   if (coverage.state === "met") return `${coverage.required} needed, ${coverage.onFile} on file`;
   return `${coverage.required} needed, ${coverage.shortfall} short`;
+}
+
+/** The award and confirmation letters beside the count, said so nobody counts them by hand. */
+export function supportingLabel(coverage: LetterCoverage): string | null {
+  if (coverage.supporting === 0) return null;
+  return coverage.supporting === 1
+    ? "1 award or confirmation letter on file, not counted"
+    : `${coverage.supporting} award or confirmation letters on file, not counted`;
 }

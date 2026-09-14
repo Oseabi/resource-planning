@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { Plus, FileCheck2, Mail, Phone, CalendarCheck, Banknote } from "lucide-react";
+import { Plus, FileCheck2, Mail, Phone, CalendarCheck, Banknote, Folder } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/layout/empty-state";
 import { formatDate } from "@/lib/availability";
-import { isContactable } from "@/lib/reference-letters";
+import { isContactable, groupByFolder, UNFILED } from "@/lib/reference-letters";
+import { KindChip } from "@/app/(app)/reference-letters/kind-chip";
 import { cn } from "@/lib/utils";
 
 function formatValue(value: number | null): string {
@@ -14,12 +15,22 @@ function formatValue(value: number | null): string {
   return `R${value}`;
 }
 
+/** An anchor a folder chip can jump to. */
+function folderAnchor(folder: string | null): string {
+  return `folder-${(folder ?? UNFILED).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+}
+
 /**
- * The reference letters the business can put into a bid.
+ * The reference letters the business can put into a bid, filed by folder.
  *
- * Ordered by when the work finished, newest first, because that is the axis
- * tenders judge them on: "three references for similar work in the last five
- * years" is the usual wording, and an old letter is simply not eligible.
+ * Folders are the practice areas the bid team keeps its letters under, which
+ * is how a bid writer looks for one: "the EA references". Within a folder
+ * the letters are ordered by when the work finished, newest first, because
+ * that is the axis tenders judge them on: "three references for similar
+ * work in the last five years" is the usual wording, and an old letter is
+ * simply not eligible. Each letter carries what it is, since an award or
+ * confirmation letter sits on file beside the references without counting
+ * as one.
  */
 export default async function ReferenceLettersPage() {
   const supabase = await createClient();
@@ -29,7 +40,10 @@ export default async function ReferenceLettersPage() {
     .order("work_completed_on", { ascending: false, nullsFirst: false });
 
   const letters = data ?? [];
-  const contactable = letters.filter(isContactable).length;
+  const references = letters.filter((l) => l.kind === "reference");
+  const contactable = references.filter(isContactable).length;
+  const supporting = letters.length - references.length;
+  const groups = groupByFolder(letters);
 
   return (
     <div className="space-y-6">
@@ -46,20 +60,22 @@ export default async function ReferenceLettersPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatCard label="Letters on file" value={String(letters.length)} />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Reference letters" value={String(references.length)} />
         {/* The number that actually answers a requirement, since tenders ask
             for contactable references. */}
         <StatCard label="Contactable" value={String(contactable)} />
         <StatCard
           label="No contact details"
-          value={String(letters.length - contactable)}
-          accent={letters.length - contactable > 0}
+          value={String(references.length - contactable)}
+          accent={references.length - contactable > 0}
         />
+        {/* Kept beside the references and never counted as one. */}
+        <StatCard label="Award and confirmation letters" value={String(supporting)} />
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-card">
-        {letters.length === 0 ? (
+      {letters.length === 0 ? (
+        <div className="overflow-hidden rounded-lg border border-border bg-card shadow-card">
           <EmptyState
             icon={FileCheck2}
             title="No reference letters yet"
@@ -71,64 +87,101 @@ export default async function ReferenceLettersPage() {
               </Button>
             }
           />
-        ) : (
-          <ul className="divide-y divide-border">
-            {letters.map((l) => (
-              <li key={l.id}>
-                <Link
-                  href={`/reference-letters/${l.id}`}
-                  className="block px-4 py-3 transition-colors hover:bg-muted/50"
+        </div>
+      ) : (
+        <>
+          {/* One chip per folder, so a long list opens on the folder wanted. */}
+          {groups.length > 1 && (
+            <nav aria-label="Folders" className="flex flex-wrap gap-2">
+              {groups.map((g) => (
+                <a
+                  key={g.folder ?? UNFILED}
+                  href={`#${folderAnchor(g.folder)}`}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1 text-body-sm text-foreground transition-colors hover:bg-muted/50"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate font-medium text-foreground">{l.client}</div>
-                      <div className="truncate text-body-sm text-muted-foreground">
-                        {l.project_title}
-                      </div>
-                    </div>
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-lg px-2 py-0.5 text-label-md font-medium",
-                        isContactable(l)
-                          ? "bg-success/10 text-success"
-                          : "bg-destructive/10 text-destructive",
-                      )}
+                  <Folder className="size-3.5 text-muted-foreground" />
+                  {g.folder ?? UNFILED}
+                  <span className="text-muted-foreground">{g.letters.length}</span>
+                </a>
+              ))}
+            </nav>
+          )}
+
+          {groups.map((g) => (
+            <section
+              key={g.folder ?? UNFILED}
+              id={folderAnchor(g.folder)}
+              className="scroll-mt-4 overflow-hidden rounded-lg border border-border bg-card shadow-card"
+            >
+              <h2 className="flex items-center gap-2 border-b border-border bg-muted/40 px-4 py-2.5 text-label-md font-semibold text-foreground">
+                <Folder className="size-4 text-muted-foreground" />
+                {g.folder ?? UNFILED}
+                <span className="font-normal text-muted-foreground">
+                  {g.letters.length === 1 ? "1 letter" : `${g.letters.length} letters`}
+                </span>
+              </h2>
+              <ul className="divide-y divide-border">
+                {g.letters.map((l) => (
+                  <li key={l.id}>
+                    <Link
+                      href={`/reference-letters/${l.id}`}
+                      className="block px-4 py-3 transition-colors hover:bg-muted/50"
                     >
-                      {isContactable(l) ? "Contactable" : "No contact"}
-                    </span>
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-body-sm text-muted-foreground">
-                    {l.work_completed_on && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <CalendarCheck className="size-3.5" />
-                        Completed {formatDate(l.work_completed_on)}
-                      </span>
-                    )}
-                    {l.contract_value != null && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <Banknote className="size-3.5" />
-                        {formatValue(l.contract_value)}
-                      </span>
-                    )}
-                    {l.contact_email && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <Mail className="size-3.5" />
-                        {l.contact_email}
-                      </span>
-                    )}
-                    {l.contact_phone && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <Phone className="size-3.5" />
-                        {l.contact_phone}
-                      </span>
-                    )}
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-foreground">{l.client}</div>
+                          <div className="truncate text-body-sm text-muted-foreground">
+                            {l.project_title}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          <KindChip kind={l.kind} />
+                          <span
+                            className={cn(
+                              "rounded-lg px-2 py-0.5 text-label-md font-medium",
+                              isContactable(l)
+                                ? "bg-success/10 text-success"
+                                : "bg-destructive/10 text-destructive",
+                            )}
+                          >
+                            {isContactable(l) ? "Contactable" : "No contact"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-body-sm text-muted-foreground">
+                        {l.work_completed_on && (
+                          <span className="inline-flex items-center gap-1.5">
+                            <CalendarCheck className="size-3.5" />
+                            Completed {formatDate(l.work_completed_on)}
+                          </span>
+                        )}
+                        {l.contract_value != null && (
+                          <span className="inline-flex items-center gap-1.5">
+                            <Banknote className="size-3.5" />
+                            {formatValue(l.contract_value)}
+                          </span>
+                        )}
+                        {l.contact_email && (
+                          <span className="inline-flex items-center gap-1.5">
+                            <Mail className="size-3.5" />
+                            {l.contact_email}
+                          </span>
+                        )}
+                        {l.contact_phone && (
+                          <span className="inline-flex items-center gap-1.5">
+                            <Phone className="size-3.5" />
+                            {l.contact_phone}
+                          </span>
+                        )}
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </>
+      )}
     </div>
   );
 }

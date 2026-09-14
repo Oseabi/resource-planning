@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { recordAudit } from "@/app/(app)/audit-actions";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Database } from "@/lib/supabase/database.types";
+import { isReferenceLetterKind } from "@/lib/reference-letters";
+import type { Database, ReferenceLetterKind } from "@/lib/supabase/database.types";
 
 type ReferenceLetterUpdate = Database["public"]["Tables"]["reference_letters"]["Update"];
 
@@ -28,6 +29,9 @@ export interface ReferenceLetterFormFields {
   contact_phone: string | null;
   reference_number: string | null;
   notes: string | null;
+  /** Where it is filed, by practice area. Null is unfiled. */
+  folder: string | null;
+  kind: ReferenceLetterKind;
 }
 
 export type SaveReferenceLetterResult = { error: string | null; id?: string };
@@ -69,12 +73,15 @@ function toColumns(fields: ReferenceLetterFormFields) {
     contact_phone: fields.contact_phone,
     reference_number: fields.reference_number,
     notes: fields.notes,
+    folder: fields.folder?.trim() || null,
+    kind: fields.kind,
   };
 }
 
 function validate(fields: ReferenceLetterFormFields): string | null {
   if (!fields.client?.trim()) return "Client is required.";
   if (!fields.project_title?.trim()) return "Project is required.";
+  if (!isReferenceLetterKind(fields.kind)) return "Pick what kind of letter this is.";
   if (
     fields.work_started_on &&
     fields.work_completed_on &&

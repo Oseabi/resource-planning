@@ -23,7 +23,7 @@ import { findBidConflicts } from "@/app/(app)/assignment-actions";
 import { ConfirmTeamBanner } from "@/app/(app)/tenders/[id]/confirm-team-banner";
 import { DeliveryPanel } from "@/app/(app)/tenders/[id]/delivery-panel";
 import { SeatCoveragePanel } from "@/app/(app)/tenders/[id]/seat-coverage-panel";
-import { letterCoverage, coverageLabel, eligibleLetters } from "@/lib/reference-letters";
+import { letterCoverage, coverageLabel, supportingLabel, eligibleLetters } from "@/lib/reference-letters";
 import { loadDepartmentContext } from "@/lib/departments-repo";
 import { FileCheck2 } from "lucide-react";
 
@@ -43,7 +43,7 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
     // disqualified before anybody reads the team.
     supabase
       .from("reference_letters")
-      .select("id, client, contract_value, work_completed_on, sectors, contact_name, contact_email, contact_phone"),
+      .select("id, client, kind, contract_value, work_completed_on, sectors, contact_name, contact_email, contact_phone"),
     loadDepartmentContext(),
   ]);
   if (!tender) notFound();
@@ -212,6 +212,13 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
             {letters.uncontactable > 0 && (
               <span className="rounded-lg bg-muted px-2 py-0.5 text-label-md font-medium text-muted-foreground">
                 {letters.uncontactable} with no contact details
+              </span>
+            )}
+            {/* Award and confirmation letters prove a contract, not the work,
+                so they sit beside the count rather than in it. */}
+            {supportingLabel(letters) && (
+              <span className="rounded-lg bg-muted px-2 py-0.5 text-label-md font-medium text-muted-foreground">
+                {supportingLabel(letters)}
               </span>
             )}
             <Link href="/reference-letters" className="ml-auto underline">

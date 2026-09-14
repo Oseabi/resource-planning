@@ -4,6 +4,11 @@ import {
   eligibleLetters,
   letterCoverage,
   coverageLabel,
+  supportingLabel,
+  groupByFolder,
+  folderNames,
+  letterKindLabel,
+  isReferenceLetterKind,
   type ReferenceLetterFacts,
 } from "@/lib/reference-letters";
 
@@ -12,6 +17,7 @@ const FROM = "2026-09-07";
 const letter = (over: Partial<ReferenceLetterFacts> = {}): ReferenceLetterFacts => ({
   id: "l1",
   client: "Eskom Holdings",
+  kind: "reference",
   contract_value: 12_000_000,
   work_completed_on: "2025-06-30",
   sectors: ["Public Sector"],
@@ -95,6 +101,58 @@ describe("letterCoverage", () => {
 
   it("reports the whole requirement as short when nothing is on file", () => {
     expect(letterCoverage(3, [])).toMatchObject({ state: "short", onFile: 0, shortfall: 3 });
+  });
+
+  it("counts references only, and says how many award and confirmation letters sit beside them", () => {
+    // An award letter proves the contract was won; nobody in it vouches for
+    // the work. Two references and an award do not answer a three-letter
+    // requirement, however contactable the award's signatory is.
+    const c = letterCoverage(3, [
+      letter({ id: "a" }),
+      letter({ id: "b" }),
+      letter({ id: "award", kind: "award" }),
+      letter({ id: "conf", kind: "confirmation", contact_email: null, contact_phone: null }),
+    ]);
+    expect(c).toMatchObject({ state: "short", onFile: 2, uncontactable: 0, supporting: 2, shortfall: 1 });
+    expect(supportingLabel(c)).toBe("2 award or confirmation letters on file, not counted");
+    expect(supportingLabel(letterCoverage(3, [letter({ id: "award", kind: "award" })]))).toBe(
+      "1 award or confirmation letter on file, not counted",
+    );
+    expect(supportingLabel(letterCoverage(3, [letter()]))).toBeNull();
+  });
+});
+
+describe("kinds", () => {
+  it("names each kind and refuses anything else", () => {
+    expect(letterKindLabel("reference")).toBe("Reference letter");
+    expect(letterKindLabel("award")).toBe("Award letter");
+    expect(letterKindLabel("confirmation")).toBe("Confirmation letter");
+    expect(isReferenceLetterKind("award")).toBe(true);
+    expect(isReferenceLetterKind("purchase_order")).toBe(false);
+    expect(isReferenceLetterKind(null)).toBe(false);
+  });
+});
+
+describe("groupByFolder", () => {
+  const rows = [
+    { id: "1", folder: "SAP" },
+    { id: "2", folder: null },
+    { id: "3", folder: "Enterprise Architecture" },
+    { id: "4", folder: "SAP" },
+    { id: "5", folder: "  " },
+  ];
+
+  it("keeps folders in name order, the unfiled last, and each folder's letters in arrival order", () => {
+    const groups = groupByFolder(rows);
+    expect(groups.map((g) => g.folder)).toEqual(["Enterprise Architecture", "SAP", null]);
+    expect(groups[1].letters.map((l) => l.id)).toEqual(["1", "4"]);
+    // A folder of spaces is no folder.
+    expect(groups[2].letters.map((l) => l.id)).toEqual(["2", "5"]);
+  });
+
+  it("lists the folder names in use for the form to offer", () => {
+    expect(folderNames(rows)).toEqual(["Enterprise Architecture", "SAP"]);
+    expect(folderNames([])).toEqual([]);
   });
 });
 
