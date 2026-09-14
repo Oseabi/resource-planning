@@ -3,7 +3,6 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/require-admin";
-import { createClient } from "@/lib/supabase/server";
 import { LENS_COOKIE } from "@/lib/departments";
 
 /**
@@ -22,16 +21,17 @@ export async function setDepartmentLens(slug: string | null): Promise<void> {
   await requireAdmin();
   const store = await cookies();
 
-  if (!slug) {
+  // Not checked against the departments here: the reader resolves the slug
+  // against the list on every request and a slug that names nothing is the
+  // group view. One query fewer on a round trip the person is waiting on.
+  if (!slug || !/^[a-z0-9-]{1,40}$/.test(slug)) {
     store.delete(LENS_COOKIE);
   } else {
-    const supabase = await createClient();
-    const { data } = await supabase.from("departments").select("slug").eq("slug", slug).maybeSingle();
-    if (!data) throw new Error("That department does not exist.");
     store.set(LENS_COOKIE, slug, { path: "/", httpOnly: true, sameSite: "lax", maxAge: 60 * 60 * 24 * 365 });
   }
 
   // Every page under the layout reads the lens: the colours, the lists, the
-  // default department on a new record.
+  // default department on a new record. The current page comes back
+  // re-rendered with this response, so the caller has nothing more to fetch.
   revalidatePath("/", "layout");
 }

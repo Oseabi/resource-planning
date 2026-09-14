@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import {
   Select,
   SelectContent,
@@ -11,7 +10,20 @@ import {
 } from "@/components/ui/select";
 import { DepartmentDot } from "@/components/departments/department-chip";
 import { setDepartmentLens } from "@/app/(app)/department-lens-actions";
+import { departmentTheme, themeCss } from "@/lib/department-theme";
 import type { DepartmentBrand } from "@/lib/departments";
+
+/**
+ * Repaint the app in the chosen department's colours now, from the colours
+ * the switcher already holds, rather than after the server has re-rendered
+ * the page. The server's render lands with the same stylesheet, so nothing
+ * flickers back; it only catches up on the lists.
+ */
+function paint(department: DepartmentBrand | null) {
+  const style = document.getElementById("department-theme");
+  if (style) style.textContent = department?.colour ? themeCss(departmentTheme(department.colour)) : "";
+  document.querySelector("[data-department]")?.setAttribute("data-department", department?.slug ?? "group");
+}
 
 const ALL = "all";
 
@@ -20,8 +32,10 @@ const ALL = "all";
  *
  * Choosing one recolours the app in that department's accent and opens the
  * lists on it, so an admin sees what its recruiters see; "All departments"
- * is the group view they start in. The same optimistic shape as the other
- * selects: set, save, put back if the server refuses.
+ * is the group view they start in. The colours change at once; the action
+ * sets the cookie and brings the current page back re-rendered in the same
+ * round trip, so there is no second fetch to wait for. Put back if the
+ * server refuses.
  */
 export function DepartmentSwitcher({
   departments,
@@ -30,7 +44,6 @@ export function DepartmentSwitcher({
   departments: DepartmentBrand[];
   lensSlug: string | null;
 }) {
-  const router = useRouter();
   const [value, setValue] = useState(lensSlug ?? ALL);
   const [isPending, startTransition] = useTransition();
 
@@ -41,12 +54,13 @@ export function DepartmentSwitcher({
       onValueChange={(next) => {
         const chosen = next ?? ALL;
         setValue(chosen);
+        paint(departments.find((d) => d.slug === chosen) ?? null);
         startTransition(async () => {
           try {
             await setDepartmentLens(chosen === ALL ? null : chosen);
-            router.refresh();
           } catch {
             setValue(lensSlug ?? ALL);
+            paint(departments.find((d) => d.slug === lensSlug) ?? null);
           }
         });
       }}
