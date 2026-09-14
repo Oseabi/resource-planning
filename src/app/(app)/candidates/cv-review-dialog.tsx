@@ -16,6 +16,8 @@ import { CandidateFields, type ExtractedFlags } from "@/app/(app)/candidates/can
 import { saveCandidate, type CandidateFormFields, type DuplicateMatch } from "@/app/(app)/candidates/actions";
 import type { ExtractionResult } from "@/lib/extraction/types";
 import { fieldsFromExtraction, flagsFromExtraction } from "@/app/(app)/candidates/cv-fields";
+import type { DepartmentBrand } from "@/lib/departments";
+import { filenameFromDisposition } from "@/lib/cv-export/filename";
 import { missingTemplateFields } from "@/lib/cv-export/missing-fields";
 
 export function CvReviewDialog({
@@ -23,14 +25,21 @@ export function CvReviewDialog({
   onOpenChange,
   extraction,
   file,
+  departments = [],
+  defaultDepartmentIds = [],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   extraction: ExtractionResult;
   file: File;
+  departments?: DepartmentBrand[];
+  /** Where the new person is filed until the reviewer says otherwise: the uploader's department. */
+  defaultDepartmentIds?: string[];
 }) {
   const router = useRouter();
-  const [fields, setFields] = useState<CandidateFormFields>(() => fieldsFromExtraction(extraction));
+  const [fields, setFields] = useState<CandidateFormFields>(() =>
+    fieldsFromExtraction(extraction, { department_ids: defaultDepartmentIds }),
+  );
   const [flags] = useState<ExtractedFlags>(() => flagsFromExtraction(extraction));
   const [error, setError] = useState<string | null>(null);
   const [duplicate, setDuplicate] = useState<DuplicateMatch | null>(null);
@@ -69,7 +78,7 @@ export function CvReviewDialog({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `TippFocus - ${fields.full_name || "candidate"}.pdf`;
+      a.download = filenameFromDisposition(res.headers.get("content-disposition"), `TippFocus - ${fields.full_name || "candidate"}.pdf`);
       a.click();
       URL.revokeObjectURL(url);
     } finally {
@@ -167,7 +176,7 @@ export function CvReviewDialog({
               </div>
             )}
 
-            <CandidateFields value={fields} onChange={setFields} extracted={flags} />
+            <CandidateFields value={fields} onChange={setFields} extracted={flags} departments={departments} />
 
             {error && <p className="mt-3 text-body-sm text-destructive">{error}</p>}
           </div>

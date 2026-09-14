@@ -15,6 +15,8 @@ import type { CandidateInput, RequirementInput } from "@/lib/scoring";
 export interface CandidateProfile extends CandidateInput {
   id: string;
   full_name: string;
+  /** Where the person is filed, so a shortlist can say who a bid is borrowing from. */
+  department_ids?: string[];
 }
 
 /** A position as the forms and the matcher see it (id absent until saved). */

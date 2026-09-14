@@ -138,6 +138,8 @@ export interface Database {
           /** Immutable handle. Imports key off this, so a rename breaks nothing. */
           slug: string;
           sort_order: number;
+          /** The accent as #RRGGBB, from the corporate site; the app derives the rest. Null wears the group theme. */
+          colour: string | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["departments"]["Row"]> & {
@@ -198,6 +200,8 @@ export interface Database {
           sectors: string[];
           languages: string[];
           resource_categories: string[];
+          /** The business units this person is filed under; may be several. A label and a default filter, never a visibility rule. */
+          department_ids: string[];
           linkedin_url: string | null;
           portfolio_url: string | null;
           work_experience: WorkExperience[];

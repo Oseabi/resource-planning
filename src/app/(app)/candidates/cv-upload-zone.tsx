@@ -6,10 +6,17 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { CvReviewDialog } from "@/app/(app)/candidates/cv-review-dialog";
 import type { ExtractionResult } from "@/lib/extraction/types";
+import type { DepartmentBrand } from "@/lib/departments";
 
 const ACCEPTED = ".pdf,.docx";
 
-export function CvUploadZone() {
+export function CvUploadZone({
+  departments = [],
+  defaultDepartmentIds = [],
+}: {
+  departments?: DepartmentBrand[];
+  defaultDepartmentIds?: string[];
+} = {}) {
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +109,8 @@ export function CvUploadZone() {
             }
           }}
           extraction={extraction}
+          departments={departments}
+          defaultDepartmentIds={defaultDepartmentIds}
           file={file}
         />
       )}

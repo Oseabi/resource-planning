@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { NewCandidateForm } from "@/app/(app)/candidates/new/new-candidate-form";
+import { loadDepartmentContext } from "@/lib/departments-repo";
+import { defaultCandidateDepartments } from "@/lib/departments";
 
-export default function NewCandidatePage() {
+export default async function NewCandidatePage() {
+  const departments = await loadDepartmentContext();
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <Link
@@ -18,7 +21,7 @@ export default function NewCandidatePage() {
           Enter the details manually, or upload a CV to pre-fill the form.
         </p>
       </div>
-      <NewCandidateForm />
+      <NewCandidateForm departments={departments.all} defaultDepartmentIds={defaultCandidateDepartments(departments.active)} />
     </div>
   );
 }

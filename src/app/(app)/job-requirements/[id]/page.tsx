@@ -8,6 +8,7 @@ import { RequirementStatusBadge } from "@/app/(app)/job-requirements/requirement
 import { MatchingResults, type MatchView } from "@/app/(app)/job-requirements/[id]/matching-results";
 import { DeleteRequirementButton } from "@/app/(app)/job-requirements/[id]/delete-requirement-button";
 import { isEmailConfigured } from "@/lib/email/resend";
+import { loadDepartmentContext } from "@/lib/departments-repo";
 import { loadPositionViews } from "@/lib/positions-repo";
 import { loadActivity } from "@/app/(app)/activity-actions";
 import { ActivityTimeline } from "@/components/activity/activity-timeline";
@@ -25,7 +26,7 @@ export default async function RequirementDetailPage({
   // Everything except the candidate lookup is independent, so it all goes out at
   // once rather than in four sequential waves. isCurrentUserAdmin is
   // request-cached, the layout has already resolved it, so it costs nothing.
-  const [{ data: req }, isAdmin, { count: placementCount }, positionData, activity] =
+  const [{ data: req }, isAdmin, { count: placementCount }, positionData, activity, departments] =
     await Promise.all([
       supabase.from("job_requirements").select("*").eq("id", id).single(),
       isCurrentUserAdmin(),
@@ -36,6 +37,7 @@ export default async function RequirementDetailPage({
         .eq("source_id", id),
       loadPositionViews(supabase, "job_requirement", id),
       loadActivity("job_requirement", id),
+      loadDepartmentContext(),
     ]);
 
   if (!req) notFound();
@@ -114,6 +116,8 @@ export default async function RequirementDetailPage({
           positions={positionViews}
           parentType="job_requirement"
           candidatePool={positionData.candidatePool}
+          parentDepartmentId={req.department_id}
+          departments={departments.all}
         />
       </div>
 

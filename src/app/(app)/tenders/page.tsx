@@ -27,14 +27,15 @@ export default async function TendersPage() {
   const supabase = await createClient();
 
   // Scoped by RLS to the caller's department, so the list and the four stat
-  // tiles derived from it are all this department's numbers. Admins see all.
-  const [{ data: tenders }, departments] = await Promise.all([
-    supabase
-      .from("tenders")
-      .select("id, title, client, submission_deadline, status, contract_start_date, contract_end_date")
-      .order("created_at", { ascending: false }),
-    loadDepartmentContext(),
-  ]);
+  // tiles derived from it are all this department's numbers. An admin sees
+  // all, or the one department they are looking through.
+  const departments = await loadDepartmentContext();
+  let query = supabase
+    .from("tenders")
+    .select("id, title, client, submission_deadline, status, contract_start_date, contract_end_date")
+    .order("created_at", { ascending: false });
+  if (departments.lens) query = query.eq("department_id", departments.lens.id);
+  const { data: tenders } = await query;
 
   const rows = tenders ?? [];
 
@@ -215,6 +216,7 @@ export default async function TendersPage() {
       <RfqUploadZone
         departments={departments.options}
         ownDepartmentName={departments.ownDepartmentName}
+        lensDepartmentId={departments.lens?.id ?? null}
       />
     </div>
   );

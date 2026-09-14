@@ -4,6 +4,7 @@ import { getCurrentProfile } from "@/lib/auth/current-user";
 import { buildTippCv, cvFilename, type CvSource } from "@/lib/cv-export/build-tipp-cv";
 import { renderTippCvPdf } from "@/lib/cv-export/pdf/tipp-cv-pdf";
 import { loadAccountManager } from "@/lib/settings";
+import { loadCvBrand } from "@/lib/departments-repo";
 
 const MIME = {
   pdf: "application/pdf",
@@ -82,12 +83,16 @@ export async function POST(request: Request) {
 
   const format = body.format === "docx" ? "docx" : "pdf";
   let document: Buffer;
+  const brand = await loadCvBrand();
   try {
     const manager = await loadAccountManager();
     const context = {
       manager,
       asOf: new Date(),
       generatedBy: profile.fullName || profile.email || "TiPP Focus",
+      // The department the person generating it belongs to, or the one an
+      // admin is looking through: its name on the cover, its colour on the rules.
+      brand,
     };
     document = format === "docx" ? buildTippCv(source, context) : await renderTippCvPdf(source, context);
   } catch (e) {
@@ -103,7 +108,7 @@ export async function POST(request: Request) {
   return new NextResponse(new Uint8Array(document), {
     headers: {
       "Content-Type": MIME[format],
-      "Content-Disposition": `attachment; filename="${cvFilename(source.full_name, format)}"`,
+      "Content-Disposition": `attachment; filename="${cvFilename(source.full_name, format, brand?.name)}"`,
       "Content-Length": String(document.length),
     },
   });

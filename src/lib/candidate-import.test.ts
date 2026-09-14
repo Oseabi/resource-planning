@@ -175,6 +175,27 @@ describe("readCandidateRows", () => {
     expect(problems[0].reasons.join(" ")).toMatch(/unrecognised column.*availabilty/);
   });
 
+  it("reads the departments a row names, by name or slug, as ids, and files a blank row where the operator says", () => {
+    const departments = [
+      { id: "d1", name: "Tipp Consulting", slug: "consulting" },
+      { id: "d4", name: "Tipp Construction", slug: "construction" },
+    ];
+    const text = "full_name,departments\nSipho Dlamini,Tipp Consulting | construction | consulting\nNomsa Khumalo,";
+    const { parsed, problems } = readCandidateRows(parseCsv(text), index, { departments, defaultDepartmentId: "d4" });
+    expect(problems).toEqual([]);
+    expect(parsed[0].department_ids).toEqual(["d1", "d4"]);
+    expect(parsed[1].department_ids).toEqual(["d4"]);
+    // Nowhere to file a blank row without a default, and the header keeps its friendly name.
+    expect(readCandidateRows(parseCsv(text), index, { departments }).parsed[1].department_ids).toEqual([]);
+  });
+
+  it("refuses a row that names a department that does not exist, listing the real ones", () => {
+    const departments = [{ id: "d1", name: "Tipp Consulting", slug: "consulting" }];
+    const { parsed, problems } = readCandidateRows(parseCsv("full_name,departments\nSipho,Marketing"), index, { departments });
+    expect(parsed).toEqual([]);
+    expect(problems[0].reasons.join(" ")).toMatch(/"Marketing" is not a department. Use one of: Tipp Consulting/);
+  });
+
   it("rejects a file with no name column", () => {
     const { problems } = read("email,phone\na@b.co.za,082");
     expect(problems[0].reasons.join(" ")).toMatch(/missing column.*full_name/);

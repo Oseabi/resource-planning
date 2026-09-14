@@ -20,6 +20,8 @@ import { ProjectsEditor } from "@/app/(app)/candidates/projects-editor";
 import type { CandidateFormFields } from "@/app/(app)/candidates/actions";
 import type { CandidateAvailability, CandidateStatus } from "@/lib/supabase/database.types";
 import { CATEGORY_NAMES, deriveCategories } from "@/lib/resource-categories";
+import type { DepartmentBrand } from "@/lib/departments";
+import { DepartmentDot } from "@/components/departments/department-chip";
 
 const AVAILABILITY_LABELS: Record<string, string> = {
   available: "Available",
@@ -56,10 +58,13 @@ export function CandidateFields({
   value,
   onChange,
   extracted = {},
+  departments = [],
 }: {
   value: CandidateFormFields;
   onChange: (next: CandidateFormFields) => void;
   extracted?: ExtractedFlags;
+  /** The business units to file the person under. Nothing to show when empty. */
+  departments?: DepartmentBrand[];
 }) {
   function set<K extends keyof CandidateFormFields>(key: K, val: CandidateFormFields[K]) {
     onChange({ ...value, [key]: val });
@@ -249,6 +254,40 @@ export function CandidateFields({
 
       {/* The system's own fields, which no CV carries. */}
       <Section title="Matching and status">
+        {/* A label and a default filter, never a wall: a person filed under
+            Consulting can still be bid by Construction. Several allowed, since a
+            project manager serves more than one unit. */}
+        {departments.length > 0 && (
+          <Field label="Departments">
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              {departments.map((d) => {
+                const checked = value.department_ids.includes(d.id);
+                return (
+                  <label key={d.id} className="inline-flex cursor-pointer items-center gap-2 text-body-sm text-foreground">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      checked={checked}
+                      onChange={() =>
+                        set(
+                          "department_ids",
+                          checked
+                            ? value.department_ids.filter((id) => id !== d.id)
+                            : departments.filter((x) => x.id === d.id || value.department_ids.includes(x.id)).map((x) => x.id),
+                        )
+                      }
+                    />
+                    <DepartmentDot colour={d.colour} />
+                    {d.name}
+                  </label>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-body-sm text-muted-foreground">
+              Which business units this person is filed under. Other departments can still bid them.
+            </p>
+          </Field>
+        )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Status" htmlFor="cf-status">
             <Select value={value.status} onValueChange={(v) => set("status", v as CandidateStatus)}>
@@ -355,6 +394,7 @@ export const EMPTY_CANDIDATE: CandidateFormFields = {
   sectors: [],
   languages: [],
   resource_categories: [],
+  department_ids: [],
   linkedin_url: null,
   portfolio_url: null,
   work_experience: [],

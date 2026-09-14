@@ -30,6 +30,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { assignCandidate, unassignCandidate } from "@/app/(app)/assignment-actions";
+import { shortlistDepartmentNote, type DepartmentBrand } from "@/lib/departments";
+import { DepartmentChips } from "@/components/departments/department-chip";
 
 export interface PositionMatch {
   candidateId: string;
@@ -90,6 +92,8 @@ export function PositionMatches({
   parentType,
   conflicts = {},
   candidatePool = {},
+  parentDepartmentId = null,
+  departments = [],
 }: {
   positions: PositionView[];
   parentType: "job_requirement" | "tender";
@@ -97,7 +101,26 @@ export function PositionMatches({
   conflicts?: Record<string, string[]>;
   /** candidateId → scoring inputs, so comparison can re-score without a fetch. */
   candidatePool?: Record<string, CandidateProfile>;
+  /** The bid's department, so a person borrowed from another is marked as such. */
+  parentDepartmentId?: string | null;
+  departments?: DepartmentBrand[];
 }) {
+  const parentName = departments.find((d) => d.id === parentDepartmentId)?.name ?? null;
+
+  /** The chips beside somebody from another department. Nothing hides; this only says. */
+  function borrowedFrom(candidateId: string) {
+    const note = shortlistDepartmentNote(candidatePool[candidateId]?.department_ids, parentDepartmentId, departments);
+    if (!note) return null;
+    return (
+      <DepartmentChips
+        ids={note.kind === "outside" ? note.departments.map((d) => d.id) : []}
+        departments={departments}
+        emptyLabel="No department"
+        title={parentName ? `Not in ${parentName}` : undefined}
+        className="mt-0.5"
+      />
+    );
+  }
   const router = useRouter();
   const [pending, setPending] = useState<PendingAssign | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -284,6 +307,7 @@ export function PositionMatches({
                       <div className="truncate text-body-sm text-muted-foreground">
                         {a.role ?? "-"}
                       </div>
+                      {borrowedFrom(a.candidateId)}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <span
@@ -347,6 +371,7 @@ export function PositionMatches({
                           <div className="truncate text-body-sm text-muted-foreground">
                             {m.role ?? "-"}
                           </div>
+                          {borrowedFrom(m.candidateId)}
                           {clash.length > 0 && (
                             <div className="mt-0.5 flex items-center gap-1 text-label-md text-strong-match">
                               <TriangleAlert className="size-3.5 shrink-0" />

@@ -36,6 +36,7 @@ COLUMNS = [
     ("available_from", 18, False, ""),
     ("status", 14, False, "active"),
     ("resource_categories", 30, False, "ERP | Business Analysis"),
+    ("departments", 30, False, "Tipp Consulting | Tipp Construction"),
     ("notes", 40, False, "Strong on D365 Finance. Prefers Gauteng-based work."),
 ]
 
@@ -211,6 +212,12 @@ GUIDE = [
      "Cybersecurity, Project & Programme Management, Business Analysis, Finance & Accounting, "
      "Construction & Engineering.",
      "ERP | Business Analysis"),
+    ("departments", "Only here",
+     "The business units this person is filed under, separated by a pipe; more than one is fine. "
+     "One of: Tipp Consulting, Tipp Resourcing, Tipp Human Capital, Tipp Construction. "
+     "Blank files them under the department given when the file is imported, or nowhere. "
+     "A label and a default filter, not a wall: every department can still bid them.",
+     "Tipp Consulting | Tipp Construction"),
     ("notes", "Only here", "Anything a resourcing conversation needs. Free text.",
      "Strong on D365 Finance. Prefers Gauteng-based work."),
 ]

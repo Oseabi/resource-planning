@@ -100,10 +100,13 @@ function toFlags(f: ExtractedTenderFields): TenderExtractedFlags {
 export function RfqUploadZone({
   departments = [],
   ownDepartmentName = null,
+  lensDepartmentId = null,
 }: {
   /** Only non-empty for an admin, who has to say where the bid belongs. */
   departments?: DepartmentOption[];
   ownDepartmentName?: string | null;
+  /** The department an admin is looking through, which their bid is filed under first. */
+  lensDepartmentId?: string | null;
 } = {}) {
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -190,6 +193,7 @@ export function RfqUploadZone({
           }}
           departments={departments}
           ownDepartmentName={ownDepartmentName}
+          lensDepartmentId={lensDepartmentId}
         />
       )}
     </>
@@ -202,17 +206,19 @@ function RfqReviewDialog({
   onClose,
   departments,
   ownDepartmentName,
+  lensDepartmentId,
 }: {
   extraction: RfqExtraction;
   file: File;
   onClose: () => void;
   departments: DepartmentOption[];
   ownDepartmentName: string | null;
+  lensDepartmentId: string | null;
 }) {
   const router = useRouter();
   const [fields, setFields] = useState<TenderFormFields>(() => ({
     ...toForm(extraction.fields),
-    department_id: defaultTenderDepartment(departments, ownDepartmentName),
+    department_id: defaultTenderDepartment(departments, ownDepartmentName, lensDepartmentId),
   }));
   const [flags] = useState<TenderExtractedFlags>(() => toFlags(extraction.fields));
   const [error, setError] = useState<string | null>(null);

@@ -47,6 +47,7 @@ const SIZE = {
   employmentLabel: 22,
   body: 18,
   coverTitle: 24,
+  coverBrand: 22,
   coverName: 32,
   coverSmall: 16,
 };
@@ -211,6 +212,10 @@ function coverPage(xml) {
   const line = { size: SIZE.body, after: 40, tabs: [2280], grey: true };
   const cover = [
     P("Candidate Resume", { size: SIZE.coverTitle, bold: true, center: true, before: 1600, after: 900 }),
+    // The department the document goes out under, when there is one. The
+    // paragraph loops over zero or one lines, so the plain document keeps
+    // its cover as issued.
+    P("{#brand_line}{.}{/brand_line}", { size: SIZE.coverBrand, bold: true, center: true, after: 900 }),
     P("{full_name}", { size: SIZE.coverName, bold: true, center: true, after: 200 }),
     P("{position}", { size: SIZE.coverName, bold: true, center: true, after: 800 }),
     P("As of date:\t{as_of_date}", line),
@@ -645,7 +650,7 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-for (const coverTag of ["{as_of_date}", "{manager_name}", "{manager_email}", "{manager_phone}"]) {
+for (const coverTag of ["{as_of_date}", "{manager_name}", "{manager_email}", "{manager_phone}", "{#brand_line}"]) {
   if (!rebuilt.includes(coverTag)) {
     console.error(`Cover page is missing ${coverTag}. Nothing written.`);
     process.exit(1);

@@ -14,6 +14,9 @@ import { EmptyState } from "@/components/layout/empty-state";
 import { CandidatesFilters } from "@/app/(app)/candidates/candidates-filters";
 import { CvUploadZone } from "@/app/(app)/candidates/cv-upload-zone";
 import { StatusBadge, AvailabilityBadge, Chip } from "@/app/(app)/candidates/candidate-badges";
+import { DepartmentChips } from "@/components/departments/department-chip";
+import { loadDepartmentContext } from "@/lib/departments-repo";
+import { parseDepartmentFilter, defaultCandidateDepartments } from "@/lib/departments";
 
 const PAGE_SIZE = 10;
 
@@ -30,6 +33,7 @@ export default async function CandidatesPage({
     category?: string;
     status?: string;
     freeBy?: string;
+    department?: string;
     page?: string;
   }>;
 }) {
@@ -38,12 +42,23 @@ export default async function CandidatesPage({
   const from = (page - 1) * PAGE_SIZE;
 
   const supabase = await createClient();
+  const departments = await loadDepartmentContext();
+
+  // The list opens on the person's own department (or the one an admin is
+  // looking through) and says so; "All departments" is one click away. A
+  // filter and a label, never a wall: the pool is shared and every
+  // department can bid anybody in it.
+  const departmentFilter = parseDepartmentFilter(sp.department, departments.filterDepartmentId, departments.all);
 
   let query = supabase
     .from("candidates")
     .select("*", { count: "exact" })
     .order("created_at", { ascending: false });
 
+  if (departmentFilter.kind === "one") query = query.contains("department_ids", [departmentFilter.department.id]);
+  // PostgREST spells an empty array "{}"; the typed eq wants a JS array, which
+  // it would serialise to nothing, so the filter goes through as text.
+  if (departmentFilter.kind === "none") query = query.filter("department_ids", "eq", "{}");
   if (sp.status) query = query.eq("status", sp.status as "active" | "inactive" | "placed");
   if (sp.role) query = query.ilike("current_role", `%${sp.role}%`);
   if (sp.category) query = query.contains("resource_categories", [sp.category]);
@@ -84,13 +99,18 @@ export default async function CandidatesPage({
   // shared, so any department can bid anybody. These two tiles are the only
   // numbers on a manager's screen that still count the whole business, which is
   // why the labels say so.
-  const [{ count: totalCount }, { count: availableCount }] = await Promise.all([
+  const [{ count: totalCount }, { count: availableCount }, { count: unfiledCount }] = await Promise.all([
     supabase.from("candidates").select("id", { count: "exact", head: true }),
     supabase
       .from("candidates")
       .select("id", { count: "exact", head: true })
       .eq("availability", "available")
       .neq("status", "placed"),
+    // Said out loud when the list opens on one department, so a default
+    // filter never hides a person nobody has filed yet.
+    departmentFilter.kind === "one"
+      ? supabase.from("candidates").select("id", { count: "exact", head: true }).filter("department_ids", "eq", "{}")
+      : Promise.resolve({ count: 0 }),
   ]);
 
   const total = count ?? 0;
@@ -105,9 +125,17 @@ export default async function CandidatesPage({
     if (sp.category) next.set("category", sp.category);
     if (sp.status) next.set("status", sp.status);
     if (sp.freeBy) next.set("freeBy", sp.freeBy);
+    if (sp.department) next.set("department", sp.department);
     next.set("page", String(p));
     return `/candidates?${next.toString()}`;
   };
+
+  const scope =
+    departmentFilter.kind === "one"
+      ? `in ${departmentFilter.department.name}`
+      : departmentFilter.kind === "none"
+        ? "with no department"
+        : "across all departments";
 
   return (
     <div className="space-y-6">
@@ -128,7 +156,17 @@ export default async function CandidatesPage({
         </div>
       </div>
 
-      <CandidatesFilters />
+      <CandidatesFilters departments={departments.all} defaultDepartmentId={departments.filterDepartmentId} />
+
+      {departmentFilter.kind === "one" && (unfiledCount ?? 0) > 0 && (
+        <p className="rounded-lg border border-border bg-card px-4 py-2.5 text-body-sm text-muted-foreground">
+          {unfiledCount} candidate{unfiledCount === 1 ? " has" : "s have"} no department yet and {unfiledCount === 1 ? "is" : "are"} not in
+          this list.{" "}
+          <Link href="/candidates?department=none" className="text-primary underline">
+            Show them
+          </Link>
+        </p>
+      )}
 
       <div className="overflow-hidden rounded-lg border border-border bg-card shadow-card">
         {rows.length === 0 ? (
@@ -161,6 +199,7 @@ export default async function CandidatesPage({
                           <div className="text-body-sm text-muted-foreground">
                             {c.location ?? "-"}
                           </div>
+                          <DepartmentChips ids={c.department_ids ?? []} departments={departments.all} className="mt-1" />
                         </Link>
                       </TableCell>
                       <TableCell>
@@ -247,6 +286,7 @@ export default async function CandidatesPage({
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-1">
                         <StatusBadge status={c.status} />
+                        <DepartmentChips ids={c.department_ids ?? []} departments={departments.all} />
                         {c.resource_categories.slice(0, 2).map((cat) => (
                           <CategoryChip key={cat}>{cat}</CategoryChip>
                         ))}
@@ -267,8 +307,8 @@ export default async function CandidatesPage({
         <div className="flex items-center justify-between border-t border-border px-4 py-3">
           <p className="text-body-sm text-muted-foreground">
             {total === 0
-              ? "No candidates"
-              : `Showing ${from + 1}–${showingTo} of ${total} candidate${total === 1 ? "" : "s"}`}
+              ? `No candidates ${scope}`
+              : `Showing ${from + 1}–${showingTo} of ${total} candidate${total === 1 ? "" : "s"} ${scope}`}
           </p>
           <div className="flex gap-2">
             <Button
@@ -295,7 +335,7 @@ export default async function CandidatesPage({
 
       <div>
         <h2 className="mb-2 text-headline-sm font-semibold text-foreground">Add a candidate</h2>
-        <CvUploadZone />
+        <CvUploadZone departments={departments.all} defaultDepartmentIds={defaultCandidateDepartments(departments.active)} />
       </div>
     </div>
   );

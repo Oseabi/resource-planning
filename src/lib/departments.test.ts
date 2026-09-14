@@ -4,7 +4,14 @@ import {
   resolveTenderDepartment,
   resolveImportDepartment,
   departmentName,
+  resolveLens,
+  activeDepartment,
+  defaultCandidateDepartments,
+  knownDepartmentIds,
+  parseDepartmentFilter,
+  shortlistDepartmentNote,
   type DepartmentOption,
+  type DepartmentBrand,
 } from "@/lib/departments";
 
 const DEPARTMENTS: DepartmentOption[] = [
@@ -117,6 +124,69 @@ describe("defaultTenderDepartment", () => {
   it("has nothing to offer when Consulting is not among the departments", () => {
     expect(defaultTenderDepartment([departments[0]], null)).toBeNull();
     expect(defaultTenderDepartment([], null)).toBeNull();
+  });
+
+  it("files under the department an admin is looking through, before Consulting", () => {
+    expect(defaultTenderDepartment(departments, null, "r")).toBe("r");
+    expect(defaultTenderDepartment(departments, null, "unknown")).toBe("c");
+    expect(defaultTenderDepartment(departments, "Tipp Resourcing", "r")).toBeNull();
+  });
+});
+
+const BRANDS: DepartmentBrand[] = [
+  { id: "d1", name: "Tipp Consulting", slug: "consulting", colour: "#68252C" },
+  { id: "d2", name: "Tipp Resourcing", slug: "resourcing", colour: "#2CB673" },
+  { id: "d4", name: "Tipp Construction", slug: "construction", colour: null },
+];
+
+describe("resolveLens and activeDepartment", () => {
+  it("reads the cookie back to a department, or nothing", () => {
+    expect(resolveLens("construction", BRANDS)?.id).toBe("d4");
+    expect(resolveLens("marketing", BRANDS)).toBeNull();
+    expect(resolveLens(undefined, BRANDS)).toBeNull();
+  });
+
+  it("is the person's own department, or the admin's chosen one, and never a lens on anybody else", () => {
+    expect(activeDepartment({ isAdmin: false, own: BRANDS[0], lens: BRANDS[1] })?.id).toBe("d1");
+    expect(activeDepartment({ isAdmin: true, own: null, lens: BRANDS[1] })?.id).toBe("d2");
+    expect(activeDepartment({ isAdmin: true, own: BRANDS[0], lens: null })).toBeNull();
+    expect(defaultCandidateDepartments(BRANDS[2])).toEqual(["d4"]);
+    expect(defaultCandidateDepartments(null)).toEqual([]);
+  });
+});
+
+describe("knownDepartmentIds", () => {
+  it("keeps real departments once each in their own order and drops the rest", () => {
+    expect(knownDepartmentIds(["d4", "nope", "d1", "d4", 7, null], BRANDS)).toEqual(["d1", "d4"]);
+    expect(knownDepartmentIds("d1", BRANDS)).toEqual([]);
+    expect(knownDepartmentIds(undefined, BRANDS)).toEqual([]);
+  });
+});
+
+describe("parseDepartmentFilter", () => {
+  it("defaults to the person's own department and honours an explicit all or none", () => {
+    expect(parseDepartmentFilter(undefined, "d1", BRANDS)).toEqual({ kind: "one", department: BRANDS[0] });
+    expect(parseDepartmentFilter("all", "d1", BRANDS)).toEqual({ kind: "all" });
+    expect(parseDepartmentFilter("none", "d1", BRANDS)).toEqual({ kind: "none" });
+    expect(parseDepartmentFilter("d2", "d1", BRANDS)).toEqual({ kind: "one", department: BRANDS[1] });
+  });
+
+  it("shows everyone when there is no default and when the value names nobody", () => {
+    expect(parseDepartmentFilter(undefined, null, BRANDS)).toEqual({ kind: "all" });
+    expect(parseDepartmentFilter("gone", "d1", BRANDS)).toEqual({ kind: "all" });
+  });
+});
+
+describe("shortlistDepartmentNote", () => {
+  it("says nothing for the bid's own people and for a bid with no department", () => {
+    expect(shortlistDepartmentNote(["d1", "d2"], "d1", BRANDS)).toBeNull();
+    expect(shortlistDepartmentNote(["d2"], null, BRANDS)).toBeNull();
+  });
+
+  it("names where a borrowed person is filed, or that they are filed nowhere", () => {
+    expect(shortlistDepartmentNote(["d2", "d4"], "d1", BRANDS)).toEqual({ kind: "outside", departments: [BRANDS[1], BRANDS[2]] });
+    expect(shortlistDepartmentNote([], "d1", BRANDS)).toEqual({ kind: "none" });
+    expect(shortlistDepartmentNote(undefined, "d1", BRANDS)).toEqual({ kind: "none" });
   });
 });
 

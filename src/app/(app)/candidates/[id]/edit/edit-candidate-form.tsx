@@ -13,15 +13,18 @@ import {
 } from "@/app/(app)/candidates/actions";
 import type { ExtractionResult } from "@/lib/extraction/types";
 import { mergeExtractionIntoFields } from "@/app/(app)/candidates/cv-fields";
+import type { DepartmentBrand } from "@/lib/departments";
 
 export function EditCandidateForm({
   candidateId,
   initial,
   currentCvName,
+  departments = [],
 }: {
   candidateId: string;
   initial: CandidateFormFields;
   currentCvName: string | null;
+  departments?: DepartmentBrand[];
 }) {
   const router = useRouter();
   const [fields, setFields] = useState<CandidateFormFields>(initial);
@@ -142,7 +145,7 @@ export function EditCandidateForm({
       )}
 
       <div className="rounded-lg border border-border bg-card shadow-card p-5">
-        <CandidateFields value={fields} onChange={setFields} extracted={flags} />
+        <CandidateFields value={fields} onChange={setFields} extracted={flags} departments={departments} />
       </div>
 
       {error && <p className="text-body-sm text-destructive">{error}</p>}

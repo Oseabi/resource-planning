@@ -95,7 +95,10 @@
   --popover: #ffffff;
   --popover-foreground: #121a2b;
 
-  --primary: #004ac6;
+  /* The group's teal, from the corporate site. A department's own accent
+     overrides these nine on the app pages; see src/lib/department-theme.ts,
+     whose test pins these values to it. */
+  --primary: #01789d;
   --primary-foreground: #ffffff;
   --secondary: #eef2f8;
   --secondary-foreground: #384252;
@@ -114,9 +117,9 @@
 
   --border: #dfe4ee;
   --input: #d5dce8;
-  --ring: #004ac6;
+  --ring: #01789d;
 
-  --chart-1: #004ac6;
+  --chart-1: #01789d;
   --chart-2: #cbd5e1;
   --chart-3: #fd651e;
   --chart-4: #10b981;
@@ -124,12 +127,12 @@
 
   --sidebar: #ffffff;
   --sidebar-foreground: #121a2b;
-  --sidebar-primary: #004ac6;
+  --sidebar-primary: #01789d;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e7edfc;
-  --sidebar-accent-foreground: #004ac6;
+  --sidebar-accent: #e6f2f5;
+  --sidebar-accent-foreground: #01769a;
   --sidebar-border: #e6eaf2;
-  --sidebar-ring: #004ac6;
+  --sidebar-ring: #01789d;
 }
 
 .dark {
@@ -140,8 +143,8 @@
   --popover: #283044;
   --popover-foreground: #eef0ff;
 
-  --primary: #b4c5ff;
-  --primary-foreground: #00174b;
+  --primary: #94c6d6;
+  --primary-foreground: #1b2530;
   --secondary: #283044;
   --secondary-foreground: #eef0ff;
   --muted: #283044;
@@ -158,9 +161,9 @@
 
   --border: #434655;
   --input: #434655;
-  --ring: #b4c5ff;
+  --ring: #94c6d6;
 
-  --chart-1: #b4c5ff;
+  --chart-1: #94c6d6;
   --chart-2: #475569;
   --chart-3: #ffb599;
   --chart-4: #10b981;
@@ -168,12 +171,12 @@
 
   --sidebar: #283044;
   --sidebar-foreground: #eef0ff;
-  --sidebar-primary: #b4c5ff;
-  --sidebar-primary-foreground: #00174b;
+  --sidebar-primary: #94c6d6;
+  --sidebar-primary-foreground: #1b2530;
   --sidebar-accent: #334155;
-  --sidebar-accent-foreground: #b4c5ff;
+  --sidebar-accent-foreground: #94c6d6;
   --sidebar-border: #434655;
-  --sidebar-ring: #b4c5ff;
+  --sidebar-ring: #94c6d6;
 }
 
 @layer base {

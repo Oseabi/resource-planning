@@ -6,6 +6,7 @@ import type { CvSource } from "@/lib/cv-export/missing-fields";
 import { durationOf, lineKinds } from "@/lib/cv-record";
 import { formatLongDate, parseLongDate } from "@/lib/dates";
 import type { AccountManager } from "@/lib/supabase/database.types";
+import type { CvBrand } from "@/lib/cv-export/brand";
 
 /**
  * The TiPP Focus CV as a PDF, drawn to match the ones the team issues.
@@ -34,6 +35,8 @@ export interface CvPdfContext {
   asOf: Date;
   /** Written into the file's properties as its author. */
   generatedBy: string;
+  /** The department the document goes out under: its name on the cover, its colour on the rules. */
+  brand?: CvBrand | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +143,7 @@ const s = StyleSheet.create({
   coverLogo: { width: 254, height: 91, marginLeft: 105, marginTop: -3 },
   coverRule: { height: 0.75, backgroundColor: "#000000", marginTop: 46 },
   coverTitle: { fontFamily: "Gothic", fontWeight: "bold", fontSize: 12, textAlign: "center", marginTop: 40 },
+  coverBrand: { fontFamily: "Gothic", fontWeight: "bold", fontSize: 11, textAlign: "center", marginTop: 22 },
   coverName: { fontFamily: "Gothic", fontWeight: "bold", fontSize: 16, textAlign: "center", marginTop: 46 },
   coverPosition: { fontFamily: "Gothic", fontWeight: "bold", fontSize: 16, textAlign: "center", marginTop: 18 },
   coverRuleAfter: { height: 0.75, backgroundColor: "#000000", marginTop: 16 },
@@ -249,11 +253,11 @@ function Header() {
  * with the table's column header and first row, and a box's heading asks
  * for room enough for a few lines below it.
  */
-function Section({ title, keepWithNext = true }: { title: string; keepWithNext?: boolean }) {
+function Section({ title, keepWithNext = true, rule = RULE }: { title: string; keepWithNext?: boolean; rule?: string }) {
   return (
     <View wrap={false} minPresenceAhead={keepWithNext ? 60 : 0}>
       <Text style={s.heading}>{title}</Text>
-      <View style={s.rule} />
+      <View style={[s.rule, { backgroundColor: rule }]} />
     </View>
   );
 }
@@ -414,7 +418,19 @@ function RowSlice({
  * ends on a heading with an empty table under it, nor on a column header
  * with no row.
  */
-function Table({ title, widths, header, rows }: { title: string; widths: number[]; header: string[]; rows: Cell[][] }) {
+function Table({
+  title,
+  widths,
+  header,
+  rows,
+  rule = RULE,
+}: {
+  title: string;
+  widths: number[];
+  header: string[];
+  rows: Cell[][];
+  rule?: string;
+}) {
   const cols = widths.length;
   const name = title.toLowerCase().replace(/[^a-z]+/g, "-");
   const slices = rows.flatMap((cells, r) =>
@@ -430,7 +446,7 @@ function Table({ title, widths, header, rows }: { title: string; widths: number[
   return (
     <View style={s.table}>
       <View wrap={false}>
-        <Section title={title} keepWithNext={false} />
+        <Section title={title} keepWithNext={false} rule={rule} />
         <View style={s.row} wrap={false}>
           {header.map((h, i) => (
             <View key={i} style={[...edges(i, cols, slices.length === 0, false), s.columnHeader, { width: widths[i] }]}>
@@ -486,14 +502,17 @@ function Cover({ source, context }: { source: CvSource; context: CvPdfContext })
     "That no offer of permanent employment is made to the candidate without Tipp Focus’s prior express consent.",
   ];
   const numerals = ["i.", "ii.", "iii.", "iv.", "v."];
+  const rule = context.brand?.colour ?? "#000000";
   return (
     <View break={false}>
       <Image style={s.coverLogo} src={image("logo-cover.png")} />
-      <View style={s.coverRule} />
+      <View style={[s.coverRule, { backgroundColor: rule }]} />
       <Text style={s.coverTitle}>Candidate Resume</Text>
+      {/* The department the document goes out under, when there is one. */}
+      {context.brand && <Text style={s.coverBrand}>{context.brand.name}</Text>}
       <Text style={s.coverName}>{source.full_name}</Text>
       <Text style={s.coverPosition}>{source.current_role ?? ""}</Text>
-      <View style={s.coverRuleAfter} />
+      <View style={[s.coverRuleAfter, { backgroundColor: rule }]} />
       <View style={s.coverDetails}>
         {[
           ["As of date:", formatLongDate(context.asOf.toISOString().slice(0, 10)) ?? ""],
@@ -682,6 +701,8 @@ function CvDocument({
     .filter((g) => g.company.trim() || g.projects.length)
     .map((g): Cell[] => [g.company, g.projects]);
   const achievements = source.achievements?.trim() ?? "";
+  // The rules under the headings, in the department's colour when there is one.
+  const rule = context.brand?.colour ?? RULE;
 
   return (
     <Document
@@ -711,7 +732,7 @@ function CvDocument({
           ))}
         </View>
 
-        <Section title="CANDIDATE OVERVIEW" />
+        <Section title="CANDIDATE OVERVIEW" rule={rule} />
         <Box id="overview">
           {summary.map((p, i) => (
             <Text key={i} style={s.paragraph}>
@@ -720,27 +741,27 @@ function CvDocument({
           ))}
         </Box>
 
-        <Table title="CAREER SUMMARY" widths={COLUMNS_3} header={["COMPANY", "POSITION", "DURATION"]} rows={career} />
+        <Table title="CAREER SUMMARY" widths={COLUMNS_3} header={["COMPANY", "POSITION", "DURATION"]} rows={career} rule={rule} />
 
-        <Table title="QUALIFICATIONS" widths={COLUMNS_3} header={["QUALIFICATION", "INSTITUTION", "YEAR"]} rows={education} />
+        <Table title="QUALIFICATIONS" widths={COLUMNS_3} header={["QUALIFICATION", "INSTITUTION", "YEAR"]} rows={education} rule={rule} />
 
         {certificates.length > 0 && (
           <>
-            <Table title="CERTIFICATES AND COURSES" widths={COLUMNS_3} header={["QUALIFICATION", "INSTITUTION", "YEAR"]} rows={certificates} />
+            <Table title="CERTIFICATES AND COURSES" widths={COLUMNS_3} header={["QUALIFICATION", "INSTITUTION", "YEAR"]} rows={certificates} rule={rule} />
           </>
         )}
 
-        <Table title="SKILLSET" widths={COLUMNS_3} header={["SKILLS", "PROFICIENCY", "YEARS OF EXPERIENCE"]} rows={skillset} />
+        <Table title="SKILLSET" widths={COLUMNS_3} header={["SKILLS", "PROFICIENCY", "YEARS OF EXPERIENCE"]} rows={skillset} rule={rule} />
 
         {projects.length > 0 && (
           <>
-            <Table title="PROJECTS" widths={[EMPLOYMENT_LABEL_COLUMN, CONTENT_WIDTH - EMPLOYMENT_LABEL_COLUMN]} header={["COMPANY NAME", "PROJECT NAME"]} rows={projects} />
+            <Table title="PROJECTS" widths={[EMPLOYMENT_LABEL_COLUMN, CONTENT_WIDTH - EMPLOYMENT_LABEL_COLUMN]} header={["COMPANY NAME", "PROJECT NAME"]} rows={projects} rule={rule} />
           </>
         )}
 
         {achievements && (
           <>
-            <Section title="ACHIEVEMENTS" />
+            <Section title="ACHIEVEMENTS" rule={rule} />
             <Box id="achievements">
               <Lines text={achievements} />
             </Box>
@@ -759,7 +780,7 @@ function CvDocument({
             <View key={i} style={{ marginBottom: i < source.work_experience.length - 1 ? 24 : 0 }}>
               {/* The label rows stay together, and the first block's with the heading. */}
               <View wrap={false}>
-                {i === 0 && <Section title="EMPLOYMENT HISTORY" keepWithNext={false} />}
+                {i === 0 && <Section title="EMPLOYMENT HISTORY" keepWithNext={false} rule={rule} />}
                 {labelled.map(([label, value]) => (
                   <View key={label} style={s.row} wrap={false}>
                     <View style={[s.cell, s.employmentLabel, { width: EMPLOYMENT_LABEL_COLUMN }]}>
