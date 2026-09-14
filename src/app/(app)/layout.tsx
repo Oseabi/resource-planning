@@ -44,7 +44,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen" data-department={active?.slug ?? "group"}>
-      {theme && <style>{theme}</style>}
+      {/* Always present, so the switcher can repaint it the moment a department
+          is chosen, before the server has answered. Empty is the group view. */}
+      <style id="department-theme">{theme ?? ""}</style>
       {/* Renders nothing. In the layout so it survives navigation. */}
       <SessionHeartbeat />
       <SidebarNav fullName={fullName} roleLabel={roleLabel} isAdmin={profile.isAdmin} />
