@@ -240,10 +240,24 @@ function sharedYears(skills: { years?: string | null }[]): string | null | undef
   return values.size === 1 ? [...values][0] : undefined;
 }
 
-export function Card({ title, children }: { title?: string; children: React.ReactNode }) {
+export function Card({
+  title,
+  action,
+  children,
+}: {
+  title?: string;
+  /** One control beside the heading, e.g. the document uploader. */
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <div className="rounded-lg border border-border bg-card shadow-card p-5">
-      {title && <h2 className="mb-2 text-label-sm uppercase tracking-wide text-muted-foreground">{title}</h2>}
+      {(title || action) && (
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          {title && <h2 className="text-label-sm uppercase tracking-wide text-muted-foreground">{title}</h2>}
+          {action}
+        </div>
+      )}
       {children}
     </div>
   );

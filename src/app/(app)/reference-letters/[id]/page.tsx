@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/availability";
 import { isContactable, letterKindLabel, UNFILED } from "@/lib/reference-letters";
 import { KindChip } from "@/app/(app)/reference-letters/kind-chip";
-import { CvDownloadButton } from "@/app/(app)/candidates/[id]/cv-download-button";
-import { DeleteReferenceLetterButton } from "@/app/(app)/reference-letters/[id]/delete-button";
+import {
+  DeleteReferenceLetterButton,
+  ReferenceLetterDownloadButton,
+} from "@/app/(app)/reference-letters/[id]/delete-button";
 
 function formatValue(value: number | null): string {
   if (value == null) return "Not recorded";
@@ -63,7 +65,7 @@ export default async function ReferenceLetterPage({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {letter.file_path && (
-            <CvDownloadButton
+            <ReferenceLetterDownloadButton
               path={letter.file_path}
               filename={letter.original_filename ?? "Reference letter"}
             />

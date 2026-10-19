@@ -52,7 +52,7 @@ export function DeleteCandidateButton({
           <DialogTitle>Delete candidate</DialogTitle>
           <DialogDescription>
             Permanently delete <span className="font-medium text-foreground">{candidateName}</span>{" "}
-            and their CV? This cannot be undone.
+            and every document on their file? This cannot be undone.
           </DialogDescription>
         </DialogHeader>
         {error && <p className="text-body-sm text-destructive">{error}</p>}
