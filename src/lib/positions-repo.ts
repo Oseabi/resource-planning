@@ -116,10 +116,13 @@ export async function loadPositionViews(
   const [{ data: matchRows }, { data: assignmentRows }] = await Promise.all([
     supabase
       .from("matches")
-      .select("id, candidate_id, match_target_id, score, score_breakdown, alert_sent")
+      .select("id, candidate_id, match_target_id, score, score_breakdown, alert_sent, ai_deep_match_notes")
       .eq("match_target_type", "position")
       .in("match_target_id", positionIds)
-      .order("score", { ascending: false }),
+      // The same total order the deep-match route uses, so the five it reads
+      // are the five the shortlist shows. Score alone leaves ties unordered.
+      .order("score", { ascending: false })
+      .order("candidate_id", { ascending: true }),
     supabase
       .from("assignments")
       .select("position_id, candidate_id, status")
@@ -200,6 +203,7 @@ export async function loadPositionViews(
         name: candById.get(m.candidate_id)?.full_name ?? "Unknown candidate",
         role: candById.get(m.candidate_id)?.current_role ?? null,
         score: m.score,
+        deepMatchNote: m.ai_deep_match_notes,
       })),
   }));
 
@@ -226,6 +230,7 @@ export async function loadPositionViews(
         breakdown: sb.breakdown ?? zero,
         points: sb.points ?? zero,
         alertSent: m.alert_sent,
+        deepMatchNote: m.ai_deep_match_notes,
       };
     });
 

@@ -205,6 +205,18 @@ describe("auditSentence", () => {
     );
   });
 
+  it("names Groq and the country when candidate profiles go for deep matching", () => {
+    // The other line that records personal data leaving South Africa.
+    const row = audit({
+      action: "sent_for_ai_deep_match",
+      entity_type: "position",
+      entity_label: "Business Analyst",
+    });
+    expect(auditSentence(row)).toBe(
+      'Nomsa Khumalo sent candidate profiles to Groq in the United States for deep matching against the seat "Business Analyst"',
+    );
+  });
+
   it("spells an entity type in words", () => {
     const row = audit({ entity_type: "job_requirement", entity_label: "BA x3" });
     expect(auditSentence(row)).toContain("a job requirement");
