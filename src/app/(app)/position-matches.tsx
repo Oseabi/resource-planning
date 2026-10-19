@@ -432,7 +432,7 @@ export function PositionMatches({
                       {/* Outside ScoreCard on purpose: that card is the
                           arithmetic, and the line between what was computed
                           and what is an opinion has to stay legible. */}
-                      <DeepMatchNoteBlock note={m.deepMatchNote ?? null} />
+                      <DeepMatchNoteBlock note={m.deepMatchNote ?? null} currentScore={m.score} />
                       {isOpen && profile && (
                         <ScoreCard
                           position={position}

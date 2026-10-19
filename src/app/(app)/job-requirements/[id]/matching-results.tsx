@@ -213,7 +213,7 @@ export function MatchingResults({
                       yet, or the note itself. The bars below are computed
                       locally in every one of them. */}
                   {top.deepMatchNote ? (
-                    <DeepMatchNoteBlock note={top.deepMatchNote} />
+                    <DeepMatchNoteBlock note={top.deepMatchNote} currentScore={top.score} />
                   ) : (
                     <p className="mt-2 rounded-md bg-muted px-3 py-2 text-body-sm text-muted-foreground">
                       No AI note on this person yet. Open a role below and run a deep match on its

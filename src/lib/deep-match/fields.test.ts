@@ -168,10 +168,25 @@ describe("what gets written", () => {
   });
 
   it("round trips through the stored envelope", () => {
-    const note = deepMatchNote({ candidate: 2, rank: 1, reason: "Ran the rollout.", confidence: "high" }, 5, "m");
+    const note = deepMatchNote({ candidate: 2, rank: 1, reason: "Ran the rollout.", confidence: "high" }, 5, "m", 83);
     const parsed = parseDeepMatchNote(note);
-    expect(parsed).toMatchObject({ reason: "Ran the rollout.", rank: 1, of: 5, confidence: "high", model: "m" });
+    expect(parsed).toMatchObject({ reason: "Ran the rollout.", rank: 1, of: 5, confidence: "high", model: "m", score: 83 });
     expect(parsed?.at).not.toBe("");
+  });
+
+  it("records the score it was written against", () => {
+    // A note survives a re-run of matching, so it can outlive the number it
+    // was written about. Without this it would sit beside a different score
+    // with nothing to say so.
+    const parsed = parseDeepMatchNote(
+      deepMatchNote({ candidate: 1, rank: 1, reason: "x", confidence: "high" }, 5, "m", 77),
+    );
+    expect(parsed?.score).toBe(77);
+  });
+
+  it("reads a note written before the score was recorded", () => {
+    const old = JSON.stringify({ v: 1, reason: "older note", rank: 2, of: 5, confidence: "low", model: "m", at: "" });
+    expect(parseDeepMatchNote(old)).toMatchObject({ reason: "older note", score: null });
   });
 
   it("reads something somebody typed in the column by hand", () => {
