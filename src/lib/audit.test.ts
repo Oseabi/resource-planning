@@ -209,6 +209,16 @@ describe("auditSentence", () => {
     const row = audit({ entity_type: "job_requirement", entity_label: "BA x3" });
     expect(auditSentence(row)).toContain("a job requirement");
   });
+
+  it("calls a document on a person's file a document", () => {
+    // The table is candidate_attachments; nobody says that out loud.
+    const row = audit({
+      action: "created",
+      entity_type: "candidate_attachment",
+      entity_label: "TOGAF 9 Foundation",
+    });
+    expect(auditSentence(row)).toBe('Nomsa Khumalo created a document "TOGAF 9 Foundation"');
+  });
 });
 
 describe("auditCounts", () => {

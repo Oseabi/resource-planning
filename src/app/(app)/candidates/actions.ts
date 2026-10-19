@@ -308,6 +308,14 @@ export async function deleteCandidate(
     .eq("id", candidateId)
     .single();
 
+  // The attachment rows go with the candidate on the cascade in 0026; their
+  // stored files do not, and once the rows are gone nothing anywhere knows the
+  // paths. Collected here, removed after the delete has actually succeeded.
+  const { data: attachments } = await supabase
+    .from("candidate_attachments")
+    .select("file_path")
+    .eq("candidate_id", candidateId);
+
   // RLS restricts DELETE to admins, and a filtered-out delete comes back with
   // zero rows and NO error. Without counting them this would fall through and
   // remove the CV from storage with the service-role client, which bypasses
@@ -327,13 +335,22 @@ export async function deleteCandidate(
     entityType: "candidate",
     entityId: candidateId,
     entityLabel: candidate?.full_name ?? null,
-    detail: { had_cv: Boolean(candidate?.cv_file_path) },
+    detail: {
+      had_cv: Boolean(candidate?.cv_file_path),
+      attachments: attachments?.length ?? 0,
+    },
   });
 
   await purgeActivity("candidate", candidateId);
 
-  if (candidate?.cv_file_path) {
-    await createAdminClient().storage.from(CV_BUCKET).remove([candidate.cv_file_path]);
+  // One call: the CV and every attachment are in the same private bucket, the
+  // CV under candidates/ and the documents under attachments/.
+  const storagePaths = [
+    ...(candidate?.cv_file_path ? [candidate.cv_file_path] : []),
+    ...(attachments ?? []).map((a) => a.file_path),
+  ];
+  if (storagePaths.length > 0) {
+    await createAdminClient().storage.from(CV_BUCKET).remove(storagePaths);
   }
 
   revalidatePath("/candidates");

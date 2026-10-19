@@ -27,6 +27,8 @@ const EVENT_LABELS: Record<string, string> = {
   matched: "Matching run",
   created: "Created",
   updated: "Updated",
+  document_attached: "Document attached",
+  document_removed: "Document removed",
 };
 
 function eventLabel(action: string | null): string {

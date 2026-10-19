@@ -23,6 +23,19 @@ export type ActivityKind = "note" | "event";
  * confirmation says a supplier is on the books without speaking to the work.
  */
 export type ReferenceLetterKind = "reference" | "award" | "confirmation";
+/**
+ * Mirrors candidate_attachments_kind_check. What a document on a person's file
+ * is, which is the heading the profile files it under. None of them expires:
+ * the one thing that really lapses is a manufacturer's authorisation, which is
+ * oem_letters.
+ */
+export type CandidateAttachmentKind =
+  | "certificate"
+  | "qualification"
+  | "id_document"
+  | "contract"
+  | "reference"
+  | "other";
 
 export interface WorkExperience {
   title: string;
@@ -245,6 +258,33 @@ export interface Database {
           full_name: string;
         };
         Update: Partial<Omit<Database["public"]["Tables"]["candidates"]["Row"], "search_text">>;
+        Relationships: [];
+      };
+      candidate_attachments: {
+        Row: {
+          id: string;
+          candidate_id: string;
+          /** What the document is; the heading it is filed under on the profile. */
+          kind: CandidateAttachmentKind;
+          /** What it is called on screen, e.g. "TOGAF 9 Foundation". */
+          title: string;
+          /** Object path in the shared private cvs bucket, under attachments/. */
+          file_path: string;
+          /** The uploaded file's own name, sanitised. Shown under the title. */
+          original_filename: string;
+          /** Who attached it. Null once that account goes; they may remove their own. */
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["candidate_attachments"]["Row"]> & {
+          candidate_id: string;
+          kind: CandidateAttachmentKind;
+          title: string;
+          file_path: string;
+          original_filename: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["candidate_attachments"]["Row"]>;
         Relationships: [];
       };
       positions: {

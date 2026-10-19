@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { isCurrentUserAdmin } from "@/lib/auth/current-user";
+import { getCurrentProfile } from "@/lib/auth/current-user";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, AvailabilityBadge } from "@/app/(app)/candidates/candidate-badges";
 import { availableFrom } from "@/lib/availability";
@@ -14,6 +14,9 @@ import { TippCvButton } from "@/app/(app)/candidates/[id]/tipp-cv-button";
 import { missingTemplateFields, type CvSource } from "@/lib/cv-export/build-tipp-cv";
 import { CandidateCvView, Card, Chips } from "@/app/(app)/candidates/[id]/cv-view";
 import { CvDownloadButton } from "@/app/(app)/candidates/[id]/cv-download-button";
+import { CandidateAttachments } from "@/app/(app)/candidates/[id]/attachments-list";
+import { AttachmentUploadDialog } from "@/app/(app)/candidates/[id]/attachment-upload-dialog";
+import { certificateTitleSuggestions } from "@/lib/candidate-attachments";
 import { DeleteCandidateButton } from "@/app/(app)/candidates/[id]/delete-candidate-button";
 import { DepartmentChips } from "@/components/departments/department-chip";
 import { loadDepartmentContext } from "@/lib/departments-repo";
@@ -26,21 +29,39 @@ export default async function CandidateProfilePage({
   const { id } = await params;
   const supabase = await createClient();
 
-  // isCurrentUserAdmin is request-cached: the layout has already resolved it, so
-  // this adds no round-trip.
-  const [{ data: candidate }, isAdmin, { data: placements }, activity, deployments, departments] =
-    await Promise.all([
-      supabase.from("candidates").select("*").eq("id", id).single(),
-      isCurrentUserAdmin(),
-      // Company wide. "When are they next free" is a question about the
-      // person, not about one department's book of work.
-      supabase.rpc("candidate_commitments").eq("candidate_id", id),
-      loadActivity("candidate", id),
-      loadDeployments(supabase, id),
-      loadDepartmentContext(),
-    ]);
+  // getCurrentProfile is request-cached: the layout has already resolved it, so
+  // this adds no round-trip. It carries the viewer's id as well as their role,
+  // and the id is what decides who sees a document's remove control.
+  const [
+    { data: candidate },
+    profile,
+    { data: placements },
+    activity,
+    deployments,
+    departments,
+    { data: attachments },
+  ] = await Promise.all([
+    supabase.from("candidates").select("*").eq("id", id).single(),
+    getCurrentProfile(),
+    // Company wide. "When are they next free" is a question about the
+    // person, not about one department's book of work.
+    supabase.rpc("candidate_commitments").eq("candidate_id", id),
+    loadActivity("candidate", id),
+    loadDeployments(supabase, id),
+    loadDepartmentContext(),
+    // The documents on this person's file. Ascending, so each heading reads in
+    // the order they were attached; the grouping into headings is done in the
+    // pure module so it can be asserted without a database.
+    supabase
+      .from("candidate_attachments")
+      .select("*")
+      .eq("candidate_id", id)
+      .order("created_at", { ascending: true }),
+  ]);
 
   if (!candidate) notFound();
+
+  const isAdmin = profile?.isAdmin ?? false;
 
   // The availability badge says what they are today; this says when they are
   // next free, which is the question anyone planning a bid team is asking.
@@ -136,12 +157,34 @@ export default async function CandidateProfilePage({
         </Card>
       )}
 
-      <Card title="Documents">
-        {candidate.cv_file_path ? (
-          <CvDownloadButton path={candidate.cv_file_path} filename={candidate.cv_original_filename} />
-        ) : (
-          <p className="text-body-sm text-muted-foreground">No CV on file.</p>
-        )}
+      <Card
+        title="Documents"
+        action={
+          <AttachmentUploadDialog
+            candidateId={candidate.id}
+            certificateNames={certificateTitleSuggestions(candidate.certificates)}
+          />
+        }
+      >
+        <div className="space-y-4">
+          {/* The CV keeps its own line at the top. It is deliberately not one
+              of the six kinds: it lives on the candidate row, it is what the
+              TiPP CV is generated from, and a new one replaces it rather than
+              adding to the pile. */}
+          <div>
+            <h3 className="mb-1.5 text-label-sm font-medium text-muted-foreground">CV</h3>
+            {candidate.cv_file_path ? (
+              <CvDownloadButton path={candidate.cv_file_path} filename={candidate.cv_original_filename} />
+            ) : (
+              <p className="text-body-sm text-muted-foreground">No CV on file.</p>
+            )}
+          </div>
+          <CandidateAttachments
+            attachments={attachments ?? []}
+            viewerId={profile?.id ?? null}
+            isAdmin={isAdmin}
+          />
+        </div>
       </Card>
 
       {candidate.notes && (

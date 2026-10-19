@@ -125,6 +125,7 @@ export function auditTone(action: string): AuditTone {
 
 const ENTITY_LABELS: Record<string, string> = {
   candidate: "candidate",
+  candidate_attachment: "document",
   tender: "tender",
   job_requirement: "job requirement",
   oem_letter: "OEM letter",
