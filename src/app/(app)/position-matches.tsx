@@ -19,6 +19,7 @@ import { TENDER_STRONG_MATCH_THRESHOLD } from "@/lib/scoring";
 import type { CandidateProfile } from "@/lib/positions";
 import { CompareCandidates } from "@/app/(app)/compare-candidates";
 import { ScoreCard, scoreDetail } from "@/app/(app)/score-breakdown";
+import { DeepMatchNoteBlock, DeepMatchButton } from "@/app/(app)/deep-match-controls";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +39,8 @@ export interface PositionMatch {
   name: string;
   role: string | null;
   score: number;
+  /** The AI's written opinion, when one has been asked for. Never a score. */
+  deepMatchNote?: string | null;
 }
 
 export interface AssignedCandidate {
@@ -340,6 +343,16 @@ export function PositionMatches({
                 No matches yet. Run matching to score candidates against this role.
               </p>
             ) : (
+              <>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
+                <span className="text-label-sm uppercase tracking-wide text-muted-foreground">
+                  Shortlist
+                </span>
+                <DeepMatchButton
+                  positionId={position.id}
+                  matchCount={position.matches.filter((m) => !seated.has(m.candidateId)).length}
+                />
+              </div>
               <ul className="divide-y divide-border">
                 {position.matches
                   .filter((m) => !seated.has(m.candidateId))
@@ -416,6 +429,10 @@ export function PositionMatches({
                           </Button>
                         </div>
                       </div>
+                      {/* Outside ScoreCard on purpose: that card is the
+                          arithmetic, and the line between what was computed
+                          and what is an opinion has to stay legible. */}
+                      <DeepMatchNoteBlock note={m.deepMatchNote ?? null} />
                       {isOpen && profile && (
                         <ScoreCard
                           position={position}
@@ -427,6 +444,7 @@ export function PositionMatches({
                     );
                   })}
               </ul>
+              </>
             )}
           </div>
         );

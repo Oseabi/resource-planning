@@ -16,6 +16,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { DeepMatchNoteBlock } from "@/app/(app)/deep-match-controls";
 import { SCORING_WEIGHTS } from "@/lib/scoring";
 import { runMatch, sendAlert, placeCandidate } from "@/app/(app)/job-requirements/actions";
 
@@ -29,6 +30,8 @@ export interface MatchView {
   breakdown: { role: number; skills: number; certifications: number; experience: number; availability: number };
   points: { role: number; skills: number; certifications: number; experience: number; availability: number };
   alertSent: boolean;
+  /** The AI's written opinion on the seat they scored best on, if asked for. */
+  deepMatchNote?: string | null;
 }
 
 const CRITERIA = [
@@ -206,10 +209,17 @@ export function MatchingResults({
                       {top.score}%
                     </span>
                   </div>
-                  <p className="mt-2 rounded-md bg-muted px-3 py-2 text-body-sm text-muted-foreground">
-                    AI narrative disabled. Enable AI to generate a qualitative match summary. The
-                    ranking and breakdown below are computed locally.
-                  </p>
+                  {/* Three states: no note and nowhere to get one, no note
+                      yet, or the note itself. The bars below are computed
+                      locally in every one of them. */}
+                  {top.deepMatchNote ? (
+                    <DeepMatchNoteBlock note={top.deepMatchNote} />
+                  ) : (
+                    <p className="mt-2 rounded-md bg-muted px-3 py-2 text-body-sm text-muted-foreground">
+                      No AI note on this person yet. Open a role below and run a deep match on its
+                      shortlist. The ranking and breakdown here are computed locally either way.
+                    </p>
+                  )}
                   <div className="mt-3 space-y-2">
                     {CRITERIA.map((c) => {
                       const earned = Math.round(top.points[c.key]);

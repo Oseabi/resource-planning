@@ -135,6 +135,7 @@ const ENTITY_LABELS: Record<string, string> = {
   profile: "user",
   session: "session",
   department: "department",
+  position: "seat",
   cv_upload: "CV",
   tender_upload: "tender document",
   setting: "setting",
@@ -161,6 +162,11 @@ export function auditSentence(row: AuditRow): string {
   }
   if (row.action === "sent_tender_for_ai_extraction") {
     return `${who} sent a tender document${named} to Google's Gemini for AI extraction`;
+  }
+  // The other entry that records personal data leaving the country. No name is
+  // sent, only the structured lists, but it is still a transfer.
+  if (row.action === "sent_for_ai_deep_match") {
+    return `${who} sent candidate profiles to Groq in the United States for deep matching against the seat${named}`;
   }
   if (row.action === "role_changed") return `${who} changed the role of user${named}`;
   if (row.action === "department_changed") return `${who} moved user${named} to another department`;
