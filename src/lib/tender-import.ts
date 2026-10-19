@@ -13,6 +13,7 @@
  */
 
 import type { CsvTable } from "@/lib/csv";
+import { ALIAS_GROUPS } from "@/lib/skill-aliases";
 import type { PositionInput } from "@/lib/positions";
 import type { TenderStatus } from "@/lib/supabase/database.types";
 
@@ -154,21 +155,6 @@ export function parseCount(raw: string): { count: number | null; error: string |
  * spreadsheet, and guessing beyond this list would be the same class of error
  * the whole check exists to prevent.
  */
-const ROLE_ALIASES: Record<string, string> = {
-  ba: "Business Analyst",
-  "snr ba": "Business Analyst",
-  "business analyst (ba)": "Business Analyst",
-  sa: "Systems Analyst",
-  pm: "Project Manager",
-  "project mgr": "Project Manager",
-  po: "Product Owner",
-  sm: "Scrum Master",
-  qs: "Quantity Surveyor",
-  dba: "Database Administrator",
-  "dev": "Software Developer",
-  "developer": "Software Developer",
-  "test analyst": "QA Engineer",
-};
 
 export interface RoleIndex {
   /** Lowercased known role to its canonical spelling. */
@@ -177,6 +163,22 @@ export interface RoleIndex {
 }
 
 const normalizeRole = (v: string) => v.trim().toLowerCase().replace(/\s+/g, " ");
+
+const ROLE_ALIASES: Record<string, string> = {
+  // The shared table, which scoring now reads too, so an import and a match
+  // agree about what a seat is called. Built from the role groups only: a
+  // tender seat is a role, not a technology.
+  ...Object.fromEntries(
+    ALIAS_GROUPS.filter((g) => g.kind === "role").flatMap((g) =>
+      g.aliases.map((a) => [normalizeRole(a), g.canonical] as const),
+    ),
+  ),
+  // Local to the importer, and deliberately not in the shared table. "SA" is
+  // Solutions Architect as often as Systems Analyst, which is fine for a
+  // register an operator reviews row by row and wrong for a score nobody
+  // checks. Keep it here, where the report names what it resolved.
+  sa: "Systems Analyst",
+};
 
 /**
  * Roles the system already knows: the vocabulary, plus whatever the candidate

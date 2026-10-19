@@ -13,7 +13,7 @@ import {
   type ExistingCandidate,
 } from "@/lib/candidate-import";
 
-const ROLES = ["Business Analyst", "Project Manager", "ERP Consultant", "Systems Analyst"];
+const ROLES = ["Business Analyst", "Senior Business Analyst", "Project Manager", "ERP Consultant", "Systems Analyst"];
 const index = buildRoleIndex(ROLES, []);
 
 const HEADERS = CANDIDATE_COLUMNS.join(",");
@@ -202,9 +202,17 @@ describe("readCandidateRows", () => {
   });
 
   it("corrects a known abbreviation and says so", () => {
-    const { parsed } = read(csv({ full_name: "Sipho Dlamini", current_role: "Snr BA" }));
+    const { parsed } = read(csv({ full_name: "Sipho Dlamini", current_role: "BA" }));
     expect(parsed[0].current_role).toBe("Business Analyst");
-    expect(parsed[0].roleNotes[0]).toMatch(/"Snr BA" read as "Business Analyst"/);
+    expect(parsed[0].roleNotes[0]).toMatch(/"BA" read as "Business Analyst"/);
+  });
+
+  it("keeps the seniority an abbreviation carries", () => {
+    // "Snr BA" used to flatten to Business Analyst. Tenders advertise
+    // Business Analyst and Senior Business Analyst as separate seats at
+    // separate rates, so losing the Snr lost real information.
+    const { parsed } = read(csv({ full_name: "Sipho Dlamini", current_role: "Snr BA" }));
+    expect(parsed[0].current_role).toBe("Senior Business Analyst");
   });
 
   it("rejects a role spelling nothing recognises, with the nearest known ones", () => {

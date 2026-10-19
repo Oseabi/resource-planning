@@ -141,10 +141,10 @@ export function ScoreCard({
         ? position.role
         : `${candidate.current_role ?? "no role set"} vs ${position.role}`,
     skills: position.requiredSkills.length
-      ? `${skills.matched.length} of ${position.requiredSkills.length} matched`
+      ? `${skills.matched.length} of ${position.requiredSkills.length} matched${nearNote(skills)}`
       : "none required",
     certifications: position.requiredCertifications.length
-      ? `${certifications.matched.length} of ${position.requiredCertifications.length} held`
+      ? `${certifications.matched.length} of ${position.requiredCertifications.length} held${nearNote(certifications)}`
       : "none required",
     experience:
       needed != null ? `${years} yrs against ${needed} needed` : `${years} yrs, no minimum set`,
@@ -186,6 +186,15 @@ export function ScoreCard({
         })}
       </ul>
 
+      {/* What was answered by something broader, and by which of the
+          candidate's own words. A partial credit whose reason is invisible is
+          indistinguishable from a bug. */}
+      {(skills.near.length > 0 || certifications.near.length > 0) && (
+        <div className="space-y-1 border-t border-border pt-2">
+          <NearLines label="Counted in part" items={[...skills.items, ...certifications.items]} />
+        </div>
+      )}
+
       {/* The gaps by name. This is the part a percentage can never tell you. */}
       {(skills.missing.length > 0 || certifications.missing.length > 0) && (
         <div className="space-y-1 border-t border-border pt-2">
@@ -197,6 +206,28 @@ export function ScoreCard({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** ", 2 in part" when some of the credit came from a broader term. */
+function nearNote(detail: OverlapDetail): string {
+  return detail.near.length > 0 ? `, ${detail.near.length} in part` : "";
+}
+
+function NearLines({ label, items }: { label: string; items: OverlapDetail["items"] }) {
+  const near = items.filter((i) => i.quality === "near");
+  if (near.length === 0) return null;
+  return (
+    <div className="space-y-0.5">
+      <span className="text-label-sm uppercase tracking-wide text-muted-foreground">{label}</span>
+      {near.map((i) => (
+        <div key={i.required} className="flex flex-wrap items-baseline gap-x-1.5 text-body-sm">
+          <AlertTriangle className="size-3.5 shrink-0 text-strong-match" />
+          <span className="text-foreground">{i.required}</span>
+          {i.via && <span className="text-muted-foreground">via {i.via}</span>}
+        </div>
+      ))}
     </div>
   );
 }

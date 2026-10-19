@@ -68,11 +68,23 @@ export interface ScoreBreakdownJson {
   total: number;
   breakdown: ScoreResult["breakdown"];
   points: ScoreResult["points"];
+  /**
+   * How many required items were answered by a broader term rather than the
+   * thing the seat named. Stored so a reader of an old row can tell a literal
+   * score from an approximate one; the column is free-form jsonb, so carrying
+   * it needs no migration.
+   */
+  near: ScoreResult["near"];
 }
 
 /** Shape persisted into matches.score_breakdown (jsonb). */
 export function toScoreBreakdownJson(result: ScoreResult): ScoreBreakdownJson {
-  return { total: result.total, breakdown: result.breakdown, points: result.points };
+  return {
+    total: result.total,
+    breakdown: result.breakdown,
+    points: result.points,
+    near: result.near,
+  };
 }
 
 /** Score one candidate row against one requirement row. */

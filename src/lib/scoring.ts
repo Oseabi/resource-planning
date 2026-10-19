@@ -1,14 +1,31 @@
 /**
- * Weighted candidate ↔ requirement/tender scoring.
+ * Weighted candidate against requirement/tender scoring.
  *
- * Pure, dependency-free, and shared between the Next.js app and (later) Supabase
- * Edge Functions. No AI, this is always-free local logic (plan Decision 10).
+ * Pure and shared between the Next.js app and the browser: the breakdown panel
+ * re-runs this client-side to name which skills matched, so nothing here may
+ * become async or reach the network. No AI, this is always-free local logic
+ * (plan Decision 10).
  *
  * Weights (from spec):
- *   role 35% · skills 25% · certifications 20% · experience 10% · availability 10%
+ *   role 35% | skills 25% | certifications 20% | experience 10% | availability 10%
  *
- * Returns a total 0–100 plus the per-criteria breakdown for UI transparency.
+ * Returns a total 0 to 100 plus the per-criteria breakdown for UI transparency.
+ *
+ * Whether a candidate's term satisfies a requirement is decided by
+ * skill-matching.ts, which knows that "D365 F&O" and "Microsoft Dynamics 365
+ * F&O" are the same thing and that "Java 8" answers "Java".
  */
+
+import {
+  buildCandidateIndex,
+  qualityAgainst,
+  aliasEqual,
+  baseKey,
+  fold,
+  type MatchQuality,
+} from "@/lib/skill-matching";
+
+export { NEAR_MATCH_CREDIT, type MatchQuality } from "@/lib/skill-matching";
 
 export const SCORING_WEIGHTS = {
   role: 35,
@@ -44,7 +61,7 @@ export interface RequirementInput {
 }
 
 export interface ScoreBreakdown {
-  /** Each sub-score is 0–1 (fraction of that criterion's weight earned). */
+  /** Each sub-score is 0 to 1 (fraction of that criterion's weight earned). */
   role: number;
   skills: number;
   certifications: number;
@@ -53,25 +70,46 @@ export interface ScoreBreakdown {
 }
 
 export interface ScoreResult {
-  /** 0–100, rounded to nearest integer. */
+  /** 0 to 100, rounded to nearest integer. */
   total: number;
-  /** Fractional sub-scores (0–1) per criterion. */
+  /** Fractional sub-scores (0 to 1) per criterion. */
   breakdown: ScoreBreakdown;
-  /** Points earned per criterion (sub-score × weight), for UI bars like "22/25". */
+  /** Points earned per criterion (sub-score times weight), for UI bars like "22/25". */
   points: ScoreBreakdown;
+  /**
+   * How much of this score rests on a broader term rather than the thing the
+   * seat actually named. Carried into the stored breakdown so a run can tell
+   * a literal 82 from an approximate one before it emails a hiring manager.
+   */
+  near: { skills: number; certifications: number };
 }
 
 function normalize(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/** One required item, and what in the candidate's own record answered it. */
+export interface OverlapItem {
+  /** Always the requirement's own spelling. That is what gets shown back. */
+  required: string;
+  quality: MatchQuality;
+  /** 1 for a full match, NEAR_MATCH_CREDIT for a broader term, 0 for none. */
+  credit: number;
+  /** The candidate's own wording that satisfied it, when something did. */
+  via: string | null;
+}
+
 export interface OverlapDetail {
-  /** Required items the candidate has, in the order the requirement listed them. */
+  /** Required items the candidate holds outright, in the requirement's order. */
   matched: string[];
+  /** Required items answered only by a broader term of the candidate's. */
+  near: string[];
   /** Required items the candidate lacks, in the same order. */
   missing: string[];
-  /** Fraction of required items held; 1 when nothing was required. */
+  /** Credit-weighted fraction of required items held; 1 when nothing was required. */
   ratio: number;
+  /** Every required item with how it was answered. The buckets derive from this. */
+  items: OverlapItem[];
 }
 
 /**
@@ -83,19 +121,22 @@ export interface OverlapDetail {
  * not as normalized, because these are shown to a person.
  */
 export function overlapDetail(candidate: string[], required: string[]): OverlapDetail {
-  const have = new Set(candidate.map(normalize));
-  const matched: string[] = [];
-  const missing: string[] = [];
-
-  for (const item of required) {
-    (have.has(normalize(item)) ? matched : missing).push(item);
-  }
+  const index = buildCandidateIndex(candidate);
+  const items: OverlapItem[] = required.map((item) => {
+    const { quality, credit, via } = qualityAgainst(index, item);
+    return { required: item, quality, credit, via };
+  });
 
   return {
-    matched,
-    missing,
+    matched: items.filter((i) => i.credit === 1).map((i) => i.required),
+    near: items.filter((i) => i.credit > 0 && i.credit < 1).map((i) => i.required),
+    missing: items.filter((i) => i.credit === 0).map((i) => i.required),
     // Empty requirement list => full marks (nothing to fail).
-    ratio: required.length === 0 ? 1 : matched.length / required.length,
+    ratio:
+      required.length === 0
+        ? 1
+        : items.reduce((sum, i) => sum + i.credit, 0) / required.length,
+    items,
   };
 }
 
@@ -108,19 +149,23 @@ export function overlapRatio(candidate: string[], required: string[]): number {
 }
 
 /**
- * Role match: exact (normalized) = 1.0; token-overlap fuzzy fallback otherwise.
- * No required role => full marks.
+ * Role match: the same role however it is written = 1.0; token-overlap fuzzy
+ * fallback otherwise. No required role => full marks.
+ *
+ * The alias layer is what lets a seat advertised as "BA" be answered by
+ * somebody whose CV says "Business Analyst". Tenders abbreviate the seat and
+ * CVs write it out, and until now that cost the candidate all 35 points.
  */
 export function roleMatch(candidateRole: string | null, requiredRole: string | null): number {
   if (!requiredRole || normalize(requiredRole) === "") return 1;
   if (!candidateRole || normalize(candidateRole) === "") return 0;
 
-  const a = normalize(candidateRole);
-  const b = normalize(requiredRole);
-  if (a === b) return 1;
+  if (fold(candidateRole) === fold(requiredRole)) return 1;
+  if (aliasEqual(candidateRole, requiredRole)) return 1;
+  if (baseKey(candidateRole) === baseKey(requiredRole)) return 1;
 
-  const at = new Set(a.split(" "));
-  const bt = b.split(" ");
+  const at = new Set(baseKey(candidateRole).split(" "));
+  const bt = baseKey(requiredRole).split(" ");
   const shared = bt.reduce((n, t) => (at.has(t) ? n + 1 : n), 0);
   // Fuzzy score capped below 1 so an exact match is always strictly better.
   return Math.min(0.9, shared / bt.length);
@@ -174,13 +219,15 @@ export function scoreCandidate(
   requirement: RequirementInput,
 ): ScoreResult {
   const candidateSkills = [...candidate.skills, ...(candidate.technical_skills ?? [])];
+  const skills = overlapDetail(candidateSkills, requirement.required_skills);
+  const certifications = overlapDetail(candidate.certifications, requirement.required_certifications);
   const breakdown: ScoreBreakdown = {
     role: bestRoleMatch(
       [candidate.current_role, ...(candidate.additional_roles ?? [])],
       requirement.required_role,
     ),
-    skills: overlapRatio(candidateSkills, requirement.required_skills),
-    certifications: overlapRatio(candidate.certifications, requirement.required_certifications),
+    skills: skills.ratio,
+    certifications: certifications.ratio,
     experience: experienceMatch(candidate.years_experience, requirement.min_experience_years),
     availability: availabilityMatch(candidate.availability, requirement.required_availability),
   };
@@ -200,6 +247,7 @@ export function scoreCandidate(
     total: Math.round(total),
     breakdown,
     points,
+    near: { skills: skills.near.length, certifications: certifications.near.length },
   };
 }
 
