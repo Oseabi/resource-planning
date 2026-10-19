@@ -51,6 +51,14 @@ export function TippCvButton({
         body: JSON.stringify({ candidateId, format }),
       });
 
+      // The middleware answers an expired session with a redirect to the
+      // sign-in page, which fetch follows and reports as a 200 of HTML. Left
+      // unchecked that HTML would be handed to res.blob() and saved as a CV.
+      if (res.redirected || res.headers.get("content-type")?.includes("text/html")) {
+        setError("Your session has expired. Sign in again, then try once more.");
+        return;
+      }
+
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         setError(body.error ?? "Could not build the CV.");

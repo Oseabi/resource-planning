@@ -34,6 +34,14 @@ export function DeepMatchButton({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ positionId }),
         });
+        // An expired session is answered by the middleware with a redirect to
+        // the sign-in page, which fetch follows and reports as a perfectly
+        // good 200 of HTML. Without this the button would spin, succeed and
+        // do nothing, and the only clue would be that no note appeared.
+        if (res.redirected || !res.headers.get("content-type")?.includes("application/json")) {
+          setError("Your session has expired. Sign in again, then try once more.");
+          return;
+        }
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) {
           setError(data.error ?? "The deep match could not be run.");
@@ -80,11 +88,22 @@ const CONFIDENCE_CLASS: Record<Confidence, string> = {
  * sentence that says what it is: the ranking on screen is still the computed
  * one, and this changed nothing about it.
  */
-export function DeepMatchNoteBlock({ note }: { note: string | null }) {
+export function DeepMatchNoteBlock({
+  note,
+  currentScore,
+}: {
+  note: string | null;
+  /** What they score now, so a note written against another number says so. */
+  currentScore?: number | null;
+}) {
   const parsed = parseDeepMatchNote(note);
   if (!parsed?.reason) return null;
 
   const when = parsed.at ? new Date(parsed.at) : null;
+  // A note survives a re-run of matching, so it can outlive the number it was
+  // written about. Saying so is the difference between context and a lie.
+  const stale =
+    parsed.score != null && currentScore != null && parsed.score !== currentScore ? parsed.score : null;
   return (
     <div className="border-t border-border bg-primary/5 px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -102,6 +121,12 @@ export function DeepMatchNoteBlock({ note }: { note: string | null }) {
         </span>
       </div>
       <p className="mt-1.5 whitespace-pre-wrap text-body-sm text-foreground">{parsed.reason}</p>
+      {stale != null && (
+        <p className="mt-1.5 text-label-md text-strong-match">
+          Written when this person scored {stale}. They score {currentScore} now, so run the deep
+          match again to refresh it.
+        </p>
+      )}
       <p className="mt-1.5 text-label-md text-muted-foreground">
         An opinion. The score and the order above are computed locally and are not changed by it.
         {parsed.model ? ` Read by ${parsed.model}` : ""}

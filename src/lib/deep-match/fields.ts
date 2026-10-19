@@ -226,6 +226,12 @@ export interface DeepMatchNote {
   confidence: Confidence;
   model: string;
   at: string;
+  /**
+   * What the candidate scored when this was written. A note survives a re-run
+   * of matching, so without this it could sit beside a different number with
+   * nothing to say it was written about another one.
+   */
+  score: number | null;
 }
 
 /**
@@ -236,7 +242,12 @@ export interface DeepMatchNote {
  * migration. Slightly dishonest for a column called notes, and the tolerant
  * reader below is the price of not adding a column.
  */
-export function deepMatchNote(entry: DeepMatchEntry, of: number, model = AI_MODEL): string {
+export function deepMatchNote(
+  entry: DeepMatchEntry,
+  of: number,
+  model = AI_MODEL,
+  score: number | null = null,
+): string {
   const note: DeepMatchNote & { v: 1 } = {
     v: 1,
     reason: entry.reason,
@@ -245,6 +256,7 @@ export function deepMatchNote(entry: DeepMatchEntry, of: number, model = AI_MODE
     confidence: entry.confidence,
     model,
     at: new Date().toISOString(),
+    score,
   };
   return JSON.stringify(note);
 }
@@ -262,12 +274,13 @@ export function parseDeepMatchNote(text: string | null): DeepMatchNote | null {
         confidence: CONFIDENCES.includes(parsed.confidence as Confidence) ? (parsed.confidence as Confidence) : "low",
         model: typeof parsed.model === "string" ? parsed.model : "",
         at: typeof parsed.at === "string" ? parsed.at : "",
+        score: typeof parsed.score === "number" ? parsed.score : null,
       };
     }
   } catch {
     // Not the envelope. Fall through and treat it as what somebody wrote.
   }
-  return { reason: text.trim(), rank: 0, of: 0, confidence: "low", model: "", at: "" };
+  return { reason: text.trim(), rank: 0, of: 0, confidence: "low", model: "", at: "", score: null };
 }
 
 /**

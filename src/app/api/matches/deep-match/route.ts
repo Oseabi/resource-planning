@@ -88,6 +88,13 @@ export async function POST(request: Request) {
   // The index is the only handle the model is given. The mapping stays here,
   // so a number it invents can address nobody.
   const order = matchRows.filter((m) => byId.has(m.candidate_id));
+  if (order.length < 2) {
+    return NextResponse.json(
+      { error: "There are not enough candidates on this seat to put in an order." },
+      { status: 400 },
+    );
+  }
+
   const candidates: DeepMatchCandidate[] = order.map((m, i) => {
     const p = byId.get(m.candidate_id)!;
     return {
@@ -134,11 +141,12 @@ export async function POST(request: Request) {
   // the department policy on matches decides whether it is allowed.
   let written = 0;
   for (const entry of result.entries) {
-    const candidateId = order[entry.candidate - 1]?.candidate_id;
-    if (!candidateId) continue;
+    const scored = order[entry.candidate - 1];
+    if (!scored) continue;
+    const candidateId = scored.candidate_id;
     const { error } = await supabase
       .from("matches")
-      .update(deepMatchUpdate(deepMatchNote(entry, candidates.length, result.model)))
+      .update(deepMatchUpdate(deepMatchNote(entry, candidates.length, result.model, scored.score)))
       .eq("candidate_id", candidateId)
       .eq("match_target_type", "position")
       .eq("match_target_id", positionId);
