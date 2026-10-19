@@ -358,3 +358,38 @@ describe("what a 100 means", () => {
     expect(scoreCandidate({ ...candidate, skills: ["D365 F&O", "PowerBI"] }, empty).total).toBe(100);
   });
 });
+
+describe("a candidate row with a null in one of its arrays", () => {
+  // A single such row used to throw out of overlapDetail and take the whole
+  // run with it, for every seat and every other candidate.
+  const candidate = {
+    current_role: "Business Analyst",
+    additional_roles: [null as unknown as string],
+    skills: ["Power BI", null as unknown as string],
+    technical_skills: [null as unknown as string],
+    certifications: [null as unknown as string, "PMP"],
+    years_experience: 8,
+    availability: "available" as const,
+  };
+
+  it("scores rather than throwing, and still credits the real entries", () => {
+    const r = scoreCandidate(candidate, {
+      required_role: "Business Analyst",
+      required_skills: ["PowerBI"],
+      required_certifications: ["PMP"],
+      min_experience_years: 5,
+    });
+    expect(r.total).toBe(100);
+  });
+
+  it("survives a null on the requirement side too", () => {
+    expect(() =>
+      scoreCandidate(candidate, {
+        required_role: null,
+        required_skills: [null as unknown as string],
+        required_certifications: [],
+        min_experience_years: null,
+      }),
+    ).not.toThrow();
+  });
+});

@@ -72,6 +72,10 @@ const MAX_EXTRA_TOKENS = 3;
  * distinct while letting "Finance & Operations" meet "Finance and Operations".
  */
 export function fold(value: string): string {
+  // Postgres allows a null element inside a not-null text[], and the database
+  // accepts one today, so a single bad row would otherwise throw and take the
+  // whole matching run down with it. A skill that is not a string is no skill.
+  if (typeof value !== "string") return "";
   return value
     .normalize("NFKD")
     .toLowerCase()

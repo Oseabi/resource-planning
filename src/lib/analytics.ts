@@ -4,6 +4,7 @@
  * them straight in.
  */
 import { expiryStatus, type ExpiryStatus } from "@/lib/oem-letters";
+import { buildCandidateIndex, qualityAgainst } from "@/lib/skill-matching";
 
 // --- Shared row shapes (structural: only the columns each metric needs) -------
 
@@ -159,10 +160,12 @@ export function skillGaps(
     const key = skill.toLowerCase();
     if (!skill || seen.has(key)) continue;
     seen.add(key);
+    // The same comparison matching uses, so the two screens cannot contradict
+    // each other. Counting exact text here while a tender credits somebody who
+    // wrote "D365" for a "Dynamics 365" seat would report a gap the shortlist
+    // visibly does not have.
     const covered = active.filter(
-      (c) =>
-        c.skills.some((s) => s.toLowerCase() === key) ||
-        c.technical_skills.some((s) => s.toLowerCase() === key),
+      (c) => qualityAgainst(buildCandidateIndex([...c.skills, ...c.technical_skills]), skill).credit > 0,
     ).length;
     gaps.push({ skill, covered });
   }

@@ -198,3 +198,31 @@ describe("buildCandidateIndex and qualityAgainst", () => {
     }
   });
 });
+
+describe("values that are not clean strings", () => {
+  // Postgres allows a null element inside a not-null text[], and the database
+  // accepts one today. One bad row must not throw and abandon a whole
+  // matching run, so a skill that is not a string is simply no skill.
+  const NOT_STRINGS = [null, undefined, 42, true, {}, []] as unknown[];
+
+  it("folds a non-string to nothing rather than throwing", () => {
+    for (const v of NOT_STRINGS) {
+      expect(() => fold(v as string), String(v)).not.toThrow();
+      expect(fold(v as string)).toBe("");
+      expect(baseKey(v as string)).toBe("");
+    }
+  });
+
+  it("never matches on one", () => {
+    for (const v of NOT_STRINGS) {
+      expect(matchQuality(v as string, "Power BI").quality).toBe("none");
+      expect(matchQuality("Power BI", v as string).quality).toBe("none");
+    }
+  });
+
+  it("keeps scoring the real skills in a list that contains one", () => {
+    const index = buildCandidateIndex(["Power BI", null as unknown as string, "Java 8"]);
+    expect(qualityAgainst(index, "PowerBI").quality).toBe("alias");
+    expect(qualityAgainst(index, "Java").quality).toBe("version");
+  });
+});
