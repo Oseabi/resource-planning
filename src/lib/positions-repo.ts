@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, PositionParentType } from "@/lib/supabase/database.types";
 import { cleanPositions, type CandidateProfile, type PositionInput } from "@/lib/positions";
+import { bestMatchPerCandidate } from "@/lib/matching";
 
 type Client = SupabaseClient<Database>;
 
@@ -206,16 +207,10 @@ export async function loadPositionViews(
   // is per position now, so without this roll-up the overall panel, which owns
   // the Match button, export and alerts, would have nothing to show.
   const zero = { role: 0, skills: 0, certifications: 0, experience: 0, availability: 0 };
-  type MatchRow = NonNullable<typeof matchRows>[number];
-  const bestByCandidate = new Map<string, MatchRow>();
-  for (const m of matchRows ?? []) {
-    const current = bestByCandidate.get(m.candidate_id);
-    if (!current || m.score > current.score) bestByCandidate.set(m.candidate_id, m);
-  }
-
-  const aggregated = [...bestByCandidate.values()]
-    .sort((a, b) => b.score - a.score)
-    .map((m) => {
+  // The same roll-up the alert sweep uses, so the panel can never show a score
+  // the email did not send on. Already sorted, best first.
+  const aggregated = bestMatchPerCandidate(matchRows ?? [])
+    .map(({ row: m }) => {
       const sb = (m.score_breakdown ?? {}) as {
         breakdown?: typeof zero;
         points?: typeof zero;

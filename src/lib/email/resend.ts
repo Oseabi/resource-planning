@@ -109,22 +109,29 @@ export interface MatchAlertArgs {
   requirementTitle: string;
   client: string | null;
   score: number;
+  /** The seat they scored best on. Omitted on a requirement with one role. */
+  role?: string | null;
   appUrl: string;
   candidateId: string;
 }
 
 /** Send a "strong candidate match" alert to a requirement's manager. */
 export async function sendMatchAlert(args: MatchAlertArgs): Promise<SendResult> {
-  const { to, candidateName, candidateRole, requirementTitle, client, score, appUrl, candidateId } =
+  const { to, candidateName, candidateRole, requirementTitle, client, score, role, appUrl, candidateId } =
     args;
-  const subject = `Match alert: ${candidateName}, ${score}% for ${requirementTitle}`;
+  // A requirement can carry several seats, and the alert goes out on the one
+  // this person scored best against, so the subject says which.
+  const seat = role?.trim() ? ` (${role.trim()})` : "";
+  const subject = `Match alert: ${candidateName}, ${score}% for ${requirementTitle}${seat}`;
   const html = `
     <div style="font-family:Inter,Arial,sans-serif;color:#131b2e;line-height:1.5">
       <h2 style="margin:0 0 8px">Strong candidate match (${score}%)</h2>
       <p style="margin:0 0 12px;color:#434655">
         <strong>${candidateName}</strong>${candidateRole ? `, ${candidateRole}` : ""}
         scored <strong>${score}%</strong> against
-        <strong>${requirementTitle}</strong>${client ? ` (${client})` : ""}.
+        <strong>${requirementTitle}</strong>${client ? ` (${client})` : ""}${
+          role?.trim() ? `, on the ${role.trim()} seat` : ""
+        }.
       </p>
       <p style="margin:0 0 16px">
         <a href="${appUrl}/candidates/${candidateId}"
