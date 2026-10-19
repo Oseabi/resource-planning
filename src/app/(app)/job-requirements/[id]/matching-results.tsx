@@ -82,7 +82,15 @@ export function MatchingResults({
       const res = await runMatch(requirementId, includeAll);
       if (res.error) setNotice(res.error);
       else {
-        if (res.alertsSent && res.alertsSent > 0) setNotice(`${res.alertsSent} alert email(s) sent.`);
+        if (res.alertsSent && res.alertsSent > 0) {
+          // The cap is reported rather than hidden: a manager who got 25
+          // emails should know another 180 people cleared the bar.
+          setNotice(
+            res.alertsSuppressed && res.alertsSuppressed > 0
+              ? `${res.alertsSent} alert email(s) sent. ${res.alertsSuppressed} more candidates cleared the threshold, listed below.`
+              : `${res.alertsSent} alert email(s) sent.`,
+          );
+        }
         router.refresh();
       }
     });

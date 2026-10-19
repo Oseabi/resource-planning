@@ -97,6 +97,64 @@ export function decideAlert(prevAlertedScore: number | null, newScore: number): 
   return newScore - prevAlertedScore >= ALERT_MATERIAL_RISE;
 }
 
+/**
+ * How many alerts one run may send before it stops and reports the rest.
+ *
+ * Matching writes one row per candidate per seat, so a ten-seat requirement
+ * against eight hundred people writes eight thousand rows. Without a cap, one
+ * button press could send hundreds of emails one after another into a single
+ * inbox, which is how a sending domain gets blocked and how the action runs
+ * out of time. The remainder is reported, never silently dropped.
+ */
+export const ALERT_BATCH_CAP = 25;
+
+export interface BestMatch<T> {
+  row: T;
+  /**
+   * The highest score this candidate has ever been alerted at on this parent,
+   * across all of its seats. Null when they have never been alerted.
+   */
+  alertedHighWater: number | null;
+}
+
+/**
+ * A candidate's best match row, with what they were last alerted at.
+ *
+ * Scoring is per seat, so one person holds a row for every seat on a
+ * requirement. Both the shortlist panel and the alert sweep want one entry per
+ * person, and they have to agree about which row that is, or the panel shows a
+ * score the email did not use.
+ *
+ * The high-water mark is what makes alerting on the best row correct. A
+ * candidate alerted at 82 on seat A, who then scores 95 on seat B, has a null
+ * alerted_score on B; deciding on that row alone would send what the manager
+ * reads as a duplicate. Taking the highest score they were ever alerted at on
+ * this parent turns 95 into genuine news and 83 into silence.
+ *
+ * Ties go to the lowest id so a re-run never flips which row carries the alert.
+ */
+export function bestMatchPerCandidate<
+  T extends { id: string; candidate_id: string; score: number; alerted_score?: number | null },
+>(rows: T[]): BestMatch<T>[] {
+  const best = new Map<string, T>();
+  const highWater = new Map<string, number | null>();
+
+  for (const row of rows) {
+    const current = best.get(row.candidate_id);
+    if (!current || row.score > current.score || (row.score === current.score && row.id < current.id)) {
+      best.set(row.candidate_id, row);
+    }
+    if (row.alerted_score != null) {
+      const seen = highWater.get(row.candidate_id);
+      if (seen == null || row.alerted_score > seen) highWater.set(row.candidate_id, row.alerted_score);
+    }
+  }
+
+  return [...best.values()]
+    .sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : 1))
+    .map((row) => ({ row, alertedHighWater: highWater.get(row.candidate_id) ?? null }));
+}
+
 // ---------------------------------------------------------------------------
 // Tender matching
 // ---------------------------------------------------------------------------

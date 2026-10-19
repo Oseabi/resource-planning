@@ -11,6 +11,8 @@ import {
   scoreCandidateForPosition,
   toScoreBreakdownJson,
   decideAlert,
+  bestMatchPerCandidate,
+  ALERT_BATCH_CAP,
 } from "@/lib/matching";
 import { replacePositions, loadPositions, toPositionInputs } from "@/lib/positions-repo";
 import type { PositionInput } from "@/lib/positions";
@@ -236,6 +238,8 @@ export interface RunMatchResult {
   error?: string;
   matched?: number;
   alertsSent?: number;
+  /** Candidates who cleared the threshold but fell outside ALERT_BATCH_CAP. */
+  alertsSuppressed?: number;
 }
 
 /** Score all (active) candidates against a requirement and persist to matches. */
@@ -293,45 +297,73 @@ export async function runMatch(
     .upsert(rows, { onConflict: "candidate_id,match_target_type,match_target_id" });
   if (upsertErr) return { error: upsertErr.message };
 
-  const alertsSent = await maybeSendAutoAlerts(supabase, requirement);
+  // The seat ids are already in hand, so the alert sweep needs no second query
+  // to find out which match rows this run just wrote.
+  const alerts = await maybeSendAutoAlerts(
+    supabase,
+    requirement,
+    positions.map((p) => p.id!),
+  );
 
   revalidatePath(`/job-requirements/${requirementId}`);
-  return { matched: rows.length, alertsSent };
+  return { matched: rows.length, alertsSent: alerts.sent, alertsSuppressed: alerts.suppressed };
 }
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
 type RequirementRow = { id: string; title: string; client: string | null; manager_email: string | null };
 
+/**
+ * Email the hiring manager about candidates who cleared the threshold.
+ *
+ * Matching writes one row per candidate per seat, so this works on the
+ * candidate's best row and on the highest score they have ever been alerted at
+ * across this requirement's seats. One person is one email: the manager is
+ * asking whether there is somebody good for the job, not for a message per
+ * seat. Tenders have no manager to write to and deliberately have no
+ * equivalent of this.
+ */
 async function maybeSendAutoAlerts(
   supabase: SupabaseServer,
   requirement: RequirementRow,
-): Promise<number> {
-  if (!requirement.manager_email || !isEmailConfigured()) return 0;
+  positionIds: string[],
+): Promise<{ sent: number; suppressed: number }> {
+  const none = { sent: 0, suppressed: 0 };
+  if (!requirement.manager_email || !isEmailConfigured()) return none;
+  if (positionIds.length === 0) return none;
 
+  // Scoring moved onto positions in 0012, so the rows this requirement owns are
+  // the ones against its seats. Reading them by requirement id, as this did
+  // until now, matched nothing and sent no alert at all.
   const { data: matches } = await supabase
     .from("matches")
     .select("id, score, alerted_score, candidate_id")
-    .eq("match_target_type", "job_requirement")
-    .eq("match_target_id", requirement.id);
+    .eq("match_target_type", "position")
+    .in("match_target_id", positionIds);
 
-  if (!matches) return 0;
+  if (!matches) return none;
 
-  const toAlert = matches.filter((m) => decideAlert(m.alerted_score, m.score));
-  if (toAlert.length === 0) return 0;
+  const eligible = bestMatchPerCandidate(matches).filter((m) =>
+    decideAlert(m.alertedHighWater, m.row.score),
+  );
+  if (eligible.length === 0) return none;
+
+  // Already sorted by score, so the cap keeps the strongest candidates.
+  const toAlert = eligible.slice(0, ALERT_BATCH_CAP);
+  const suppressed = eligible.length - toAlert.length;
 
   const { data: candidates } = await supabase
     .from("candidates")
     .select("id, full_name, current_role")
     .in(
       "id",
-      toAlert.map((m) => m.candidate_id),
+      toAlert.map((m) => m.row.candidate_id),
     );
   const candById = new Map((candidates ?? []).map((c) => [c.id, c]));
 
   let sent = 0;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  for (const m of toAlert) {
-    const candidate = candById.get(m.candidate_id);
+  for (const { row } of toAlert) {
+    const candidate = candById.get(row.candidate_id);
     if (!candidate) continue;
     const result = await sendMatchAlert({
       to: requirement.manager_email,
@@ -339,24 +371,27 @@ async function maybeSendAutoAlerts(
       candidateRole: candidate.current_role,
       requirementTitle: requirement.title,
       client: requirement.client,
-      score: m.score,
+      score: row.score,
       appUrl,
       candidateId: candidate.id,
     });
     if (result.configured && result.ok) {
+      // Marked on the row that was actually alerted. The candidate's other
+      // seats stay unmarked by design: the high-water mark above is what
+      // governs whether they hear about this person again.
       await supabase
         .from("matches")
-        .update({ alert_sent: true, alerted_score: m.score })
-        .eq("id", m.id);
+        .update({ alert_sent: true, alerted_score: row.score })
+        .eq("id", row.id);
       await supabase.from("match_alerts").insert({
-        match_id: m.id,
+        match_id: row.id,
         sent_to: requirement.manager_email,
         status: "sent",
       });
       sent += 1;
     }
   }
-  return sent;
+  return { sent, suppressed };
 }
 
 export type SendAlertResult = { status: "sent" | "not_configured" | "no_manager" | "error"; message?: string };
@@ -371,15 +406,33 @@ export async function sendAlert(matchId: string): Promise<SendAlertResult> {
 
   const { data: match } = await supabase
     .from("matches")
-    .select("id, score, match_target_id, candidate_id")
+    .select("id, score, match_target_type, match_target_id, candidate_id")
     .eq("id", matchId)
     .single();
   if (!match) return { status: "error", message: "Match not found." };
 
+  // Since 0012 a match points at a seat, not at the requirement, so getting
+  // back to the manager's address goes through the seat's parent. Reading
+  // job_requirements by match_target_id, as this did until now, looked up a
+  // position id in the requirements table and never found anything.
+  if (match.match_target_type !== "position") {
+    return { status: "error", message: "That match was scored before seats existed. Re-run matching first." };
+  }
+
+  const { data: seat } = await supabase
+    .from("positions")
+    .select("role, parent_type, parent_id")
+    .eq("id", match.match_target_id)
+    .single();
+  if (!seat) return { status: "error", message: "The seat this match was scored against is gone." };
+  if (seat.parent_type !== "job_requirement") {
+    return { status: "error", message: "That match is against a tender, which has no hiring manager to alert." };
+  }
+
   const { data: requirement } = await supabase
     .from("job_requirements")
-    .select("title, client, manager_email")
-    .eq("id", match.match_target_id)
+    .select("id, title, client, manager_email")
+    .eq("id", seat.parent_id)
     .single();
   if (!requirement) return { status: "error", message: "Requirement not found." };
   if (!requirement.manager_email) return { status: "no_manager" };
@@ -398,6 +451,9 @@ export async function sendAlert(matchId: string): Promise<SendAlertResult> {
     requirementTitle: requirement.title,
     client: requirement.client,
     score: match.score,
+    // Which seat they scored best on. The button alerts on a candidate's best
+    // row across the requirement, so without this the manager cannot tell.
+    role: seat.role,
     appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "",
     candidateId: candidate.id,
   });
@@ -415,7 +471,7 @@ export async function sendAlert(matchId: string): Promise<SendAlertResult> {
     status: "sent",
   });
 
-  revalidatePath(`/job-requirements/${match.match_target_id}`);
+  revalidatePath(`/job-requirements/${requirement.id}`);
   return { status: "sent" };
 }
 
