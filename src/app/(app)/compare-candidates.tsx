@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Check, X } from "lucide-react";
+import { AlertTriangle, Check, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,7 +10,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { SCORING_WEIGHTS } from "@/lib/scoring";
+import { SCORING_WEIGHTS, type OverlapDetail } from "@/lib/scoring";
 import type { CandidateProfile } from "@/lib/positions";
 import { CRITERIA, CriterionBar, scoreDetail } from "@/app/(app)/score-breakdown";
 
@@ -120,10 +120,11 @@ function CompareBody({
           </div>
 
           <div className="mt-4 space-y-3 border-t border-border pt-3">
-            <ItemList title="Skills" matched={skills.matched} missing={skills.missing} />
+            <ItemList title="Skills" matched={skills.matched} near={skills.items} missing={skills.missing} />
             <ItemList
               title="Certifications"
               matched={certifications.matched}
+              near={certifications.items}
               missing={certifications.missing}
             />
             <div className="text-body-sm">
@@ -156,12 +157,16 @@ function CompareBody({
 function ItemList({
   title,
   matched,
+  near,
   missing,
 }: {
   title: string;
   matched: string[];
+  /** Every required item with how it was answered; only the near ones render. */
+  near: OverlapDetail["items"];
   missing: string[];
 }) {
+  const partial = near.filter((i) => i.quality === "near");
   if (matched.length === 0 && missing.length === 0) {
     return (
       <div className="text-body-sm">
@@ -179,6 +184,17 @@ function ItemList({
           <li key={item} className="flex items-start gap-1.5 text-body-sm text-foreground">
             <Check className="mt-0.5 size-3.5 shrink-0 text-success" />
             <span className="min-w-0">{item}</span>
+          </li>
+        ))}
+        {/* Answered by something broader of the candidate's own, named so the
+            partial credit can be argued with. */}
+        {partial.map((item) => (
+          <li key={item.required} className="flex items-start gap-1.5 text-body-sm text-foreground">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-strong-match" />
+            <span className="min-w-0">
+              {item.required}
+              {item.via && <span className="text-muted-foreground"> via {item.via}</span>}
+            </span>
           </li>
         ))}
         {missing.map((item) => (
