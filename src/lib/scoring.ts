@@ -85,6 +85,9 @@ export interface ScoreResult {
 }
 
 function normalize(value: string): string {
+  // Same guard as fold in skill-matching: one null element in a text[] column
+  // must not throw and abandon a whole run.
+  if (typeof value !== "string") return "";
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
@@ -173,7 +176,7 @@ export function roleMatch(candidateRole: string | null, requiredRole: string | n
 
 /** Best role match across a candidate's primary + additional roles. */
 export function bestRoleMatch(roles: (string | null)[], requiredRole: string | null): number {
-  const candidates = roles.filter((r): r is string => !!r && r.trim() !== "");
+  const candidates = roles.filter((r): r is string => typeof r === "string" && r.trim() !== "");
   if (candidates.length === 0) return roleMatch(null, requiredRole);
   return Math.max(...candidates.map((r) => roleMatch(r, requiredRole)));
 }
