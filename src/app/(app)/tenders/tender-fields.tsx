@@ -27,28 +27,7 @@ const STATUS_LABELS: Record<string, string> = {
 /** Which fields the RFQ parser pre-filled, for auto-filled highlights. */
 export type TenderExtractedFlags = Partial<Record<keyof TenderFormFields, boolean>>;
 
-export const EMPTY_TENDER: TenderFormFields = {
-  title: "",
-  department_id: null,
-  positions: [],
-  reference_number: null,
-  client: null,
-  location: null,
-  summary: null,
-  submission_deadline: null,
-  contract_start_date: null,
-  contract_end_date: null,
-  reference_letters_required: null,
-  reference_letters_note: null,
-  reference_letters_within_years: null,
-  reference_letters_min_value: null,
-  required_roles: [],
-  required_skills: [],
-  required_certifications: [],
-  sectors: [],
-  min_experience_years: null,
-  status: "draft",
-};
+export { EMPTY_TENDER } from "@/app/(app)/tenders/empty-tender";
 
 export function TenderFields({
   value,

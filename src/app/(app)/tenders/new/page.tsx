@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { TenderForm } from "@/app/(app)/tenders/tender-form";
-import { EMPTY_TENDER } from "@/app/(app)/tenders/tender-fields";
+// From its own module, not from tender-fields: that one is a client module,
+// and spreading a constant imported from one yields an empty object here.
+import { EMPTY_TENDER } from "@/app/(app)/tenders/empty-tender";
 import { loadDepartmentContext } from "@/lib/departments-repo";
 import { defaultTenderDepartment } from "@/lib/departments";
 
