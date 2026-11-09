@@ -17,12 +17,15 @@ import { EMPTY_POSITION, seatCount, type PositionInput } from "@/lib/positions";
  * education editors: `{ value, onChange, highlight? }` with update/remove/add.
  */
 export function PositionsEditor({
-  value,
+  // Defaulted because a missing list used to take the whole create page down:
+  // every method here walks it, and one undefined prop threw before anything
+  // rendered. An empty editor is a far better failure than a blank screen.
+  value = [],
   onChange,
   sectors = [],
   highlight,
 }: {
-  value: PositionInput[];
+  value?: PositionInput[];
   onChange: (next: PositionInput[]) => void;
   /** Parent sectors, so each line's suggestion chips stay industry-relevant. */
   sectors?: string[];
