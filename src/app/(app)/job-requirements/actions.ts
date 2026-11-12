@@ -15,6 +15,10 @@ import {
   ALERT_BATCH_CAP,
 } from "@/lib/matching";
 import { replacePositions, loadPositions, toPositionInputs } from "@/lib/positions-repo";
+import { fetchAll, chunk } from "@/lib/supabase/fetch-all";
+
+/** Match rows written per request. Small enough to stay well inside a body limit. */
+const MATCH_WRITE_BATCH = 500;
 import type { PositionInput } from "@/lib/positions";
 import { sendMatchAlert, isEmailConfigured } from "@/lib/email/resend";
 
@@ -265,15 +269,18 @@ export async function runMatch(
     return { error: "Add at least one role to this requirement before matching." };
   }
 
-  let candidatesQuery = supabase
-    .from("candidates")
-    .select(
-      "id, current_role, additional_roles, skills, technical_skills, certifications, years_experience, availability",
-    );
-  if (!includeAllStatuses) candidatesQuery = candidatesQuery.eq("status", "active");
-
-  const { data: candidates, error: candErr } = await candidatesQuery;
-  if (candErr) return { error: candErr.message };
+  // Paged: one query answers at most a thousand rows and says nothing about
+  // the rest, so past that some people would never have been scored at all.
+  const { data: candidates, error: candErr } = await fetchAll((from, to) => {
+    let q = supabase
+      .from("candidates")
+      .select(
+        "id, current_role, additional_roles, skills, technical_skills, certifications, years_experience, availability",
+      );
+    if (!includeAllStatuses) q = q.eq("status", "active");
+    return q.order("id").range(from, to);
+  });
+  if (candErr) return { error: candErr };
   if (!candidates || candidates.length === 0) return { matched: 0, alertsSent: 0 };
 
   // One row per (candidate, position): each seat has its own skills, certs and
@@ -292,10 +299,14 @@ export async function runMatch(
   );
 
   // Upsert: preserves alert_sent / alerted_score on existing rows (not in payload).
-  const { error: upsertErr } = await supabase
-    .from("matches")
-    .upsert(rows, { onConflict: "candidate_id,match_target_type,match_target_id" });
-  if (upsertErr) return { error: upsertErr.message };
+  // In runs, because seats times candidates is too large for one request once
+  // the pool is in the thousands.
+  for (const batch of chunk(rows, MATCH_WRITE_BATCH)) {
+    const { error: upsertErr } = await supabase
+      .from("matches")
+      .upsert(batch, { onConflict: "candidate_id,match_target_type,match_target_id" });
+    if (upsertErr) return { error: upsertErr.message };
+  }
 
   // The seat ids are already in hand, so the alert sweep needs no second query
   // to find out which match rows this run just wrote.
@@ -334,13 +345,17 @@ async function maybeSendAutoAlerts(
   // Scoring moved onto positions in 0012, so the rows this requirement owns are
   // the ones against its seats. Reading them by requirement id, as this did
   // until now, matched nothing and sent no alert at all.
-  const { data: matches } = await supabase
-    .from("matches")
-    .select("id, score, alerted_score, candidate_id")
-    .eq("match_target_type", "position")
-    .in("match_target_id", positionIds);
+  const { data: matches } = await fetchAll((from, to) =>
+    supabase
+      .from("matches")
+      .select("id, score, alerted_score, candidate_id")
+      .eq("match_target_type", "position")
+      .in("match_target_id", positionIds)
+      .order("id")
+      .range(from, to),
+  );
 
-  if (!matches) return none;
+  if (matches.length === 0) return none;
 
   const eligible = bestMatchPerCandidate(matches).filter((m) =>
     decideAlert(m.alertedHighWater, m.row.score),

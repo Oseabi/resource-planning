@@ -10,6 +10,7 @@ import { validateExtension, placementsAlignedTo } from "@/lib/delivery";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { TenderStatus, Json } from "@/lib/supabase/database.types";
 import { scoreCandidateForPosition, toScoreBreakdownJson } from "@/lib/matching";
+import { fetchAll, chunk } from "@/lib/supabase/fetch-all";
 import { replacePositions, loadPositions, toPositionInputs } from "@/lib/positions-repo";
 import type { PositionInput } from "@/lib/positions";
 
@@ -331,15 +332,18 @@ export async function runTenderMatch(
     return { error: "Add at least one role to this tender before matching." };
   }
 
-  let candidatesQuery = supabase
-    .from("candidates")
-    .select(
-      "id, current_role, additional_roles, skills, technical_skills, certifications, years_experience, availability",
-    );
-  if (!includeAllStatuses) candidatesQuery = candidatesQuery.eq("status", "active");
-
-  const { data: candidates, error: candErr } = await candidatesQuery;
-  if (candErr) return { error: candErr.message };
+  // Paged: one query answers at most a thousand rows and says nothing about
+  // the rest, so past that some people would never have been scored at all.
+  const { data: candidates, error: candErr } = await fetchAll((from, to) => {
+    let q = supabase
+      .from("candidates")
+      .select(
+        "id, current_role, additional_roles, skills, technical_skills, certifications, years_experience, availability",
+      );
+    if (!includeAllStatuses) q = q.eq("status", "active");
+    return q.order("id").range(from, to);
+  });
+  if (candErr) return { error: candErr };
   if (!candidates || candidates.length === 0) return { matched: 0 };
 
   // One row per (candidate, position): each seat has its own skills, certs and
@@ -357,10 +361,14 @@ export async function runTenderMatch(
     }),
   );
 
-  const { error: upsertErr } = await supabase
-    .from("matches")
-    .upsert(rows, { onConflict: "candidate_id,match_target_type,match_target_id" });
-  if (upsertErr) return { error: upsertErr.message };
+  // In runs: seats times candidates is too large for one request once the
+  // pool is in the thousands.
+  for (const batch of chunk(rows, 500)) {
+    const { error: upsertErr } = await supabase
+      .from("matches")
+      .upsert(batch, { onConflict: "candidate_id,match_target_type,match_target_id" });
+    if (upsertErr) return { error: upsertErr.message };
+  }
 
   revalidatePath(`/tenders/${tenderId}`);
   revalidatePath("/tenders");
