@@ -46,6 +46,7 @@ import { fieldsFromExtraction } from "@/app/(app)/candidates/cv-fields";
 import { toCandidateColumns } from "@/lib/candidate-columns";
 import type { CandidateFormFields } from "@/app/(app)/candidates/actions";
 import { fetchAll } from "@/lib/supabase/fetch-all";
+import { deriveCategories } from "@/lib/resource-categories";
 import {
   attachmentContentType,
   attachmentStoragePath,
@@ -260,6 +261,16 @@ async function main() {
         ...fieldsFromExtraction(result, { department_ids: [department.id] }),
         ...(override.fields ?? {}),
       };
+      // The practice areas come from the roles and skills, so they are worked
+      // out again once a correction has changed those.
+      if (override.fields && !override.fields.resource_categories) {
+        fields.resource_categories = deriveCategories({
+          skills: fields.skills,
+          technical_skills: fields.technical_skills,
+          current_role: fields.current_role,
+          additional_roles: fields.additional_roles,
+        });
+      }
       extractedName = fields.full_name || null;
       if (dumpDir) {
         fs.mkdirSync(dumpDir, { recursive: true });
