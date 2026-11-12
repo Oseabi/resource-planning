@@ -101,6 +101,9 @@ export async function replacePositions(
  * positions, their assignment counts, and their ranked matches with candidate
  * names, assembled in three queries rather than one per position.
  */
+/** How deep into a seat's ranking the pages read. Far past what is shown. */
+const SHORTLIST_ROWS_PER_SEAT = 100;
+
 export async function loadPositionViews(
   supabase: Client,
   parentType: PositionParentType,
@@ -113,21 +116,34 @@ export async function loadPositionViews(
 
   const positionIds = positions.map((p) => p.id);
 
-  const [{ data: matchRows }, { data: assignmentRows }] = await Promise.all([
-    supabase
-      .from("matches")
-      .select("id, candidate_id, match_target_id, score, score_breakdown, alert_sent, ai_deep_match_notes")
-      .eq("match_target_type", "position")
-      .in("match_target_id", positionIds)
-      // The same total order the deep-match route uses, so the five it reads
-      // are the five the shortlist shows. Score alone leaves ties unordered.
-      .order("score", { ascending: false })
-      .order("candidate_id", { ascending: true }),
+  // Each seat's own best, one query per seat. A single query across every
+  // seat is silently cut at a thousand rows, which a ten-seat bid passes at a
+  // hundred candidates, and the rows it dropped were the weaker seats' whole
+  // shortlists. A shortlist is the top of the list by definition, so a
+  // generous cap per seat loses nothing a person would act on and keeps the
+  // page from carrying every candidate in the business to the browser.
+  const [perSeat, { data: assignmentRows }] = await Promise.all([
+    Promise.all(
+      positionIds.map((positionId) =>
+        supabase
+          .from("matches")
+          .select("id, candidate_id, match_target_id, score, score_breakdown, alert_sent, ai_deep_match_notes")
+          .eq("match_target_type", "position")
+          .eq("match_target_id", positionId)
+          // The same total order the deep-match route uses, so the five it
+          // reads are the five the shortlist shows. Score alone leaves ties
+          // unordered.
+          .order("score", { ascending: false })
+          .order("candidate_id", { ascending: true })
+          .limit(SHORTLIST_ROWS_PER_SEAT),
+      ),
+    ),
     supabase
       .from("assignments")
       .select("position_id, candidate_id, status")
       .in("position_id", positionIds),
   ]);
+  const matchRows = perSeat.flatMap((r) => r.data ?? []);
 
   // Names are needed for everyone shortlisted *and* everyone already seated.
   const candidateIds = [
