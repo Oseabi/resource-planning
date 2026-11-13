@@ -76,6 +76,8 @@ interface Override {
   fields?: Partial<CandidateFormFields>;
   skip?: string;
   accept_name?: boolean;
+  /** The CV's path within the person's folder, when its name does not say it is one. */
+  cv?: string;
 }
 
 function readEnv(): Record<string, string> {
@@ -231,7 +233,17 @@ async function main() {
       continue;
     }
     const override = overrides[folder] ?? {};
-    const decided = planPersonFiles(files, { include, personName: folder });
+    const decided = planPersonFiles(files, { include, personName: folder }).map((d) => {
+      // A correction can name the CV when its file name does not say so.
+      if (!override.cv) return d;
+      if (d.file.rel === override.cv) return { ...d, decision: { action: "primary_cv" as const } };
+      if (d.decision.action === "primary_cv") return { ...d, decision: { action: "skip" as const, reason: "not the CV" } };
+      return d;
+    });
+    if (override.cv && !decided.some((d) => d.decision.action === "primary_cv")) {
+      console.error(`${folder}: the correction names "${override.cv}" as the CV, but there is no such file`);
+      process.exit(1);
+    }
     const cv = decided.find((d) => d.decision.action === "primary_cv")?.file ?? null;
     const plan: PersonPlan = {
       folder,
