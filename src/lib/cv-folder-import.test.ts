@@ -50,6 +50,8 @@ describe("what a file is, from its name", () => {
     ["Bachelor of Business Administration in Risk Management.pdf", "qualification"],
     ["management advancement programme 24 Nov 2000.PDF", "certificate"],
     ["M Rooplall PMI Certfication.pdf", "certificate"],
+    ["PGDip_UCT.pdf", "qualification"],
+    ["AgileBA 2000906150-AGBAF.PDF", "certificate"],
     ["Nomsa ID-RSA (1).pdf", "id_document"],
     ["ID_SM.pdf", "id_document"],
     ["Certified Identity Document - Nomsa Dube.pdf", "id_document"],
