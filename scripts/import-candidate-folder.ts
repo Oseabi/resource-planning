@@ -144,6 +144,8 @@ interface PersonPlan {
   folder: string;
   /** Why nothing is created for this folder, when nothing is. */
   hold: string | null;
+  /** The folder earlier in this run that holds the same person, when there is one. */
+  twinOf?: string;
   /** The person already on file, when there is one. */
   known: { person: KnownPerson; by: string } | null;
   fields: CandidateFormFields | null;
@@ -315,10 +317,14 @@ async function main() {
       phone: plan.fields?.phone ?? null,
     };
     plan.known = findKnownPerson(probe, known) ?? findKnownPerson({ full_name: folder, email: null, phone: null }, known);
-    if (!plan.known && plan.fields) {
-      const twin = findKnownPerson(probe, planned);
-      if (twin) plan.hold = `the same person as the folder "${twin.person.id}" in this run`;
-      else planned.push({ id: folder, ...probe });
+    // A person filed under two folders in one run is one record: the second
+    // folder's documents go on the record the first one creates.
+    if (!plan.known) {
+      const twin = findKnownPerson(probe, planned) ?? findKnownPerson({ full_name: folder, email: null, phone: null }, planned);
+      if (twin) {
+        plan.twinOf = twin.person.id;
+        plan.fields = null;
+      } else if (plan.fields) planned.push({ id: folder, ...probe });
     }
     plans.push(plan);
   }
@@ -328,7 +334,9 @@ async function main() {
   for (const p of plans) {
     const verdict = p.known
       ? `ALREADY ON FILE as ${p.known.person.full_name} (matched by ${p.known.by}); record untouched`
-      : p.fields
+      : p.twinOf
+        ? `SAME PERSON as the folder "${p.twinOf}" in this run; documents go on that record`
+        : p.fields
         ? "CREATE"
         : `HELD: ${p.hold}`;
     console.log(`${p.folder}\n  ${verdict}`);
@@ -349,8 +357,8 @@ async function main() {
   if (loose.length) console.log(`Loose files in the role folder, not loaded: ${loose.length}`);
 
   const toCreate = plans.filter((p) => p.fields && !p.known);
-  const toExtend = plans.filter((p) => p.known);
-  const held = plans.filter((p) => !p.known && !p.fields);
+  const toExtend = plans.filter((p) => p.known || p.twinOf);
+  const held = plans.filter((p) => !p.known && !p.fields && !p.twinOf);
   console.log(
     `\nWould create ${toCreate.length}, add documents to ${toExtend.length} already on file, hold ${held.length}. ` +
       `${plans.reduce((n, p) => n + p.attach.length, 0)} attachment(s), ${plans.reduce((n, p) => n + p.left.length, 0)} file(s) left behind.`,
@@ -364,10 +372,15 @@ async function main() {
   const departmentOptions = (departments ?? []).map((d) => ({ id: d.id, name: d.name, slug: d.slug }));
   let created = 0;
   let attached = 0;
+  const createdIn = new Map<string, string>();
   for (const p of plans) {
-    if (!p.known && !p.fields) continue;
+    if (!p.known && !p.fields && !p.twinOf) continue;
     const dir = path.join(root, p.folder);
-    let candidateId = p.known?.person.id ?? null;
+    let candidateId = p.known?.person.id ?? (p.twinOf ? (createdIn.get(p.twinOf) ?? null) : null);
+    if (p.twinOf && !candidateId) {
+      console.error(`${p.folder}: "${p.twinOf}" was not created, so its documents have nowhere to go`);
+      continue;
+    }
     let label = p.known?.person.full_name ?? "";
 
     if (!candidateId && p.fields && p.cv) {
@@ -396,6 +409,7 @@ async function main() {
         continue;
       }
       candidateId = row.id;
+      createdIn.set(p.folder, row.id);
       label = p.fields.full_name;
       created += 1;
       await db.from("audit_log").insert({
