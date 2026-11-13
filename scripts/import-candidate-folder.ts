@@ -39,6 +39,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import os from "node:os";
+import { spawnSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
 import { planExtraction, extractFromPlan } from "@/lib/extraction";
 import { tippParsedFully } from "@/lib/extraction/local-parser";
@@ -65,6 +67,27 @@ import {
 import type { CandidateAttachmentKind } from "@/lib/supabase/database.types";
 
 const BUCKET = "cvs";
+
+/**
+ * LibreOffice turns an old Word .doc into a .docx the reader and the bucket
+ * both take. The copy goes in a temporary folder; the archive is not touched.
+ */
+const SOFFICE = ["C:/Program Files/LibreOffice/program/soffice.exe", "/usr/bin/soffice", "/Applications/LibreOffice.app/Contents/MacOS/soffice"].find((p) =>
+  fs.existsSync(p),
+);
+const converted = new Map<string, string>();
+function docAsDocx(abs: string): string | null {
+  if (!SOFFICE) return null;
+  const hit = converted.get(abs);
+  if (hit) return hit;
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "tipp-doc-"));
+  const run = spawnSync(SOFFICE, ["--headless", "--convert-to", "docx", "--outdir", out, abs], { timeout: 120_000 });
+  const docx = path.join(out, path.basename(abs).replace(/\.doc$/i, ".docx"));
+  if (run.status !== 0 || !fs.existsSync(docx)) return null;
+  converted.set(abs, docx);
+  return docx;
+}
+
 /** Folders inside a role folder that hold files, not a person. */
 const NOT_A_PERSON = /^(original cvs?|qualifications?|format+ed cvs?|cvs?|archive|old|templates?)$/i;
 
@@ -280,15 +303,18 @@ async function main() {
       plan.hold = override.skip;
     } else if (!cv) {
       plan.hold = "no CV in the folder";
-    } else if (!READABLE_CV_EXTENSIONS.has(cv.ext)) {
+    } else if (!READABLE_CV_EXTENSIONS.has(cv.ext) && !(cv.ext === ".doc" && docAsDocx(path.join(dir, cv.rel)))) {
       plan.hold = `the only CV is a ${cv.ext} file, which cannot be read; save it as .docx or PDF`;
     } else {
-      const bytes = fs.readFileSync(path.join(dir, cv.rel));
+      const docx = cv.ext === ".doc" ? docAsDocx(path.join(dir, cv.rel)) : null;
+      const readExt = docx ? ".docx" : cv.ext;
+      const readName = docx ? path.basename(docx) : cv.name;
+      const bytes = fs.readFileSync(docx ?? path.join(dir, cv.rel));
       const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-      const extraction = await planExtraction(buffer, MIME[cv.ext], cv.name);
-      const result = await extractFromPlan(extraction, cv.name);
+      const extraction = await planExtraction(buffer, MIME[readExt], readName);
+      const result = await extractFromPlan(extraction, readName);
       const template = extraction.isTipp ? (tippParsedFully(extraction.local) ? "TiPP template, read in full" : "TiPP template, partly read") : "not the template";
-      plan.engine = `${result.engine}, ${template}`;
+      plan.engine = `${result.engine}, ${template}${docx ? ", converted from .doc" : ""}`;
       const fields: CandidateFormFields = withoutAgencyContact(
         noEmDashes({
           ...fieldsFromExtraction(result, { department_ids: [department.id] }),
@@ -399,9 +425,11 @@ async function main() {
     let label = p.known?.person.full_name ?? "";
 
     if (!candidateId && p.fields && p.cv) {
-      const cvPath = `candidates/${crypto.randomUUID()}${p.cv.ext}`;
-      const { error: upErr } = await db.storage.from(BUCKET).upload(cvPath, fs.readFileSync(path.join(dir, p.cv.rel)), {
-        contentType: MIME[p.cv.ext],
+      const docx = p.cv.ext === ".doc" ? docAsDocx(path.join(dir, p.cv.rel)) : null;
+      const storeExt = docx ? ".docx" : p.cv.ext;
+      const cvPath = `candidates/${crypto.randomUUID()}${storeExt}`;
+      const { error: upErr } = await db.storage.from(BUCKET).upload(cvPath, fs.readFileSync(docx ?? path.join(dir, p.cv.rel)), {
+        contentType: MIME[storeExt],
         upsert: false,
       });
       if (upErr) {
