@@ -4,7 +4,7 @@
  *
  *   npx tsx --conditions=react-server scripts/import-candidate-folder.ts "<role folder>"
  *       [--department <slug>] [--include id_document,contract] [--only "<person folder>"]
- *       [--hold "<folder>,<folder>"] [--overrides fixes.json] [--dump <dir>]
+ *       [--hold "<folder>,<folder>"] [--overrides fixes.json] [--dump <dir>] [--slice 0:20]
  *       [--as <email>] [--apply]
  *
  * Dry run is the default: it reads every CV, prints what it would create,
@@ -125,6 +125,19 @@ function walk(root: string, dir = root): ArchiveFile[] {
   return out.sort((a, b) => a.rel.localeCompare(b.rel));
 }
 
+/**
+ * The system never shows an em dash, so one copied out of a CV becomes a
+ * spaced hyphen on the way in. Everything else is kept as the document wrote it.
+ */
+function noEmDashes<T>(value: T): T {
+  if (typeof value === "string") return value.replace(/\s*—\s*/g, " - ") as T;
+  if (Array.isArray(value)) return value.map(noEmDashes) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, noEmDashes(v)])) as T;
+  }
+  return value;
+}
+
 const sha = (buffer: Buffer) => crypto.createHash("sha256").update(buffer).digest("hex");
 
 interface PersonPlan {
@@ -154,6 +167,9 @@ async function main() {
   }
   const include = (flag("include") ?? "").split(",").map((s) => s.trim()).filter(Boolean) as ArchiveFileKind[];
   const only = flag("only");
+  // --slice 0:20 takes the first twenty subfolders in name order, so a large
+  // role folder can be checked and loaded in batches.
+  const [sliceStart, sliceEnd] = (flag("slice") ?? ":").split(":").map((s) => (s.trim() === "" ? undefined : Number(s)));
   const alsoHold = new Set((flag("hold") ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
   const dumpDir = flag("dump");
   const overridesFile = flag("overrides");
@@ -196,7 +212,8 @@ async function main() {
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
     .filter((n) => !only || n === only)
-    .sort((a, b) => a.localeCompare(b));
+    .sort((a, b) => a.localeCompare(b))
+    .slice(sliceStart, sliceEnd);
   const loose = fs.readdirSync(root, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name);
 
   const plans: PersonPlan[] = [];
@@ -257,10 +274,10 @@ async function main() {
       const result = await extractFromPlan(extraction, cv.name);
       const template = extraction.isTipp ? (tippParsedFully(extraction.local) ? "TiPP template, read in full" : "TiPP template, partly read") : "not the template";
       plan.engine = `${result.engine}, ${template}`;
-      const fields: CandidateFormFields = {
+      const fields: CandidateFormFields = noEmDashes({
         ...fieldsFromExtraction(result, { department_ids: [department.id] }),
         ...(override.fields ?? {}),
-      };
+      });
       // The practice areas come from the roles and skills, so they are worked
       // out again once a correction has changed those.
       if (override.fields && !override.fields.resource_categories) {

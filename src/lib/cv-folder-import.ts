@@ -73,8 +73,8 @@ export function classifyArchiveFile(file: Pick<ArchiveFile, "name" | "ext">): Ar
   // only then the bare word: "BSc Degree certificate" and "Matric Certificate"
   // are qualifications, and "certificate" alone would have claimed them.
   if (has(n, /togaf|cobit|itil|prince2?|sabsa|cmmi|scrum|cissp|azure|(^|[^a-z])(pmp|aws)([^a-z]|$)/)) return "certificate";
-  if (has(n, /degree|diploma|matric|senior certificate|transcript|qualif|saqa|honou?rs|(^|[^a-z])hons([^a-z]|$)|b[ -]?tech|b[ -]?com|(^|[^a-z])b[ -]?sc([^a-z]|$)|beng|masters|(^|[^a-z])(mba|nqf|mca)([^a-z]|$)|academic|marksheet|provisional/)) return "qualification";
-  if (has(n, /certificat|(^|[^a-z])certs?([^a-z]|$)|attendance|accredit/)) return "certificate";
+  if (has(n, /degree|diploma|matric|senior certificate|transcript|qualif|saqa|honou?rs|(^|[^a-z])hons([^a-z]|$)|b[ -]?tech|b[ -]?com|(^|[^a-z])b[ -]?sc([^a-z]|$)|beng|masters|(^|[^a-z])(mba|nqf|mca)([^a-z]|$)|academic|marksheet|provisional|bachelor/)) return "qualification";
+  if (has(n, /certificat|(^|[^a-z])certs?([^a-z]|$)|attendance|accredit|programme|course|training/)) return "certificate";
 
   return "unknown";
 }
