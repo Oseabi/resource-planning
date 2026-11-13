@@ -55,6 +55,7 @@ import {
 import {
   planPersonFiles,
   findKnownPerson,
+  withoutAgencyContact,
   sameName,
   READABLE_CV_EXTENSIONS,
   type ArchiveFile,
@@ -288,10 +289,12 @@ async function main() {
       const result = await extractFromPlan(extraction, cv.name);
       const template = extraction.isTipp ? (tippParsedFully(extraction.local) ? "TiPP template, read in full" : "TiPP template, partly read") : "not the template";
       plan.engine = `${result.engine}, ${template}`;
-      const fields: CandidateFormFields = noEmDashes({
-        ...fieldsFromExtraction(result, { department_ids: [department.id] }),
-        ...(override.fields ?? {}),
-      });
+      const fields: CandidateFormFields = withoutAgencyContact(
+        noEmDashes({
+          ...fieldsFromExtraction(result, { department_ids: [department.id] }),
+          ...(override.fields ?? {}),
+        }),
+      );
       // The practice areas come from the roles and skills, so they are worked
       // out again once a correction has changed those.
       if (override.fields && !override.fields.resource_categories) {

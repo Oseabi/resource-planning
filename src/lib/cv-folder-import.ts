@@ -210,6 +210,29 @@ export function phoneKey(phone: string | null | undefined): string | null {
   return digits.length >= 9 ? digits.slice(-9) : null;
 }
 
+/**
+ * TiPP's own contact details. The newer CV template prints the account
+ * manager's email and the office line on its cover page, so a reader can take
+ * them for the candidate's, and two CVs would then look like one person.
+ */
+const AGENCY_EMAIL = /@tippfocus\.co\.za$/i;
+const AGENCY_PHONE_KEYS = new Set([phoneKey("011 805 3447")]);
+
+export function isAgencyContact(value: { email?: string | null; phone?: string | null }): boolean {
+  if (value.email && AGENCY_EMAIL.test(value.email.trim())) return true;
+  const key = phoneKey(value.phone);
+  return key !== null && AGENCY_PHONE_KEYS.has(key);
+}
+
+/** The fields with TiPP's own email and phone taken out. */
+export function withoutAgencyContact<T extends { email: string | null; phone: string | null }>(fields: T): T {
+  return {
+    ...fields,
+    email: fields.email && isAgencyContact({ email: fields.email }) ? null : fields.email,
+    phone: fields.phone && isAgencyContact({ phone: fields.phone }) ? null : fields.phone,
+  };
+}
+
 export interface KnownPerson {
   id: string;
   full_name: string;
@@ -228,6 +251,7 @@ export function findKnownPerson(
   candidate: { full_name: string; email: string | null; phone: string | null },
   known: KnownPerson[],
 ): { person: KnownPerson; by: "email" | "phone" | "name" } | null {
+  candidate = withoutAgencyContact(candidate);
   const email = candidate.email?.trim().toLowerCase();
   if (email) {
     const hit = known.find((k) => k.email?.trim().toLowerCase() === email);

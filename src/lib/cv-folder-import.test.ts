@@ -7,6 +7,7 @@ import {
   sameName,
   phoneKey,
   findKnownPerson,
+  withoutAgencyContact,
   type ArchiveFile,
 } from "@/lib/cv-folder-import";
 
@@ -204,5 +205,12 @@ describe("recognising somebody already on file", () => {
     expect(findKnownPerson({ full_name: "N Dube", email: null, phone: "+27825550101" }, known)).toMatchObject({ by: "phone" });
     expect(findKnownPerson({ full_name: "Sipho Dube", email: null, phone: null }, known)).toMatchObject({ by: "name", person: { id: "b" } });
     expect(findKnownPerson({ full_name: "Lerato Mokoena", email: null, phone: null }, known)).toBeNull();
+  });
+
+  it("never matches two people on TiPP's own email or office line", () => {
+    const agency = [{ id: "p", full_name: "Piet Radebe", email: "samantha@tippfocus.co.za", phone: "011 805 3447" }];
+    expect(findKnownPerson({ full_name: "Sanah Sibaya", email: "brendam@tippfocus.co.za", phone: "+27 11 805 3447" }, agency)).toBeNull();
+    expect(withoutAgencyContact({ email: "Samantha@TippFocus.co.za", phone: "011 805 3447" })).toEqual({ email: null, phone: null });
+    expect(withoutAgencyContact({ email: "nomsa@example.co.za", phone: "082 555 0101" })).toEqual({ email: "nomsa@example.co.za", phone: "082 555 0101" });
   });
 });
