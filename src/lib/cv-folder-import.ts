@@ -60,9 +60,9 @@ export function classifyArchiveFile(file: Pick<ArchiveFile, "name" | "ext">): Ar
   if (n.startsWith("~$") || n === "desktop.ini" || n === "thumbs.db") return "junk";
   if ([".zip", ".msg", ".htm", ".html", ".ini", ".db", ".url", ".lnk"].includes(file.ext)) return "junk";
 
-  if (has(n, /payslip|pay slip|paysheet|salary|bank|irp5|tax (clearance|number|cert)|proof of (address|banking|residence)/)) return "payroll";
+  if (has(n, /payslip|pay slip|paysheet|salary|bank|account details|savings account|(^|[^a-z])sars([^a-z]|$)|irp5|tax (clearance|number|cert)|proof of (address|banking|residence)/)) return "payroll";
   if (has(n, /criminal|credit check|\bmie\b|verification|clearance|afiswitch|background/)) return "vetting";
-  if (has(n, /consent|consert|popi|\bnda\b|offer|contract|agreement|declaration|questionnaire|information needed/)) return "contract";
+  if (has(n, /consent|consert|popi|oath of secrecy|new hire|employee information|\bnda\b|offer|contract|agreement|declaration|questionnaire|information needed/)) return "contract";
   if (has(n, /(^|[^a-z])id([^a-z]|$)|identity|passport|smart ?card|work permit/)) return "id_document";
   if (has(n, /reference|testimonial|recommendation/)) return "reference";
 
