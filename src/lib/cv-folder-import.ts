@@ -60,7 +60,9 @@ export function classifyArchiveFile(file: Pick<ArchiveFile, "name" | "ext">): Ar
   if (n.startsWith("~$") || n === "desktop.ini" || n === "thumbs.db") return "junk";
   if ([".zip", ".msg", ".htm", ".html", ".ini", ".db", ".url", ".lnk"].includes(file.ext)) return "junk";
 
-  if (has(n, /payslip|pay slip|paysheet|remittance|salary|bank ?(statement|confirmation|letter|details|account)|banking details|stamped bank|account details|savings account|gray application form|beneficiary-nomination|beneficiary nomination|discovery - applying|pension|medical aid|(^|[^a-z])sars([^a-z]|$)|irp5|tax (clearance|number|cert)|proof of (address|banking|residence)/)) return "payroll";
+  // A client submission copy of a CV: "BMW 20200505_Name.docx", "TYME 2020526_ Name.pdf", "DCS 20200114_ Name.pdf".
+  if (has(n, /^[a-z&]{2,12} ?-? ?20[12]\d{4,5} ?[_-]/)) return "cv";
+  if (has(n, /payslip|pay slip|pmn?t adv|payment advice|paysheet|remittance|salary|bank ?(statement|confirmation|letter|details|account)|banking details|stamped bank|account details|savings account|gray application form|beneficiary-nomination|beneficiary nomination|discovery - applying|pension|medical aid|(^|[^a-z])sars([^a-z]|$)|irp5|tax (clearance|number|cert)|proof of (address|banking|residence)/)) return "payroll";
   if (has(n, /criminal|credit check|\bmie\b|verification|clearance|afiswitch|background/)) return "vetting";
   if (has(n, /consent|consert|popi|oath of secrecy|new hire|sign-on document|employee information|eea1|consultant information|code of e?thics|code of ehics|conditions of service|\bnda\b|offer|contract|agreement|declaration|questionnaire|information needed/)) return "contract";
   if (has(n, /(^|[^a-z])id([^a-z]|$)|^said[ _.-]|drivers? ?lic|idcard|i\.d\.? ?copy|driver'?s licen|identity|passport|smart ?card|work permit/)) return "id_document";
