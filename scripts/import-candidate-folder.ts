@@ -164,6 +164,20 @@ function noEmDashes<T>(value: T): T {
   return value;
 }
 
+/**
+ * Postgres text cannot hold a NUL character, and some PDFs put one where a
+ * ligature ("ffi", "fl") was, so the whole insert fails. The NUL carries no
+ * meaning, so it is dropped.
+ */
+function withoutNul<T>(value: T): T {
+  if (typeof value === "string") return value.replace(/\u0000/g, "") as T;
+  if (Array.isArray(value)) return value.map(withoutNul) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, withoutNul(v)])) as T;
+  }
+  return value;
+}
+
 const sha = (buffer: Buffer) => crypto.createHash("sha256").update(buffer).digest("hex");
 
 interface PersonPlan {
@@ -439,7 +453,7 @@ async function main() {
       const { data: row, error } = await db
         .from("candidates")
         .insert({
-          ...toCandidateColumns(p.fields, departmentOptions),
+          ...withoutNul(toCandidateColumns(p.fields, departmentOptions)),
           cv_file_path: cvPath,
           cv_original_filename: sanitizeFilename(p.cv.name),
           created_by: operator.id,
