@@ -73,7 +73,7 @@ export function classifyArchiveFile(file: Pick<ArchiveFile, "name" | "ext">): Ar
   // only then the bare word: "BSc Degree certificate" and "Matric Certificate"
   // are qualifications, and "certificate" alone would have claimed them.
   // Professional registrations (ECSA, SACPCMP, SAICE, SAIEE) count as certificates.
-  if (has(n, /togaf|cobit|itil|prince2?|sabsa|cmmi|scrum|cissp|azure|agileba|ecsa|sacpcmp|saice|saiee|mcse|ccna|comptia|(^|[^a-z])(pmp|aws)([^a-z]|$)|^[an]\+/)) return "certificate";
+  if (has(n, /togaf|cobit|itil|prince2?|sabsa|cmmi|scrum|cissp|azure|agileba|ecsa|sacpcmp|saice|saiee|hpcsa|sabpp|mcse|ccna|comptia|(^|[^a-z])(pmp|aws)([^a-z]|$)|^[an]\+/)) return "certificate";
   if (has(n, /degree|diploma|matric|senior certificate|transcript|qualif|saqa|honou?rs|(^|[^a-z])(hons|nd)([^a-z]|$)|b[ -]?tech|b[ -]?com|(^|[^a-z])b[ -]?sc([^a-z]|$)|beng|masters|(^|[^a-z])(mba|nqf|mca|llb|llm)([^a-z]|$)|academic|marksheet|provisional|bachelor|pgdip|postgrad|soc\.? ?sc|(^|[^a-z])[ao][ -]?level/)) return "qualification";
   if (has(n, /certificat|certfica|(^|[^a-z])certs?([^a-z]|$)|attendance|accredit|programme|course|training/)) return "certificate";
 

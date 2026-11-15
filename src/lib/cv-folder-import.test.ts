@@ -54,6 +54,7 @@ describe("what a file is, from its name", () => {
     ["PGDip_UCT.pdf", "qualification"],
     ["AgileBA 2000906150-AGBAF.PDF", "certificate"],
     ["MCSE.PDF", "certificate"],
+    ["HPCSA Practitioner_Registration_Winnie Mosidi.pdf", "certificate"],
     ["A+.pdf", "certificate"],
     ["N+.pdf", "certificate"],
     ["LLB (certified Copy).pdf", "qualification"],
