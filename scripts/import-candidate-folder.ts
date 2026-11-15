@@ -30,7 +30,8 @@
  * the reader produced, {"skip": "reason"} leaves the person out, and
  * {"accept_name": true} settles a name the reader got differently, {"cv": path}
  * names the CV, and {"attach": {path: "certificate"}} loads a certificate or
- * qualification whose file name does not say what it is. It carries
+ * qualification whose file name does not say what it is, and {"exclude": [path]}
+ * leaves a file out (another person's document filed in the folder). It carries
  * personal details, so it stays out of the repo. --dump writes each record and
  * the text it was read from to a folder, for that check; keep it out of the
  * repo too.
@@ -107,6 +108,8 @@ interface Override {
   cv?: string;
   /** Files whose names do not say what they are, by path within the folder: certificate or qualification. */
   attach?: Record<string, "certificate" | "qualification">;
+  /** Files to leave out, by path within the folder, e.g. another person's certificate filed here. */
+  exclude?: string[];
 }
 
 function readEnv(): Record<string, string> {
@@ -278,6 +281,7 @@ async function main() {
     const override = overrides[folder] ?? {};
     const decided = planPersonFiles(files, { include, personName: folder }).map((d) => {
       // A correction can name the CV when its file name does not say so.
+      if (override.exclude?.includes(d.file.rel)) return { ...d, decision: { action: "skip" as const, reason: "left out by a correction" } };
       const as = override.attach?.[d.file.rel];
       if (as) return { ...d, decision: { action: "attach" as const, kind: as, title: titleFromFilename(d.file.name) } };
       if (!override.cv) return d;
@@ -285,9 +289,9 @@ async function main() {
       if (d.decision.action === "primary_cv") return { ...d, decision: { action: "skip" as const, reason: "not the CV" } };
       return d;
     });
-    for (const rel of Object.keys(override.attach ?? {})) {
+    for (const rel of [...Object.keys(override.attach ?? {}), ...(override.exclude ?? [])]) {
       if (!files.some((f) => f.rel === rel)) {
-        console.error(`${folder}: the correction attaches "${rel}", but there is no such file`);
+        console.error(`${folder}: the correction names "${rel}", but there is no such file`);
         process.exit(1);
       }
     }

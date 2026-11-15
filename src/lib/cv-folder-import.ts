@@ -60,10 +60,10 @@ export function classifyArchiveFile(file: Pick<ArchiveFile, "name" | "ext">): Ar
   if (n.startsWith("~$") || n === "desktop.ini" || n === "thumbs.db") return "junk";
   if ([".zip", ".msg", ".htm", ".html", ".ini", ".db", ".url", ".lnk"].includes(file.ext)) return "junk";
 
-  if (has(n, /payslip|pay slip|paysheet|remittance|salary|bank|account details|savings account|gray application form|beneficiary-nomination|beneficiary nomination|discovery - applying|pension|medical aid|(^|[^a-z])sars([^a-z]|$)|irp5|tax (clearance|number|cert)|proof of (address|banking|residence)/)) return "payroll";
+  if (has(n, /payslip|pay slip|paysheet|remittance|salary|bank ?(statement|confirmation|letter|details|account)|banking details|stamped bank|account details|savings account|gray application form|beneficiary-nomination|beneficiary nomination|discovery - applying|pension|medical aid|(^|[^a-z])sars([^a-z]|$)|irp5|tax (clearance|number|cert)|proof of (address|banking|residence)/)) return "payroll";
   if (has(n, /criminal|credit check|\bmie\b|verification|clearance|afiswitch|background/)) return "vetting";
   if (has(n, /consent|consert|popi|oath of secrecy|new hire|sign-on document|employee information|eea1|consultant information|code of e?thics|code of ehics|conditions of service|\bnda\b|offer|contract|agreement|declaration|questionnaire|information needed/)) return "contract";
-  if (has(n, /(^|[^a-z])id([^a-z]|$)|^said[ _.-]|drivers? ?lic|idcard|driver'?s licen|identity|passport|smart ?card|work permit/)) return "id_document";
+  if (has(n, /(^|[^a-z])id([^a-z]|$)|^said[ _.-]|drivers? ?lic|idcard|i\.d\.? ?copy|driver'?s licen|identity|passport|smart ?card|work permit/)) return "id_document";
   if (has(n, /reference|testimonial|recommendation/)) return "reference";
 
   // A CV before the qualifications, so "CV with certificates" reads as a CV.
@@ -73,7 +73,7 @@ export function classifyArchiveFile(file: Pick<ArchiveFile, "name" | "ext">): Ar
   // only then the bare word: "BSc Degree certificate" and "Matric Certificate"
   // are qualifications, and "certificate" alone would have claimed them.
   // Professional registrations (ECSA, SACPCMP, SAICE, SAIEE) count as certificates.
-  if (has(n, /istqb|iseb|ctfl|sastqb|togaf|cobit|itil|prince2?|sabsa|cmmi|scrum|cissp|azure|agileba|ecsa|sacpcmp|saice|saiee|hpcsa|sabpp|prosci|apmg|hcmbok|hcmp|mcse|ccna|comptia|(^|[^a-z])(pmp|aws)([^a-z]|$)|^[an]\+/)) return "certificate";
+  if (has(n, /istqb|iseb|ctfl|sastqb|(^|[^a-z])re ?[1-5]([^0-9]|$)|(^|[^a-z])c\.?o\.?b\.?([^a-z]|$)|class of business|regulatory.examination|fais|fetc|wealth management|togaf|cobit|itil|prince2?|sabsa|cmmi|scrum|cissp|azure|agileba|ecsa|sacpcmp|saice|saiee|hpcsa|sabpp|prosci|apmg|hcmbok|hcmp|mcse|ccna|comptia|(^|[^a-z])(pmp|aws)([^a-z]|$)|^[an]\+/)) return "certificate";
   if (has(n, /degree|diploma|(^|[^a-z])n ?dip([^a-z]|$)|matric|senior certi|transcript|transcrpt|qualif|saqa|honou?rs|(^|[^a-z])(hons|nd)([^a-z]|$)|b[ -]?tech|b[ -]?com|(^|[^a-z])b[ -]?sc([^a-z]|$)|beng|masters|(^|[^a-z])(mba|nqf|mca|llb|llm)([^a-z]|$)|academic|marksheet|provisional|bachelor|pgdip|postgrad|(^|[^a-z])pmd([^a-z]|$)|soc\.? ?sc|(^|[^a-z])[ao][ -]?level/)) return "qualification";
   if (has(n, /certificat|certfica|cetifica|certified|(^|[^a-z])certs?([^a-z]|$)|attendance|accredit|programme|course|training/)) return "certificate";
 
