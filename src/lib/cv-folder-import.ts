@@ -63,7 +63,7 @@ export function classifyArchiveFile(file: Pick<ArchiveFile, "name" | "ext">): Ar
   if (has(n, /payslip|pay slip|paysheet|remittance|salary|bank|account details|savings account|(^|[^a-z])sars([^a-z]|$)|irp5|tax (clearance|number|cert)|proof of (address|banking|residence)/)) return "payroll";
   if (has(n, /criminal|credit check|\bmie\b|verification|clearance|afiswitch|background/)) return "vetting";
   if (has(n, /consent|consert|popi|oath of secrecy|new hire|sign-on document|employee information|\bnda\b|offer|contract|agreement|declaration|questionnaire|information needed/)) return "contract";
-  if (has(n, /(^|[^a-z])id([^a-z]|$)|(^|[^a-z])said([^a-z]|$)|drivers? ?lic|driver'?s licen|identity|passport|smart ?card|work permit/)) return "id_document";
+  if (has(n, /(^|[^a-z])id([^a-z]|$)|^said[ _.-]|drivers? ?lic|driver'?s licen|identity|passport|smart ?card|work permit/)) return "id_document";
   if (has(n, /reference|testimonial|recommendation/)) return "reference";
 
   // A CV before the qualifications, so "CV with certificates" reads as a CV.

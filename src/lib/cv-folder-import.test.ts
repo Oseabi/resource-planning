@@ -84,6 +84,7 @@ describe("what a file is, from its name", () => {
     ["Remittance For Khotso Charles Mokhethi [2023-03].pdf", "payroll"],
     ["Charles Drivers Lic.pdf", "id_document"],
     ["SAID_pdf.pdf", "id_document"],
+    ["Ahmed Said CV.pdf", "cv"],
     ["Senior Certi.pdf", "qualification"],
     ["Ncumisa Nomna Mbusi Savings Account Details.pdf", "payroll"],
     ["Proof of SARS Number Ncumisa Nomna Mbusi.pdf", "payroll"],
