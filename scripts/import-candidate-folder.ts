@@ -28,7 +28,9 @@
  * --overrides is a JSON object keyed by person folder, for what a check of the
  * record against the document turned up: {"fields": {...}} is laid over what
  * the reader produced, {"skip": "reason"} leaves the person out, and
- * {"accept_name": true} settles a name the reader got differently. It carries
+ * {"accept_name": true} settles a name the reader got differently, {"cv": path}
+ * names the CV, and {"attach": {path: "certificate"}} loads a certificate or
+ * qualification whose file name does not say what it is. It carries
  * personal details, so it stays out of the repo. --dump writes each record and
  * the text it was read from to a folder, for that check; keep it out of the
  * repo too.
@@ -56,6 +58,7 @@ import {
 } from "@/lib/candidate-attachments";
 import {
   planPersonFiles,
+  titleFromFilename,
   findKnownPerson,
   withoutAgencyContact,
   sameName,
@@ -102,6 +105,8 @@ interface Override {
   accept_name?: boolean;
   /** The CV's path within the person's folder, when its name does not say it is one. */
   cv?: string;
+  /** Files whose names do not say what they are, by path within the folder: certificate or qualification. */
+  attach?: Record<string, "certificate" | "qualification">;
 }
 
 function readEnv(): Record<string, string> {
@@ -273,11 +278,19 @@ async function main() {
     const override = overrides[folder] ?? {};
     const decided = planPersonFiles(files, { include, personName: folder }).map((d) => {
       // A correction can name the CV when its file name does not say so.
+      const as = override.attach?.[d.file.rel];
+      if (as) return { ...d, decision: { action: "attach" as const, kind: as, title: titleFromFilename(d.file.name) } };
       if (!override.cv) return d;
       if (d.file.rel === override.cv) return { ...d, decision: { action: "primary_cv" as const } };
       if (d.decision.action === "primary_cv") return { ...d, decision: { action: "skip" as const, reason: "not the CV" } };
       return d;
     });
+    for (const rel of Object.keys(override.attach ?? {})) {
+      if (!files.some((f) => f.rel === rel)) {
+        console.error(`${folder}: the correction attaches "${rel}", but there is no such file`);
+        process.exit(1);
+      }
+    }
     if (override.cv && !decided.some((d) => d.decision.action === "primary_cv")) {
       console.error(`${folder}: the correction names "${override.cv}" as the CV, but there is no such file`);
       process.exit(1);
