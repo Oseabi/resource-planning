@@ -62,6 +62,7 @@ import {
   titleFromFilename,
   findKnownPerson,
   withoutAgencyContact,
+  recordChecks,
   sameName,
   READABLE_CV_EXTENSIONS,
   type ArchiveFile,
@@ -69,8 +70,31 @@ import {
   type KnownPerson,
 } from "@/lib/cv-folder-import";
 import type { CandidateAttachmentKind } from "@/lib/supabase/database.types";
+import { getItemByPath, uploadFile } from "@/lib/sharepoint/graph";
+import { libraryRelativePath } from "@/lib/sharepoint/paths";
 
 const BUCKET = "cvs";
+
+/**
+ * Where a file ends up. With SharePoint configured (MS_TENANT_ID,
+ * MS_CLIENT_ID, MS_CLIENT_SECRET and SHAREPOINT_DRIVE_ID in .env.local), a
+ * file that already sits in the synced library is linked, not copied; a file
+ * that is not in the library (a staged zip's contents, a converted scan) is
+ * uploaded once to "Imported (system)/<role>/<person>/" in the library and
+ * linked. Without SharePoint the file is copied into the cvs bucket as before.
+ */
+type Placed = { kind: "drive"; driveId: string; itemId: string } | { kind: "storage"; path: string };
+const SYSTEM_FOLDER = "Imported (system)";
+
+function sharePointConfig(env: Record<string, string>) {
+  for (const k of ["MS_TENANT_ID", "MS_CLIENT_ID", "MS_CLIENT_SECRET", "SHAREPOINT_DRIVE_ID"]) {
+    if (env[k] && process.env[k] === undefined) process.env[k] = env[k];
+  }
+  if (!(env.MS_TENANT_ID && env.MS_CLIENT_ID && env.MS_CLIENT_SECRET && env.SHAREPOINT_DRIVE_ID)) return null;
+  const libraryRoot =
+    env.SHAREPOINT_LIBRARY_ROOT || path.join(os.homedir(), "TIPP FOCUS HOLDINGS (PTY) LTD", "Resourcing - Candidate Database");
+  return { driveId: env.SHAREPOINT_DRIVE_ID, libraryRoot };
+}
 
 /**
  * LibreOffice turns an old Word .doc into a .docx the reader and the bucket
@@ -201,6 +225,8 @@ interface PersonPlan {
   engine: string;
   attach: { file: ArchiveFile; kind: CandidateAttachmentKind; title: string }[];
   left: { file: ArchiveFile; reason: string }[];
+  /** The CV text, for the checks. */
+  rawText?: string;
 }
 
 async function main() {
@@ -231,6 +257,33 @@ async function main() {
   const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
   });
+  const sp = sharePointConfig(env);
+  console.log(sp ? `Files: linked in SharePoint (library ${sp.libraryRoot})` : "Files: copied into the cvs bucket (SharePoint is not configured)");
+
+  /** Link a file in the library, upload it there if it is not in it, or copy it to the bucket without SharePoint. */
+  async function place(absPath: string, name: string, personFolder: string, prefix: "candidates" | "attachments", ext: string): Promise<Placed> {
+    if (sp) {
+      const rel = libraryRelativePath(sp.libraryRoot, absPath);
+      if (rel) {
+        const item = await getItemByPath(sp.driveId, rel);
+        if (item) return { kind: "drive", driveId: sp.driveId, itemId: item.id };
+        throw new Error(`"${rel}" is not in SharePoint yet (still syncing?)`);
+      }
+      const item = await uploadFile(sp.driveId, `${SYSTEM_FOLDER}/${roleFolder}/${personFolder}`, name, fs.readFileSync(absPath),
+                                    MIME[ext] ?? attachmentContentType(name));
+      return { kind: "drive", driveId: sp.driveId, itemId: item.id };
+    }
+    // Bucket copy: an old Word .doc CV goes in as the .docx the bucket accepts.
+    const docx = prefix === "candidates" && ext === ".doc" ? docAsDocx(absPath) : null;
+    const storeExt = docx ? ".docx" : ext;
+    const objectPath = prefix === "candidates" ? `candidates/${crypto.randomUUID()}${storeExt}` : attachmentStoragePath(crypto.randomUUID(), name);
+    const { error } = await db.storage.from(BUCKET).upload(objectPath, fs.readFileSync(docx ?? absPath), {
+      contentType: prefix === "candidates" ? MIME[storeExt] : attachmentContentType(name),
+      upsert: false,
+    });
+    if (error) throw new Error(error.message);
+    return { kind: "storage", path: objectPath };
+  }
 
   let operator: { id: string; email: string; full_name: string } | null = null;
   if (operatorEmail) {
@@ -363,6 +416,7 @@ async function main() {
         });
       }
       extractedName = fields.full_name || null;
+      plan.rawText = result.raw_text;
       if (dumpDir) {
         fs.mkdirSync(dumpDir, { recursive: true });
         fs.writeFileSync(
@@ -420,6 +474,7 @@ async function main() {
           `${f.skills.length}+${f.technical_skills.length} skills | ${f.certifications.length} certs | ${f.education?.length ?? 0} education | ` +
           `email ${f.email ? "yes" : "NO"} | phone ${f.phone ? "yes" : "NO"}`,
       );
+      for (const c of recordChecks(f, p.rawText ?? "")) console.log(`  check: ${c}`);
     }
     for (const a of p.attach) console.log(`  attach ${a.kind}: ${a.title}  (${a.file.rel})`);
     for (const l of p.left) console.log(`  leave: ${l.file.rel}  (${l.reason})`);
@@ -456,29 +511,27 @@ async function main() {
     let label = p.known?.person.full_name ?? "";
 
     if (!candidateId && p.fields && p.cv) {
-      const docx = p.cv.ext === ".doc" ? docAsDocx(path.join(dir, p.cv.rel)) : null;
-      const storeExt = docx ? ".docx" : p.cv.ext;
-      const cvPath = `candidates/${crypto.randomUUID()}${storeExt}`;
-      const { error: upErr } = await db.storage.from(BUCKET).upload(cvPath, fs.readFileSync(docx ?? path.join(dir, p.cv.rel)), {
-        contentType: MIME[storeExt],
-        upsert: false,
-      });
-      if (upErr) {
-        console.error(`${p.folder}: CV upload failed, person not created: ${upErr.message}`);
+      let placed: Placed;
+      try {
+        placed = await place(path.join(dir, p.cv.rel), p.cv.name, p.folder, "candidates", p.cv.ext);
+      } catch (e) {
+        console.error(`${p.folder}: CV not placed, person not created: ${e instanceof Error ? e.message : e}`);
         continue;
       }
       const { data: row, error } = await db
         .from("candidates")
         .insert({
           ...withoutNul(toCandidateColumns(p.fields, departmentOptions)),
-          cv_file_path: cvPath,
+          ...(placed.kind === "drive"
+            ? { cv_drive_id: placed.driveId, cv_drive_item_id: placed.itemId }
+            : { cv_file_path: placed.path }),
           cv_original_filename: sanitizeFilename(p.cv.name),
           created_by: operator.id,
         })
         .select("id")
         .single();
       if (error || !row) {
-        await db.storage.from(BUCKET).remove([cvPath]);
+        if (placed.kind === "storage") await db.storage.from(BUCKET).remove([placed.path]);
         console.error(`${p.folder}: not created: ${error?.message ?? "no row returned"}`);
         continue;
       }
@@ -509,13 +562,11 @@ async function main() {
     for (const a of p.attach) {
       const original = sanitizeFilename(a.file.name) || "document";
       if (have.has(original)) continue;
-      const filePath = attachmentStoragePath(crypto.randomUUID(), a.file.name);
-      const { error: upErr } = await db.storage.from(BUCKET).upload(filePath, fs.readFileSync(path.join(dir, a.file.rel)), {
-        contentType: attachmentContentType(a.file.name),
-        upsert: false,
-      });
-      if (upErr) {
-        console.error(`${p.folder}: ${a.file.rel} not attached: ${upErr.message}`);
+      let placed: Placed;
+      try {
+        placed = await place(path.join(dir, a.file.rel), a.file.name, p.folder, "attachments", a.file.ext);
+      } catch (e) {
+        console.error(`${p.folder}: ${a.file.rel} not attached: ${e instanceof Error ? e.message : e}`);
         continue;
       }
       const { data: row, error } = await db
@@ -524,14 +575,16 @@ async function main() {
           candidate_id: candidateId,
           kind: a.kind,
           title: a.title,
-          file_path: filePath,
+          ...(placed.kind === "drive"
+            ? { drive_id: placed.driveId, drive_item_id: placed.itemId, file_path: null }
+            : { file_path: placed.path }),
           original_filename: original,
           created_by: operator.id,
         })
         .select("id")
         .single();
       if (error || !row) {
-        await db.storage.from(BUCKET).remove([filePath]);
+        if (placed.kind === "storage") await db.storage.from(BUCKET).remove([placed.path]);
         console.error(`${p.folder}: ${a.file.rel} not attached: ${error?.message ?? "no row returned"}`);
         continue;
       }

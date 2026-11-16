@@ -2,6 +2,10 @@
  * Lists candidates whose stored CV file is missing from storage.
  *
  *   npx tsx scripts/check-cv-files.ts
+ *   npx tsx --conditions=react-server scripts/check-cv-files.ts --sharepoint
+ *
+ * With --sharepoint it also checks that every CV and document linked to
+ * SharePoint still resolves there (needs the Graph settings in .env.local).
  *
  * A dropped connection during an import can leave a candidate row whose CV was
  * removed as the failed upload was cleaned up. Reads .env.local for the
@@ -45,6 +49,27 @@ async function main() {
   const missing = rows.filter((r) => r.cv_file_path && r.cv_file_path.startsWith("candidates/") && !stored.has(r.cv_file_path));
   console.log(`${rows.length} candidates, ${stored.size} CV files in storage, ${missing.length} with a missing CV file`);
   for (const r of missing) console.log(`  ${r.full_name} (${r.id})`);
+
+  if (!process.argv.includes("--sharepoint")) return;
+  for (const [k, v] of Object.entries(env)) if (process.env[k] === undefined) process.env[k] = v;
+  const { getItem } = await import("@/lib/sharepoint/graph");
+  const links: { label: string; driveId: string; itemId: string }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db.from("candidates").select("full_name, cv_drive_id, cv_drive_item_id").not("cv_drive_item_id", "is", null).order("id").range(from, from + 999);
+    if (error) throw error;
+    for (const r of data ?? []) links.push({ label: `CV of ${r.full_name}`, driveId: r.cv_drive_id!, itemId: r.cv_drive_item_id! });
+    if (!data || data.length < 1000) break;
+  }
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db.from("candidate_attachments").select("title, candidate_id, drive_id, drive_item_id").not("drive_item_id", "is", null).order("id").range(from, from + 999);
+    if (error) throw error;
+    for (const r of data ?? []) links.push({ label: `${r.title} (candidate ${r.candidate_id})`, driveId: r.drive_id!, itemId: r.drive_item_id! });
+    if (!data || data.length < 1000) break;
+  }
+  const broken: string[] = [];
+  for (const l of links) if (!(await getItem(l.driveId, l.itemId))) broken.push(l.label);
+  console.log(`${links.length} SharePoint links checked, ${broken.length} broken`);
+  for (const b of broken) console.log(`  ${b}`);
 }
 
 main().catch((e) => {

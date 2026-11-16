@@ -267,3 +267,62 @@ export function findKnownPerson(
   const hit = known.find((k) => sameName(k.full_name, candidate.full_name));
   return hit ? { person: hit, by: "name" } : null;
 }
+
+/** The parts of a record the checks look at. */
+export interface CheckedRecord {
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  skills: string[];
+  technical_skills: string[];
+  work_experience: { title?: string | null; company?: string | null; start_date?: string | null; end_date?: string | null; is_current?: boolean; description?: string | null }[];
+}
+
+const MONTH_YEAR = /^(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}$/;
+const UNSTATED = /^Not (stated|clear) in CV/;
+
+function dateOk(value: string | null | undefined): boolean {
+  return !value || MONTH_YEAR.test(value) || /^\d{4}$/.test(value) || UNSTATED.test(value);
+}
+
+/**
+ * What to look at before a record goes in: the things the reader gets wrong
+ * most often in the archive. Each line is a question for the reviewer, not a
+ * verdict; an empty list means nothing stood out.
+ */
+export function recordChecks(fields: CheckedRecord, rawText: string): string[] {
+  const out: string[] = [];
+  const lines = rawText.split(/\r?\n/);
+
+  const digits = fields.phone?.replace(/\D/g, "") ?? "";
+  if (digits) {
+    const tail = digits.slice(-9);
+    const at = lines.findIndex((l) => l.replace(/\D/g, "").includes(tail));
+    if (at === -1) out.push("phone is not in the CV text");
+    else {
+      const near = lines.slice(Math.max(0, at - 1), at + 1).join(" ");
+      if (/\b(id|identity|dob|date of birth|persal|student|passport)\b/i.test(near)) out.push("phone sits next to an ID/DOB/student label");
+      const refAt = lines.findIndex((l) => /^\s*(references?|referees?)\s*:?\s*$/i.test(l));
+      if (refAt !== -1 && at > refAt) out.push("phone is in the references section");
+    }
+  }
+  if (fields.email) {
+    const at = lines.findIndex((l) => l.toLowerCase().includes(fields.email!.toLowerCase()));
+    const refAt = lines.findIndex((l) => /^\s*(references?|referees?)\s*:?\s*$/i.test(l));
+    if (refAt !== -1 && at > refAt) out.push("email is in the references section");
+  }
+  if (!fields.work_experience.length) out.push("no jobs read");
+  fields.work_experience.forEach((w, i) => {
+    const n = `job ${i + 1} (${w.company ?? "no company"})`;
+    if (!w.title) out.push(`${n}: no title`);
+    if (!w.company) out.push(`${n}: no company`);
+    if (!dateOk(w.start_date) || (!w.is_current && !dateOk(w.end_date))) out.push(`${n}: dates "${w.start_date ?? ""} - ${w.end_date ?? ""}" need a look`);
+    if (!w.description?.trim()) out.push(`${n}: no duties`);
+  });
+  const headingLike = [...fields.skills, ...fields.technical_skills].filter(
+    (s) => s.trim().endsWith(":") || /^(skills?|technical skills|key skills|tools|languages|software)$/i.test(s.trim()) || s.length > 160,
+  );
+  if (headingLike.length) out.push(`skills that look like headings or sentences: ${headingLike.slice(0, 3).join(" | ")}`);
+  if (!fields.skills.length && !fields.technical_skills.length) out.push("no skills read");
+  return out;
+}

@@ -43,6 +43,24 @@ describe("extractEmail", () => {
   });
 });
 
+describe("extractPhone never takes an ID, DOB or referee number", () => {
+  it("skips a 13-digit ID number, solid or grouped", () => {
+    expect(extractPhone("ID NUMBER/DOB\n8308016405184\nCell: 082 123 4567")).toBe("082 123 4567");
+    expect(extractPhone("ID Number: 830801 6405 184")).toBeNull();
+    expect(extractPhone("Identity Number 0001015009087")).toBeNull();
+  });
+  it("skips labelled student and staff numbers", () => {
+    expect(extractPhone("Student No:\n211108774\nMobile 071 555 0101")).toBe("071 555 0101");
+    expect(extractPhone("Persal Number : 26268281")).toBeNull();
+  });
+  it("ignores the references section", () => {
+    expect(extractPhone("Jane Doe\nREFERENCES\nMr X, Manager, 083 261 1035")).toBeNull();
+  });
+  it("keeps lines that merely start with the letters id", () => {
+    expect(extractPhone("Identify defects early\nCell 060 123 4567")).toBe("060 123 4567");
+  });
+});
+
 describe("extractPhone", () => {
   it("finds an international phone number", () => {
     expect(extractPhone(SAMPLE_CV)).toContain("44 7911 123456");

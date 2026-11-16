@@ -7,14 +7,23 @@ import { getSignedCvUrl } from "@/app/(app)/candidates/actions";
 
 export function CvDownloadButton({
   path,
+  href,
   filename,
 }: {
-  path: string;
+  /** A tender document's object path, signed on click. */
+  path?: string;
+  /** The app's own file route (candidate CVs); opened directly. */
+  href?: string;
   filename: string | null;
 }) {
   const [loading, setLoading] = useState(false);
 
   async function handleClick() {
+    if (href) {
+      window.open(href, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (!path) return;
     setLoading(true);
     const { url } = await getSignedCvUrl(path);
     setLoading(false);

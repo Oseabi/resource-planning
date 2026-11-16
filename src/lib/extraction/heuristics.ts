@@ -17,20 +17,60 @@ export function extractEmail(text: string): string | null {
   return match ? match[0].toLowerCase() : null;
 }
 
+// An SA ID number, solid or in its usual 6-4-3 grouping.
+const SA_ID_RE = /(?<!\d)\d{6}[ ]?\d{4}[ ]?\d{3}(?!\d)/g;
+// Labels whose value is never a phone: ID numbers, dates of birth, staff and
+// student numbers, passports. The value may sit on the same line or the next.
+const NOT_A_PHONE_LABEL =
+  /^\s*(?:id\s*number\s*\/\s*dob|(?:id|identity)(?:\s*(?:number|no\.?))?|dob|date\s+of\s+birth|persal(?:\s+number)?|student\s*(?:number|no\.?)|passport(?:\s*(?:number|no\.?))?)\b\s*[:.#-]?\s*(.*)$/i;
+// A references section lists other people's numbers.
+const REFERENCES_HEADING = /^\s*(references?|referees?|reference\s+details)\s*:?\s*$/i;
+
 /**
- * First plausible phone number (9–13 digits). Skips the local-part of any email
- * so "+27..." style numbers aren't confused with address noise.
+ * The text with everything that looks like a number but is not the
+ * candidate's phone taken out: ID numbers, labelled ID/DOB/staff/student
+ * values, and the references section (referees' numbers).
+ */
+export function withoutNonPhoneNumbers(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const out: string[] = [];
+  let skipNext = false;
+  for (const line of lines) {
+    if (REFERENCES_HEADING.test(line)) break;
+    if (skipNext) {
+      skipNext = false;
+      continue;
+    }
+    const m = line.match(NOT_A_PHONE_LABEL);
+    if (m) {
+      if (!m[1]?.trim()) skipNext = true;
+      continue;
+    }
+    out.push(line.replace(SA_ID_RE, " "));
+  }
+  return out.join("\n");
+}
+
+/**
+ * First plausible phone number (9–12 digits). Skips email addresses, ID
+ * numbers, labelled ID/DOB/staff/student values and the references section,
+ * so an ID number or a referee's number is never taken for the candidate's.
  */
 export function extractPhone(text: string): string | null {
-  const withoutEmails = text.replace(new RegExp(EMAIL_RE.source, "gi"), " ");
-  const matches = withoutEmails.match(PHONE_CANDIDATE_RE);
+  const cleaned = withoutNonPhoneNumbers(text).replace(new RegExp(EMAIL_RE.source, "gi"), " ");
+  const matches = cleaned.match(PHONE_CANDIDATE_RE);
   if (!matches) return null;
 
   for (const raw of matches) {
     const digits = raw.replace(/\D/g, "");
-    if (digits.length >= 9 && digits.length <= 13) {
-      return raw.trim().replace(/\s+/g, " ");
-    }
+    if (digits.length < 9 || digits.length > 12) continue;
+    // A real number's shape: a local SA number (0 and nine digits), SA in
+    // international form, or anything written with a leading +. Runs of
+    // version numbers and years in a skills table have none of these.
+    const trimmed = raw.trim();
+    const local = digits.length === 10 && digits.startsWith("0");
+    const za = digits.startsWith("27") && digits.length === 11;
+    if (local || za || trimmed.startsWith("+")) return trimmed.replace(/\s+/g, " ");
   }
   return null;
 }

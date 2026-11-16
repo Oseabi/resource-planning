@@ -8,6 +8,7 @@ import {
   phoneKey,
   findKnownPerson,
   withoutAgencyContact,
+  recordChecks,
   type ArchiveFile,
 } from "@/lib/cv-folder-import";
 
@@ -279,3 +280,27 @@ describe("recognising somebody already on file", () => {
     expect(withoutAgencyContact({ email: "nomsa@example.co.za", phone: "082 555 0101" })).toEqual({ email: "nomsa@example.co.za", phone: "082 555 0101" });
   });
 });
+
+describe("recordChecks", () => {
+  const base = {
+    full_name: "A B", email: null, phone: null, skills: ["Testing"], technical_skills: ["Java"],
+    work_experience: [{ title: "Dev", company: "X", start_date: "May 2019", end_date: "June 2020", is_current: false, description: "Built things" }],
+  };
+  it("is quiet for a clean record", () => {
+    expect(recordChecks(base, "A B")).toEqual([]);
+  });
+  it("flags a phone next to an ID label or among the referees", () => {
+    expect(recordChecks({ ...base, phone: "8308016405" }, "ID NUMBER/DOB\n8308016405184")).toContain("phone sits next to an ID/DOB/student label");
+    expect(recordChecks({ ...base, phone: "0831234567" }, "Me\nREFERENCES\nMr X 083 123 4567")).toContain("phone is in the references section");
+  });
+  it("flags odd dates, missing duties and heading skills", () => {
+    const r = recordChecks(
+      { ...base, skills: ["Skills:"], work_experience: [{ title: "Dev", company: "X", start_date: "May 17", end_date: null, is_current: false, description: "" }] },
+      "",
+    );
+    expect(r.some((x) => x.includes("need a look"))).toBe(true);
+    expect(r.some((x) => x.includes("no duties"))).toBe(true);
+    expect(r.some((x) => x.startsWith("skills that look like headings"))).toBe(true);
+  });
+});
+
