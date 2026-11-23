@@ -5,6 +5,7 @@ import { departmentTheme, themeCss } from "@/lib/department-theme";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { Topbar } from "@/components/layout/topbar";
 import { SessionHeartbeat } from "@/app/(app)/session-heartbeat";
+import { TalentChat } from "@/components/talent-chat/talent-chat";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Cached for the whole render, so pages that also need the user or their role
@@ -60,6 +61,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         />
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-background p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
+      {/* In the layout so a conversation survives moving between pages. */}
+      <TalentChat />
     </div>
   );
 }
