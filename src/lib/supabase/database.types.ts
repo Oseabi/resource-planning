@@ -234,6 +234,10 @@ export interface Database {
           location: string | null;
           cv_file_path: string | null;
           cv_original_filename: string | null;
+          /** SharePoint library holding the CV; set together with cv_drive_item_id. */
+          cv_drive_id: string | null;
+          /** The CV's SharePoint item. Wins over cv_file_path when both are set. */
+          cv_drive_item_id: string | null;
           notes: string | null;
           /** ISO date. Personal information; stripped before any AI call. */
           date_of_birth: string | null;
@@ -268,8 +272,12 @@ export interface Database {
           kind: CandidateAttachmentKind;
           /** What it is called on screen, e.g. "TOGAF 9 Foundation". */
           title: string;
-          /** Object path in the shared private cvs bucket, under attachments/. */
-          file_path: string;
+          /** Object path in the shared private cvs bucket, under attachments/. Null once the file lives in SharePoint. */
+          file_path: string | null;
+          /** SharePoint library holding the file; set together with drive_item_id. */
+          drive_id: string | null;
+          /** The file's SharePoint item. Wins over file_path when both are set. */
+          drive_item_id: string | null;
           /** The uploaded file's own name, sanitised. Shown under the title. */
           original_filename: string;
           /** Who attached it. Null once that account goes; they may remove their own. */
@@ -281,7 +289,6 @@ export interface Database {
           candidate_id: string;
           kind: CandidateAttachmentKind;
           title: string;
-          file_path: string;
           original_filename: string;
         };
         Update: Partial<Database["public"]["Tables"]["candidate_attachments"]["Row"]>;

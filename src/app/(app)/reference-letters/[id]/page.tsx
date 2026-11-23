@@ -66,7 +66,7 @@ export default async function ReferenceLetterPage({
         <div className="flex flex-wrap items-center gap-2">
           {letter.file_path && (
             <ReferenceLetterDownloadButton
-              path={letter.file_path}
+              letterId={letter.id}
               filename={letter.original_filename ?? "Reference letter"}
             />
           )}

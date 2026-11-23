@@ -4,7 +4,7 @@
  *
  *   npx tsx --conditions=react-server scripts/import-candidate-folder.ts "<role folder>"
  *       [--department <slug>] [--include id_document,contract] [--only "<person folder>"]
- *       [--hold "<folder>,<folder>"] [--overrides fixes.json] [--dump <dir>]
+ *       [--hold "<folder>,<folder>"] [--overrides fixes.json] [--dump <dir>] [--slice 0:20]
  *       [--as <email>] [--apply]
  *
  * Dry run is the default: it reads every CV, prints what it would create,
@@ -28,7 +28,10 @@
  * --overrides is a JSON object keyed by person folder, for what a check of the
  * record against the document turned up: {"fields": {...}} is laid over what
  * the reader produced, {"skip": "reason"} leaves the person out, and
- * {"accept_name": true} settles a name the reader got differently. It carries
+ * {"accept_name": true} settles a name the reader got differently, {"cv": path}
+ * names the CV, and {"attach": {path: "certificate"}} loads a certificate or
+ * qualification whose file name does not say what it is, and {"exclude": [path]}
+ * leaves a file out (another person's document filed in the folder). It carries
  * personal details, so it stays out of the repo. --dump writes each record and
  * the text it was read from to a folder, for that check; keep it out of the
  * repo too.
@@ -39,6 +42,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import os from "node:os";
+import { spawnSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
 import { planExtraction, extractFromPlan } from "@/lib/extraction";
 import { tippParsedFully } from "@/lib/extraction/local-parser";
@@ -54,7 +59,10 @@ import {
 } from "@/lib/candidate-attachments";
 import {
   planPersonFiles,
+  titleFromFilename,
   findKnownPerson,
+  withoutAgencyContact,
+  recordChecks,
   sameName,
   READABLE_CV_EXTENSIONS,
   type ArchiveFile,
@@ -62,8 +70,52 @@ import {
   type KnownPerson,
 } from "@/lib/cv-folder-import";
 import type { CandidateAttachmentKind } from "@/lib/supabase/database.types";
+import { getItemByPath, uploadFile } from "@/lib/sharepoint/graph";
+import { libraryRelativePath } from "@/lib/sharepoint/paths";
 
 const BUCKET = "cvs";
+
+/**
+ * Where a file ends up. With SharePoint configured (MS_TENANT_ID,
+ * MS_CLIENT_ID, MS_CLIENT_SECRET and SHAREPOINT_DRIVE_ID in .env.local), a
+ * file that already sits in the synced library is linked, not copied; a file
+ * that is not in the library (a staged zip's contents, a converted scan) is
+ * uploaded once to "Imported (system)/<role>/<person>/" in the library and
+ * linked. Without SharePoint the file is copied into the cvs bucket as before.
+ */
+type Placed = { kind: "drive"; driveId: string; itemId: string } | { kind: "storage"; path: string };
+const SYSTEM_FOLDER = "Imported (system)";
+
+function sharePointConfig(env: Record<string, string>) {
+  for (const k of ["MS_TENANT_ID", "MS_CLIENT_ID", "MS_CLIENT_SECRET", "SHAREPOINT_DRIVE_ID"]) {
+    if (env[k] && process.env[k] === undefined) process.env[k] = env[k];
+  }
+  if (!(env.MS_TENANT_ID && env.MS_CLIENT_ID && env.MS_CLIENT_SECRET && env.SHAREPOINT_DRIVE_ID)) return null;
+  const libraryRoot =
+    env.SHAREPOINT_LIBRARY_ROOT || path.join(os.homedir(), "TIPP FOCUS HOLDINGS (PTY) LTD", "Resourcing - Candidate Database");
+  return { driveId: env.SHAREPOINT_DRIVE_ID, libraryRoot };
+}
+
+/**
+ * LibreOffice turns an old Word .doc into a .docx the reader and the bucket
+ * both take. The copy goes in a temporary folder; the archive is not touched.
+ */
+const SOFFICE = ["C:/Program Files/LibreOffice/program/soffice.exe", "/usr/bin/soffice", "/Applications/LibreOffice.app/Contents/MacOS/soffice"].find((p) =>
+  fs.existsSync(p),
+);
+const converted = new Map<string, string>();
+function docAsDocx(abs: string): string | null {
+  if (!SOFFICE) return null;
+  const hit = converted.get(abs);
+  if (hit) return hit;
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "tipp-doc-"));
+  const run = spawnSync(SOFFICE, ["--headless", "--convert-to", "docx", "--outdir", out, abs], { timeout: 120_000 });
+  const docx = path.join(out, path.basename(abs).replace(/\.doc$/i, ".docx"));
+  if (run.status !== 0 || !fs.existsSync(docx)) return null;
+  converted.set(abs, docx);
+  return docx;
+}
+
 /** Folders inside a role folder that hold files, not a person. */
 const NOT_A_PERSON = /^(original cvs?|qualifications?|format+ed cvs?|cvs?|archive|old|templates?)$/i;
 
@@ -76,6 +128,12 @@ interface Override {
   fields?: Partial<CandidateFormFields>;
   skip?: string;
   accept_name?: boolean;
+  /** The CV's path within the person's folder, when its name does not say it is one. */
+  cv?: string;
+  /** Files whose names do not say what they are, by path within the folder: certificate or qualification. */
+  attach?: Record<string, "certificate" | "qualification">;
+  /** Files to leave out, by path within the folder, e.g. another person's certificate filed here. */
+  exclude?: string[];
 }
 
 function readEnv(): Record<string, string> {
@@ -125,12 +183,41 @@ function walk(root: string, dir = root): ArchiveFile[] {
   return out.sort((a, b) => a.rel.localeCompare(b.rel));
 }
 
+/**
+ * The system never shows an em dash, so one copied out of a CV becomes a
+ * spaced hyphen on the way in. Everything else is kept as the document wrote it.
+ */
+function noEmDashes<T>(value: T): T {
+  if (typeof value === "string") return value.replace(/\s*—\s*/g, " - ") as T;
+  if (Array.isArray(value)) return value.map(noEmDashes) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, noEmDashes(v)])) as T;
+  }
+  return value;
+}
+
+/**
+ * Postgres text cannot hold a NUL character, and some PDFs put one where a
+ * ligature ("ffi", "fl") was, so the whole insert fails. The NUL carries no
+ * meaning, so it is dropped.
+ */
+function withoutNul<T>(value: T): T {
+  if (typeof value === "string") return value.replace(/\u0000/g, "") as T;
+  if (Array.isArray(value)) return value.map(withoutNul) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, withoutNul(v)])) as T;
+  }
+  return value;
+}
+
 const sha = (buffer: Buffer) => crypto.createHash("sha256").update(buffer).digest("hex");
 
 interface PersonPlan {
   folder: string;
   /** Why nothing is created for this folder, when nothing is. */
   hold: string | null;
+  /** The folder earlier in this run that holds the same person, when there is one. */
+  twinOf?: string;
   /** The person already on file, when there is one. */
   known: { person: KnownPerson; by: string } | null;
   fields: CandidateFormFields | null;
@@ -138,6 +225,8 @@ interface PersonPlan {
   engine: string;
   attach: { file: ArchiveFile; kind: CandidateAttachmentKind; title: string }[];
   left: { file: ArchiveFile; reason: string }[];
+  /** The CV text, for the checks. */
+  rawText?: string;
 }
 
 async function main() {
@@ -154,6 +243,9 @@ async function main() {
   }
   const include = (flag("include") ?? "").split(",").map((s) => s.trim()).filter(Boolean) as ArchiveFileKind[];
   const only = flag("only");
+  // --slice 0:20 takes the first twenty subfolders in name order, so a large
+  // role folder can be checked and loaded in batches.
+  const [sliceStart, sliceEnd] = (flag("slice") ?? ":").split(":").map((s) => (s.trim() === "" ? undefined : Number(s)));
   const alsoHold = new Set((flag("hold") ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
   const dumpDir = flag("dump");
   const overridesFile = flag("overrides");
@@ -165,6 +257,33 @@ async function main() {
   const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
   });
+  const sp = sharePointConfig(env);
+  console.log(sp ? `Files: linked in SharePoint (library ${sp.libraryRoot})` : "Files: copied into the cvs bucket (SharePoint is not configured)");
+
+  /** Link a file in the library, upload it there if it is not in it, or copy it to the bucket without SharePoint. */
+  async function place(absPath: string, name: string, personFolder: string, prefix: "candidates" | "attachments", ext: string): Promise<Placed> {
+    if (sp) {
+      const rel = libraryRelativePath(sp.libraryRoot, absPath);
+      if (rel) {
+        const item = await getItemByPath(sp.driveId, rel);
+        if (item) return { kind: "drive", driveId: sp.driveId, itemId: item.id };
+        throw new Error(`"${rel}" is not in SharePoint yet (still syncing?)`);
+      }
+      const item = await uploadFile(sp.driveId, `${SYSTEM_FOLDER}/${roleFolder}/${personFolder}`, name, fs.readFileSync(absPath),
+                                    MIME[ext] ?? attachmentContentType(name));
+      return { kind: "drive", driveId: sp.driveId, itemId: item.id };
+    }
+    // Bucket copy: an old Word .doc CV goes in as the .docx the bucket accepts.
+    const docx = prefix === "candidates" && ext === ".doc" ? docAsDocx(absPath) : null;
+    const storeExt = docx ? ".docx" : ext;
+    const objectPath = prefix === "candidates" ? `candidates/${crypto.randomUUID()}${storeExt}` : attachmentStoragePath(crypto.randomUUID(), name);
+    const { error } = await db.storage.from(BUCKET).upload(objectPath, fs.readFileSync(docx ?? absPath), {
+      contentType: prefix === "candidates" ? MIME[storeExt] : attachmentContentType(name),
+      upsert: false,
+    });
+    if (error) throw new Error(error.message);
+    return { kind: "storage", path: objectPath };
+  }
 
   let operator: { id: string; email: string; full_name: string } | null = null;
   if (operatorEmail) {
@@ -196,7 +315,8 @@ async function main() {
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
     .filter((n) => !only || n === only)
-    .sort((a, b) => a.localeCompare(b));
+    .sort((a, b) => a.localeCompare(b))
+    .slice(sliceStart, sliceEnd);
   const loose = fs.readdirSync(root, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name);
 
   const plans: PersonPlan[] = [];
@@ -212,7 +332,26 @@ async function main() {
       continue;
     }
     const override = overrides[folder] ?? {};
-    const decided = planPersonFiles(files, { include, personName: folder });
+    const decided = planPersonFiles(files, { include, personName: folder }).map((d) => {
+      // A correction can name the CV when its file name does not say so.
+      if (override.exclude?.includes(d.file.rel)) return { ...d, decision: { action: "skip" as const, reason: "left out by a correction" } };
+      const as = override.attach?.[d.file.rel];
+      if (as) return { ...d, decision: { action: "attach" as const, kind: as, title: titleFromFilename(d.file.name) } };
+      if (!override.cv) return d;
+      if (d.file.rel === override.cv) return { ...d, decision: { action: "primary_cv" as const } };
+      if (d.decision.action === "primary_cv") return { ...d, decision: { action: "skip" as const, reason: "not the CV" } };
+      return d;
+    });
+    for (const rel of [...Object.keys(override.attach ?? {}), ...(override.exclude ?? [])]) {
+      if (!files.some((f) => f.rel === rel)) {
+        console.error(`${folder}: the correction names "${rel}", but there is no such file`);
+        process.exit(1);
+      }
+    }
+    if (override.cv && !decided.some((d) => d.decision.action === "primary_cv")) {
+      console.error(`${folder}: the correction names "${override.cv}" as the CV, but there is no such file`);
+      process.exit(1);
+    }
     const cv = decided.find((d) => d.decision.action === "primary_cv")?.file ?? null;
     const plan: PersonPlan = {
       folder,
@@ -248,19 +387,24 @@ async function main() {
       plan.hold = override.skip;
     } else if (!cv) {
       plan.hold = "no CV in the folder";
-    } else if (!READABLE_CV_EXTENSIONS.has(cv.ext)) {
+    } else if (!READABLE_CV_EXTENSIONS.has(cv.ext) && !(cv.ext === ".doc" && docAsDocx(path.join(dir, cv.rel)))) {
       plan.hold = `the only CV is a ${cv.ext} file, which cannot be read; save it as .docx or PDF`;
     } else {
-      const bytes = fs.readFileSync(path.join(dir, cv.rel));
+      const docx = cv.ext === ".doc" ? docAsDocx(path.join(dir, cv.rel)) : null;
+      const readExt = docx ? ".docx" : cv.ext;
+      const readName = docx ? path.basename(docx) : cv.name;
+      const bytes = fs.readFileSync(docx ?? path.join(dir, cv.rel));
       const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-      const extraction = await planExtraction(buffer, MIME[cv.ext], cv.name);
-      const result = await extractFromPlan(extraction, cv.name);
+      const extraction = await planExtraction(buffer, MIME[readExt], readName);
+      const result = await extractFromPlan(extraction, readName);
       const template = extraction.isTipp ? (tippParsedFully(extraction.local) ? "TiPP template, read in full" : "TiPP template, partly read") : "not the template";
-      plan.engine = `${result.engine}, ${template}`;
-      const fields: CandidateFormFields = {
-        ...fieldsFromExtraction(result, { department_ids: [department.id] }),
-        ...(override.fields ?? {}),
-      };
+      plan.engine = `${result.engine}, ${template}${docx ? ", converted from .doc" : ""}`;
+      const fields: CandidateFormFields = withoutAgencyContact(
+        noEmDashes({
+          ...fieldsFromExtraction(result, { department_ids: [department.id] }),
+          ...(override.fields ?? {}),
+        }),
+      );
       // The practice areas come from the roles and skills, so they are worked
       // out again once a correction has changed those.
       if (override.fields && !override.fields.resource_categories) {
@@ -272,6 +416,7 @@ async function main() {
         });
       }
       extractedName = fields.full_name || null;
+      plan.rawText = result.raw_text;
       if (dumpDir) {
         fs.mkdirSync(dumpDir, { recursive: true });
         fs.writeFileSync(
@@ -298,10 +443,14 @@ async function main() {
       phone: plan.fields?.phone ?? null,
     };
     plan.known = findKnownPerson(probe, known) ?? findKnownPerson({ full_name: folder, email: null, phone: null }, known);
-    if (!plan.known && plan.fields) {
-      const twin = findKnownPerson(probe, planned);
-      if (twin) plan.hold = `the same person as the folder "${twin.person.id}" in this run`;
-      else planned.push({ id: folder, ...probe });
+    // A person filed under two folders in one run is one record: the second
+    // folder's documents go on the record the first one creates.
+    if (!plan.known) {
+      const twin = findKnownPerson(probe, planned) ?? findKnownPerson({ full_name: folder, email: null, phone: null }, planned);
+      if (twin) {
+        plan.twinOf = twin.person.id;
+        plan.fields = null;
+      } else if (plan.fields) planned.push({ id: folder, ...probe });
     }
     plans.push(plan);
   }
@@ -311,7 +460,9 @@ async function main() {
   for (const p of plans) {
     const verdict = p.known
       ? `ALREADY ON FILE as ${p.known.person.full_name} (matched by ${p.known.by}); record untouched`
-      : p.fields
+      : p.twinOf
+        ? `SAME PERSON as the folder "${p.twinOf}" in this run; documents go on that record`
+        : p.fields
         ? "CREATE"
         : `HELD: ${p.hold}`;
     console.log(`${p.folder}\n  ${verdict}`);
@@ -323,6 +474,7 @@ async function main() {
           `${f.skills.length}+${f.technical_skills.length} skills | ${f.certifications.length} certs | ${f.education?.length ?? 0} education | ` +
           `email ${f.email ? "yes" : "NO"} | phone ${f.phone ? "yes" : "NO"}`,
       );
+      for (const c of recordChecks(f, p.rawText ?? "")) console.log(`  check: ${c}`);
     }
     for (const a of p.attach) console.log(`  attach ${a.kind}: ${a.title}  (${a.file.rel})`);
     for (const l of p.left) console.log(`  leave: ${l.file.rel}  (${l.reason})`);
@@ -332,8 +484,8 @@ async function main() {
   if (loose.length) console.log(`Loose files in the role folder, not loaded: ${loose.length}`);
 
   const toCreate = plans.filter((p) => p.fields && !p.known);
-  const toExtend = plans.filter((p) => p.known);
-  const held = plans.filter((p) => !p.known && !p.fields);
+  const toExtend = plans.filter((p) => p.known || p.twinOf);
+  const held = plans.filter((p) => !p.known && !p.fields && !p.twinOf);
   console.log(
     `\nWould create ${toCreate.length}, add documents to ${toExtend.length} already on file, hold ${held.length}. ` +
       `${plans.reduce((n, p) => n + p.attach.length, 0)} attachment(s), ${plans.reduce((n, p) => n + p.left.length, 0)} file(s) left behind.`,
@@ -347,38 +499,44 @@ async function main() {
   const departmentOptions = (departments ?? []).map((d) => ({ id: d.id, name: d.name, slug: d.slug }));
   let created = 0;
   let attached = 0;
+  const createdIn = new Map<string, string>();
   for (const p of plans) {
-    if (!p.known && !p.fields) continue;
+    if (!p.known && !p.fields && !p.twinOf) continue;
     const dir = path.join(root, p.folder);
-    let candidateId = p.known?.person.id ?? null;
+    let candidateId = p.known?.person.id ?? (p.twinOf ? (createdIn.get(p.twinOf) ?? null) : null);
+    if (p.twinOf && !candidateId) {
+      console.error(`${p.folder}: "${p.twinOf}" was not created, so its documents have nowhere to go`);
+      continue;
+    }
     let label = p.known?.person.full_name ?? "";
 
     if (!candidateId && p.fields && p.cv) {
-      const cvPath = `candidates/${crypto.randomUUID()}${p.cv.ext}`;
-      const { error: upErr } = await db.storage.from(BUCKET).upload(cvPath, fs.readFileSync(path.join(dir, p.cv.rel)), {
-        contentType: MIME[p.cv.ext],
-        upsert: false,
-      });
-      if (upErr) {
-        console.error(`${p.folder}: CV upload failed, person not created: ${upErr.message}`);
+      let placed: Placed;
+      try {
+        placed = await place(path.join(dir, p.cv.rel), p.cv.name, p.folder, "candidates", p.cv.ext);
+      } catch (e) {
+        console.error(`${p.folder}: CV not placed, person not created: ${e instanceof Error ? e.message : e}`);
         continue;
       }
       const { data: row, error } = await db
         .from("candidates")
         .insert({
-          ...toCandidateColumns(p.fields, departmentOptions),
-          cv_file_path: cvPath,
+          ...withoutNul(toCandidateColumns(p.fields, departmentOptions)),
+          ...(placed.kind === "drive"
+            ? { cv_drive_id: placed.driveId, cv_drive_item_id: placed.itemId }
+            : { cv_file_path: placed.path }),
           cv_original_filename: sanitizeFilename(p.cv.name),
           created_by: operator.id,
         })
         .select("id")
         .single();
       if (error || !row) {
-        await db.storage.from(BUCKET).remove([cvPath]);
+        if (placed.kind === "storage") await db.storage.from(BUCKET).remove([placed.path]);
         console.error(`${p.folder}: not created: ${error?.message ?? "no row returned"}`);
         continue;
       }
       candidateId = row.id;
+      createdIn.set(p.folder, row.id);
       label = p.fields.full_name;
       created += 1;
       await db.from("audit_log").insert({
@@ -404,13 +562,11 @@ async function main() {
     for (const a of p.attach) {
       const original = sanitizeFilename(a.file.name) || "document";
       if (have.has(original)) continue;
-      const filePath = attachmentStoragePath(crypto.randomUUID(), a.file.name);
-      const { error: upErr } = await db.storage.from(BUCKET).upload(filePath, fs.readFileSync(path.join(dir, a.file.rel)), {
-        contentType: attachmentContentType(a.file.name),
-        upsert: false,
-      });
-      if (upErr) {
-        console.error(`${p.folder}: ${a.file.rel} not attached: ${upErr.message}`);
+      let placed: Placed;
+      try {
+        placed = await place(path.join(dir, a.file.rel), a.file.name, p.folder, "attachments", a.file.ext);
+      } catch (e) {
+        console.error(`${p.folder}: ${a.file.rel} not attached: ${e instanceof Error ? e.message : e}`);
         continue;
       }
       const { data: row, error } = await db
@@ -419,14 +575,16 @@ async function main() {
           candidate_id: candidateId,
           kind: a.kind,
           title: a.title,
-          file_path: filePath,
+          ...(placed.kind === "drive"
+            ? { drive_id: placed.driveId, drive_item_id: placed.itemId, file_path: null }
+            : { file_path: placed.path }),
           original_filename: original,
           created_by: operator.id,
         })
         .select("id")
         .single();
       if (error || !row) {
-        await db.storage.from(BUCKET).remove([filePath]);
+        if (placed.kind === "storage") await db.storage.from(BUCKET).remove([placed.path]);
         console.error(`${p.folder}: ${a.file.rel} not attached: ${error?.message ?? "no row returned"}`);
         continue;
       }

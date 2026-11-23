@@ -14,6 +14,7 @@ import { TippCvButton } from "@/app/(app)/candidates/[id]/tipp-cv-button";
 import { missingTemplateFields, type CvSource } from "@/lib/cv-export/build-tipp-cv";
 import { CandidateCvView, Card, Chips } from "@/app/(app)/candidates/[id]/cv-view";
 import { CvDownloadButton } from "@/app/(app)/candidates/[id]/cv-download-button";
+import { cvSource, fileRoute } from "@/lib/candidate-files";
 import { CandidateAttachments } from "@/app/(app)/candidates/[id]/attachments-list";
 import { AttachmentUploadDialog } from "@/app/(app)/candidates/[id]/attachment-upload-dialog";
 import { certificateTitleSuggestions } from "@/lib/candidate-attachments";
@@ -102,8 +103,8 @@ export default async function CandidateProfilePage({
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {candidate.cv_file_path && (
-            <CvDownloadButton path={candidate.cv_file_path} filename={candidate.cv_original_filename} />
+          {cvSource(candidate) && (
+            <CvDownloadButton href={fileRoute("cv", candidate.id)} filename={candidate.cv_original_filename} />
           )}
           <TippCvButton
             candidateId={candidate.id}
@@ -173,8 +174,8 @@ export default async function CandidateProfilePage({
               adding to the pile. */}
           <div>
             <h3 className="mb-1.5 text-label-sm font-medium text-muted-foreground">CV</h3>
-            {candidate.cv_file_path ? (
-              <CvDownloadButton path={candidate.cv_file_path} filename={candidate.cv_original_filename} />
+            {cvSource(candidate) ? (
+              <CvDownloadButton href={fileRoute("cv", candidate.id)} filename={candidate.cv_original_filename} />
             ) : (
               <p className="text-body-sm text-muted-foreground">No CV on file.</p>
             )}

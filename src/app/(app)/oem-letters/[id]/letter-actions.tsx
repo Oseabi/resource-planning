@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Loader2, Trash2 } from "lucide-react";
+import { Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,31 +11,18 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { getSignedLetterUrl, deleteOemLetter } from "@/app/(app)/oem-letters/actions";
+import { deleteOemLetter } from "@/app/(app)/oem-letters/actions";
+import { fileRoute } from "@/lib/candidate-files";
 
-/** Fetches a short-lived signed URL, then opens the document in a new tab. */
-export function LetterDownloadButton({
-  path,
-  filename,
-}: {
-  path: string;
-  filename: string | null;
-}) {
-  const [busy, setBusy] = useState(false);
-
-  async function open() {
-    setBusy(true);
-    try {
-      const { url } = await getSignedLetterUrl(path);
-      if (url) window.open(url, "_blank", "noopener,noreferrer");
-    } finally {
-      setBusy(false);
-    }
-  }
-
+/** Opens the letter through the app's file route, straight from the click. */
+export function LetterDownloadButton({ letterId, filename }: { letterId: string; filename: string | null }) {
   return (
-    <Button variant="outline" size="sm" onClick={open} disabled={busy}>
-      {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => window.open(fileRoute("oem-letter", letterId), "_blank", "noopener,noreferrer")}
+    >
+      <Download className="size-4" />
       {filename ?? "Download letter"}
     </Button>
   );

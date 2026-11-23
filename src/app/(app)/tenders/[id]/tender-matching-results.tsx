@@ -18,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { TENDER_STRONG_MATCH_THRESHOLD, type PoolGap } from "@/lib/matching";
 import { runTenderMatch, placeCandidateForTender } from "@/app/(app)/tenders/actions";
+import { saveBlob } from "@/lib/save-file";
 
 export interface TenderMatchView {
   matchId: string;
@@ -73,12 +74,7 @@ export function TenderMatchingResults({
     );
     const csv = [header.join(","), ...lines].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${tenderTitle.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-matches.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    saveBlob(blob, `${tenderTitle.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-matches.csv`);
   }
 
   return (

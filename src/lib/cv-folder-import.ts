@@ -60,10 +60,12 @@ export function classifyArchiveFile(file: Pick<ArchiveFile, "name" | "ext">): Ar
   if (n.startsWith("~$") || n === "desktop.ini" || n === "thumbs.db") return "junk";
   if ([".zip", ".msg", ".htm", ".html", ".ini", ".db", ".url", ".lnk"].includes(file.ext)) return "junk";
 
-  if (has(n, /payslip|pay slip|salary|bank|irp5|tax (clearance|number|cert)|proof of (address|banking|residence)/)) return "payroll";
+  // A client submission copy of a CV: "BMW 20200505_Name.docx", "TYME 2020526_ Name.pdf", "DCS 20200114_ Name.pdf".
+  if (has(n, /^[a-z&]{2,12} ?-? ?20[12]\d{4,5} ?[_-]/)) return "cv";
+  if (has(n, /payslip|pay slip|pmn?t adv|payment advice|paysheet|remittance|salary|bank ?(statement|confirmation|letter|details|account)|banking details|stamped bank|account details|savings account|gray application form|beneficiary-nomination|beneficiary nomination|discovery - applying|pension|medical aid|(^|[^a-z])sars([^a-z]|$)|irp5|tax (clearance|number|cert)|proof of (address|banking|residence)/)) return "payroll";
   if (has(n, /criminal|credit check|\bmie\b|verification|clearance|afiswitch|background/)) return "vetting";
-  if (has(n, /consent|popi|\bnda\b|offer|contract|agreement|declaration|questionnaire|information needed/)) return "contract";
-  if (has(n, /(^|[^a-z])id([^a-z]|$)|identity|passport|smart ?card|work permit/)) return "id_document";
+  if (has(n, /consent|consert|popi|oath of secrecy|new hire|sign-on document|employee information|eea1|consultant information|code of e?thics|code of ehics|conditions of service|\bnda\b|offer|contract|agreement|declaration|questionnaire|information needed/)) return "contract";
+  if (has(n, /(^|[^a-z])id([^a-z]|$)|^said[ _.-]|drivers? ?lic|idcard|i\.d\.? ?copy|driver'?s licen|identity|passport|smart ?card|work permit/)) return "id_document";
   if (has(n, /reference|testimonial|recommendation/)) return "reference";
 
   // A CV before the qualifications, so "CV with certificates" reads as a CV.
@@ -72,9 +74,10 @@ export function classifyArchiveFile(file: Pick<ArchiveFile, "name" | "ext">): Ar
   // A named certification first, then anything that reads as a degree, and
   // only then the bare word: "BSc Degree certificate" and "Matric Certificate"
   // are qualifications, and "certificate" alone would have claimed them.
-  if (has(n, /togaf|cobit|itil|prince2?|sabsa|cmmi|scrum|cissp|azure|(^|[^a-z])(pmp|aws)([^a-z]|$)/)) return "certificate";
-  if (has(n, /degree|diploma|matric|senior certificate|transcript|qualif|saqa|honou?rs|(^|[^a-z])hons([^a-z]|$)|b[ -]?tech|b[ -]?com|(^|[^a-z])b[ -]?sc([^a-z]|$)|beng|masters|(^|[^a-z])(mba|nqf|mca)([^a-z]|$)|academic|marksheet|provisional/)) return "qualification";
-  if (has(n, /certificat|(^|[^a-z])certs?([^a-z]|$)|attendance|accredit/)) return "certificate";
+  // Professional registrations (ECSA, SACPCMP, SAICE, SAIEE) count as certificates.
+  if (has(n, /istqb|iseb|ctfl|sastqb|(^|[^a-z])re ?[1-5]([^0-9]|$)|(^|[^a-z])c\.?o\.?b\.?([^a-z]|$)|class of business|regulatory.examination|fais|fetc|wealth management|togaf|cobit|itil|prince2?|sabsa|cmmi|scrum|cissp|azure|agileba|ecsa|sacpcmp|saice|saiee|hpcsa|sabpp|prosci|apmg|hcmbok|hcmp|mcse|ccna|comptia|(^|[^a-z])(pmp|aws)([^a-z]|$)|^[an]\+/)) return "certificate";
+  if (has(n, /degree|diploma|(^|[^a-z])n ?dip([^a-z]|$)|matric|senior certi|transcript|transcrpt|qualif|saqa|honou?rs|(^|[^a-z])(hons|nd)([^a-z]|$)|b[ -]?tech|b[ -]?com|(^|[^a-z])b[ -]?sc([^a-z]|$)|beng|masters|(^|[^a-z])(mba|nqf|mca|llb|llm)([^a-z]|$)|academic|marksheet|provisional|bachelor|pgdip|postgrad|(^|[^a-z])pmd([^a-z]|$)|soc\.? ?sc|(^|[^a-z])[ao][ -]?level/)) return "qualification";
+  if (has(n, /certificat|certfica|cetifica|certified|(^|[^a-z])certs?([^a-z]|$)|attendance|accredit|programme|course|training/)) return "certificate";
 
   return "unknown";
 }
@@ -209,6 +212,29 @@ export function phoneKey(phone: string | null | undefined): string | null {
   return digits.length >= 9 ? digits.slice(-9) : null;
 }
 
+/**
+ * TiPP's own contact details. The newer CV template prints the account
+ * manager's email and the office line on its cover page, so a reader can take
+ * them for the candidate's, and two CVs would then look like one person.
+ */
+const AGENCY_EMAIL = /@tippfocus\.co\.za$/i;
+const AGENCY_PHONE_KEYS = new Set([phoneKey("011 805 3447")]);
+
+export function isAgencyContact(value: { email?: string | null; phone?: string | null }): boolean {
+  if (value.email && AGENCY_EMAIL.test(value.email.trim())) return true;
+  const key = phoneKey(value.phone);
+  return key !== null && AGENCY_PHONE_KEYS.has(key);
+}
+
+/** The fields with TiPP's own email and phone taken out. */
+export function withoutAgencyContact<T extends { email: string | null; phone: string | null }>(fields: T): T {
+  return {
+    ...fields,
+    email: fields.email && isAgencyContact({ email: fields.email }) ? null : fields.email,
+    phone: fields.phone && isAgencyContact({ phone: fields.phone }) ? null : fields.phone,
+  };
+}
+
 export interface KnownPerson {
   id: string;
   full_name: string;
@@ -227,6 +253,7 @@ export function findKnownPerson(
   candidate: { full_name: string; email: string | null; phone: string | null },
   known: KnownPerson[],
 ): { person: KnownPerson; by: "email" | "phone" | "name" } | null {
+  candidate = withoutAgencyContact(candidate);
   const email = candidate.email?.trim().toLowerCase();
   if (email) {
     const hit = known.find((k) => k.email?.trim().toLowerCase() === email);
@@ -239,4 +266,63 @@ export function findKnownPerson(
   }
   const hit = known.find((k) => sameName(k.full_name, candidate.full_name));
   return hit ? { person: hit, by: "name" } : null;
+}
+
+/** The parts of a record the checks look at. */
+export interface CheckedRecord {
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  skills: string[];
+  technical_skills: string[];
+  work_experience: { title?: string | null; company?: string | null; start_date?: string | null; end_date?: string | null; is_current?: boolean; description?: string | null }[];
+}
+
+const MONTH_YEAR = /^(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}$/;
+const UNSTATED = /^Not (stated|clear) in CV/;
+
+function dateOk(value: string | null | undefined): boolean {
+  return !value || MONTH_YEAR.test(value) || /^\d{4}$/.test(value) || UNSTATED.test(value);
+}
+
+/**
+ * What to look at before a record goes in: the things the reader gets wrong
+ * most often in the archive. Each line is a question for the reviewer, not a
+ * verdict; an empty list means nothing stood out.
+ */
+export function recordChecks(fields: CheckedRecord, rawText: string): string[] {
+  const out: string[] = [];
+  const lines = rawText.split(/\r?\n/);
+
+  const digits = fields.phone?.replace(/\D/g, "") ?? "";
+  if (digits) {
+    const tail = digits.slice(-9);
+    const at = lines.findIndex((l) => l.replace(/\D/g, "").includes(tail));
+    if (at === -1) out.push("phone is not in the CV text");
+    else {
+      const near = lines.slice(Math.max(0, at - 1), at + 1).join(" ");
+      if (/\b(id|identity|dob|date of birth|persal|student|passport)\b/i.test(near)) out.push("phone sits next to an ID/DOB/student label");
+      const refAt = lines.findIndex((l) => /^\s*(references?|referees?)\s*:?\s*$/i.test(l));
+      if (refAt !== -1 && at > refAt) out.push("phone is in the references section");
+    }
+  }
+  if (fields.email) {
+    const at = lines.findIndex((l) => l.toLowerCase().includes(fields.email!.toLowerCase()));
+    const refAt = lines.findIndex((l) => /^\s*(references?|referees?)\s*:?\s*$/i.test(l));
+    if (refAt !== -1 && at > refAt) out.push("email is in the references section");
+  }
+  if (!fields.work_experience.length) out.push("no jobs read");
+  fields.work_experience.forEach((w, i) => {
+    const n = `job ${i + 1} (${w.company ?? "no company"})`;
+    if (!w.title) out.push(`${n}: no title`);
+    if (!w.company) out.push(`${n}: no company`);
+    if (!dateOk(w.start_date) || (!w.is_current && !dateOk(w.end_date))) out.push(`${n}: dates "${w.start_date ?? ""} - ${w.end_date ?? ""}" need a look`);
+    if (!w.description?.trim()) out.push(`${n}: no duties`);
+  });
+  const headingLike = [...fields.skills, ...fields.technical_skills].filter(
+    (s) => s.trim().endsWith(":") || /^(skills?|technical skills|key skills|tools|languages|software)$/i.test(s.trim()) || s.length > 160,
+  );
+  if (headingLike.length) out.push(`skills that look like headings or sentences: ${headingLike.slice(0, 3).join(" | ")}`);
+  if (!fields.skills.length && !fields.technical_skills.length) out.push("no skills read");
+  return out;
 }

@@ -17,6 +17,7 @@ import type {
 } from "@/lib/supabase/database.types";
 import { toCandidateColumns } from "@/lib/candidate-columns";
 import { loadDepartmentContext } from "@/lib/departments-repo";
+import { storeCandidateFile } from "@/lib/candidate-file-store";
 
 type CandidateUpdate = Database["public"]["Tables"]["candidates"]["Update"];
 
@@ -102,20 +103,19 @@ async function findDuplicate(
   return data && data.length > 0 ? data[0] : null;
 }
 
-async function uploadCv(
-  file: File,
-  candidateHint: string,
-): Promise<{ path: string; originalName: string }> {
-  const admin = createAdminClient();
+/**
+ * Keep an uploaded CV: in SharePoint when it is configured, otherwise in the
+ * private bucket. Returns the columns to set on the candidate row.
+ */
+async function uploadCv(file: File, candidateId: string): Promise<CandidateUpdate> {
   const ext = file.name.includes(".") ? file.name.split(".").pop() : "bin";
-  const path = `${candidateHint}/${crypto.randomUUID()}.${ext}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const { error } = await admin.storage.from(CV_BUCKET).upload(path, buffer, {
-    contentType: file.type || "application/octet-stream",
-    upsert: false,
-  });
-  if (error) throw new Error(`CV upload failed: ${error.message}`);
-  return { path, originalName: sanitizeFilename(file.name) };
+  const stored = await storeCandidateFile(file, candidateId, `candidates/${crypto.randomUUID()}.${ext}`);
+  return stored.kind === "drive"
+    ? { cv_drive_id: stored.driveId, cv_drive_item_id: stored.itemId, cv_file_path: null, cv_original_filename: sanitizeFilename(file.name) }
+    // The SharePoint columns are left out here so a bucket upload also works on
+    // a database without migration 0027; they are only ever set together with
+    // SharePoint being configured, when uploads go the other way.
+    : { cv_file_path: stored.path, cv_original_filename: sanitizeFilename(file.name) };
 }
 
 function parsePayload(formData: FormData): { fields: CandidateFormFields; force: boolean } {
@@ -149,14 +149,14 @@ export async function saveCandidate(formData: FormData): Promise<SaveCandidateSt
     if (dup) return { status: "duplicate", match: dup };
   }
 
-  let cvPath: string | null = null;
-  let cvName: string | null = null;
+  // The id is chosen here so an uploaded CV can be filed in SharePoint under
+  // the candidate's own folder before the row exists.
+  const newId = crypto.randomUUID();
+  let cvColumns: CandidateUpdate = {};
   const file = formData.get("file");
   if (file instanceof File && file.size > 0) {
     try {
-      const uploaded = await uploadCv(file, "candidates");
-      cvPath = uploaded.path;
-      cvName = uploaded.originalName;
+      cvColumns = await uploadCv(file, newId);
     } catch (e) {
       return { status: "error", message: e instanceof Error ? e.message : "CV upload failed." };
     }
@@ -167,8 +167,8 @@ export async function saveCandidate(formData: FormData): Promise<SaveCandidateSt
     .from("candidates")
     .insert({
       ...toCandidateColumns(fields, departments),
-      cv_file_path: cvPath,
-      cv_original_filename: cvName,
+      ...cvColumns,
+      id: newId,
       created_by: user.id,
     })
     .select("id")
@@ -183,7 +183,7 @@ export async function saveCandidate(formData: FormData): Promise<SaveCandidateSt
     entityType: "candidate",
     entityId: data.id,
     entityLabel: fields.full_name,
-    detail: { from_cv: Boolean(cvPath) },
+    detail: { from_cv: Boolean(cvColumns.cv_original_filename) },
   });
 
   revalidatePath("/candidates");
@@ -223,9 +223,7 @@ export async function updateCandidate(formData: FormData): Promise<SaveCandidate
   const file = formData.get("file");
   if (file instanceof File && file.size > 0) {
     try {
-      const uploaded = await uploadCv(file, "candidates");
-      updates.cv_file_path = uploaded.path;
-      updates.cv_original_filename = uploaded.originalName;
+      Object.assign(updates, await uploadCv(file, candidateId));
     } catch (e) {
       return { status: "error", message: e instanceof Error ? e.message : "CV upload failed." };
     }
@@ -244,10 +242,11 @@ export async function deleteCandidate(
 ): Promise<{ error: string | null }> {
   const supabase = await createClient();
 
-  // Fetch the CV path before deleting so we can clean up storage.
+  // Fetch the CV path before deleting so we can clean up storage. "*" so this
+  // works with or without the SharePoint columns from migration 0027.
   const { data: candidate } = await supabase
     .from("candidates")
-    .select("cv_file_path, full_name")
+    .select("*")
     .eq("id", candidateId)
     .single();
 
@@ -279,7 +278,7 @@ export async function deleteCandidate(
     entityId: candidateId,
     entityLabel: candidate?.full_name ?? null,
     detail: {
-      had_cv: Boolean(candidate?.cv_file_path),
+      had_cv: Boolean(candidate?.cv_file_path || candidate?.cv_drive_item_id),
       attachments: attachments?.length ?? 0,
     },
   });
@@ -287,10 +286,12 @@ export async function deleteCandidate(
   await purgeActivity("candidate", candidateId);
 
   // One call: the CV and every attachment are in the same private bucket, the
-  // CV under candidates/ and the documents under attachments/.
+  // CV under candidates/ and the documents under attachments/. Files in
+  // SharePoint are left alone: the library is the company archive, so only
+  // the link to them goes with the record.
   const storagePaths = [
     ...(candidate?.cv_file_path ? [candidate.cv_file_path] : []),
-    ...(attachments ?? []).map((a) => a.file_path),
+    ...(attachments ?? []).map((a) => a.file_path).filter((p): p is string => Boolean(p)),
   ];
   if (storagePaths.length > 0) {
     await createAdminClient().storage.from(CV_BUCKET).remove(storagePaths);
@@ -298,17 +299,4 @@ export async function deleteCandidate(
 
   revalidatePath("/candidates");
   return { error: null };
-}
-
-export async function getSignedCvUrl(path: string): Promise<{ url: string | null }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { url: null };
-
-  const { data } = await createAdminClient()
-    .storage.from(CV_BUCKET)
-    .createSignedUrl(path, 120); // 2-minute link
-  return { url: data?.signedUrl ?? null };
 }

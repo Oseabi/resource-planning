@@ -6,7 +6,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { recordAudit } from "@/app/(app)/audit-actions";
 import { recordEvent } from "@/app/(app)/activity-actions";
 import {
-  ATTACHMENT_PREFIX,
   attachmentContentType,
   attachmentFileError,
   attachmentKindLabel,
@@ -14,6 +13,7 @@ import {
   isAttachmentKind,
 } from "@/lib/candidate-attachments";
 import type { CandidateAttachmentKind } from "@/lib/supabase/database.types";
+import { discardStoredFile, storeCandidateFile, type StoredFile } from "@/lib/candidate-file-store";
 
 // Shares the private cvs bucket rather than adding a fourth. Tender documents
 // already live in it under tenders/ and the CVs under candidates/; documents on
@@ -67,14 +67,13 @@ export async function uploadCandidateAttachment(formData: FormData): Promise<Att
   const fileError = attachmentFileError(file);
   if (fileError) return { error: fileError };
 
-  const path = attachmentStoragePath(crypto.randomUUID(), file.name);
-  const { error: uploadError } = await createAdminClient()
-    .storage.from(ATTACHMENT_BUCKET)
-    .upload(path, Buffer.from(await file.arrayBuffer()), {
-      contentType: attachmentContentType(file.name, file.type),
-      upsert: false,
-    });
-  if (uploadError) return { error: `Upload failed: ${uploadError.message}` };
+  let stored: StoredFile;
+  try {
+    stored = await storeCandidateFile(file, candidateId, attachmentStoragePath(crypto.randomUUID(), file.name),
+                                      attachmentContentType(file.name, file.type));
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Upload failed." };
+  }
 
   const { data, error } = await supabase
     .from("candidate_attachments")
@@ -82,7 +81,9 @@ export async function uploadCandidateAttachment(formData: FormData): Promise<Att
       candidate_id: candidateId,
       kind: fields.kind,
       title,
-      file_path: path,
+      ...(stored.kind === "drive"
+        ? { drive_id: stored.driveId, drive_item_id: stored.itemId, file_path: null }
+        : { file_path: stored.path }),
       original_filename: sanitizeFilename(file.name) || "document",
       created_by: user.id,
     })
@@ -92,7 +93,7 @@ export async function uploadCandidateAttachment(formData: FormData): Promise<Att
   if (error || !data) {
     // The path existed only in the row that just failed, so without this the
     // object is an orphan nobody can ever find, let alone remove.
-    await createAdminClient().storage.from(ATTACHMENT_BUCKET).remove([path]);
+    await discardStoredFile(stored);
     return { error: error?.message ?? "Could not attach the document." };
   }
 
@@ -160,26 +161,11 @@ export async function deleteCandidateAttachment(
     title: attachment.title,
   });
 
-  await createAdminClient().storage.from(ATTACHMENT_BUCKET).remove([attachment.file_path]);
+  // A SharePoint file stays in the library; only a bucket copy is removed.
+  if (attachment.file_path) {
+    await createAdminClient().storage.from(ATTACHMENT_BUCKET).remove([attachment.file_path]);
+  }
 
   revalidatePath(`/candidates/${attachment.candidate_id}`);
   return { error: null };
-}
-
-/** A short-lived link to a stored document. */
-export async function getSignedAttachmentUrl(path: string): Promise<{ url: string | null }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { url: null };
-
-  // The bucket holds CVs and tender documents too, so this signs nothing
-  // outside attachments/ rather than becoming a general-purpose signer.
-  if (!path.startsWith(ATTACHMENT_PREFIX)) return { url: null };
-
-  const { data } = await createAdminClient()
-    .storage.from(ATTACHMENT_BUCKET)
-    .createSignedUrl(path, 120); // 2-minute link
-  return { url: data?.signedUrl ?? null };
 }

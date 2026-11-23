@@ -3,6 +3,7 @@
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toCsv } from "@/lib/csv";
+import { saveBlob } from "@/lib/save-file";
 
 /**
  * Hands the rows straight to a file.
@@ -30,12 +31,7 @@ export function ExportButton({
     const blob = new Blob(["﻿" + toCsv(headers, rows)], {
       type: "text/csv;charset=utf-8",
     });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    saveBlob(blob, filename);
   }
 
   return (

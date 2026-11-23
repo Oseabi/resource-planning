@@ -7,6 +7,8 @@ import {
   sameName,
   phoneKey,
   findKnownPerson,
+  withoutAgencyContact,
+  recordChecks,
   type ArchiveFile,
 } from "@/lib/cv-folder-import";
 
@@ -47,6 +49,30 @@ describe("what a file is, from its name", () => {
     ["B-Tech IT TUT.pdf", "qualification"],
     ["Hons.pdf", "qualification"],
     ["Nomsa Dube_PMD_Transcript.pdf", "qualification"],
+    ["Bachelor of Business Administration in Risk Management.pdf", "qualification"],
+    ["management advancement programme 24 Nov 2000.PDF", "certificate"],
+    ["M Rooplall PMI Certfication.pdf", "certificate"],
+    ["PGDip_UCT.pdf", "qualification"],
+    ["AgileBA 2000906150-AGBAF.PDF", "certificate"],
+    ["MCSE.PDF", "certificate"],
+    ["HCMBOK-30-5065.PDF", "certificate"],
+    ["HCMP-30-5073.PDF", "certificate"],
+    ["Gibs_PMD.pdf", "qualification"],
+    ["Sign-On Document Non Permanent Employees Rev 8 (2).pdf", "contract"],
+    ["Prosci change management .pdf", "certificate"],
+    ["Kabelo.Mogale.APMG.pdf", "certificate"],
+    ["Certified HR OD Practitioner _ Nyembe _ January 9, 2023.pdf", "certificate"],
+    ["HPCSA Practitioner_Registration_Winnie Mosidi.pdf", "certificate"],
+    ["A+.pdf", "certificate"],
+    ["N+.pdf", "certificate"],
+    ["LLB (certified Copy).pdf", "qualification"],
+    ["B.Soc.Sc.pdf", "qualification"],
+    ["4. o level.pdf", "qualification"],
+    ["consert form.pdf", "contract"],
+    ["ECSA.pdf", "certificate"],
+    ["SACPCMP.pdf", "certificate"],
+    ["ND Civil.pdf", "qualification"],
+    ["Fundamentals.pdf", "unknown"],
     ["Nomsa ID-RSA (1).pdf", "id_document"],
     ["ID_SM.pdf", "id_document"],
     ["Certified Identity Document - Nomsa Dube.pdf", "id_document"],
@@ -55,6 +81,56 @@ describe("what a file is, from its name", () => {
     ["Joburg Water Consent Form - Nomsa Dube.pdf", "contract"],
     ["2. Candidate Information Needed for Submission to Client.pdf", "contract"],
     ["Payslip March.pdf", "payroll"],
+    ["Paysheet 6006280919.pdf", "payroll"],
+    ["Remittance For Khotso Charles Mokhethi [2023-03].pdf", "payroll"],
+    ["Charles Drivers Lic.pdf", "id_document"],
+    ["SAID_pdf.pdf", "id_document"],
+    ["IDCard.pdf", "id_document"],
+    ["transcrpt.doc", "qualification"],
+    ["Ahmed Said CV.pdf", "cv"],
+    ["RE5 (1).pdf", "certificate"],
+    ["RE 1.pdf", "certificate"],
+    ["COB9 (1).pdf", "certificate"],
+    ["C.O.B. COMMERCIAL LINES.pdf", "certificate"],
+    ["Class of Business Commercial Lines.pdf", "certificate"],
+    ["Kagiso Molefe Fais Credits.pdf", "certificate"],
+    ["FETC in Short Term Insurance.pdf", "certificate"],
+    ["Wealth Management.pdf", "certificate"],
+    ["BMW 20200505_Meshalk Jabulani Msipha.docx", "cv"],
+    ["TYME 2020526_ Nakedi Mabusela.pdf", "cv"],
+    ["BMW 20200317 - Mohammad Faiz Ahamad.pdf", "cv"],
+    ["SARS 20200301_ Name Surname.docx", "cv"],
+    ["Pmnt Adv - 03.2020 - Ngubane M.pdf", "payroll"],
+    ["Pmt Adv - 04.2020 - Ngubane M.pdf", "payroll"],
+    ["Banking Cert NQF LEVEL 5 120 CRED.pdf", "qualification"],
+    ["Nedbank Test Analyst CV.docx", "cv"],
+    ["Bank statement March.pdf", "payroll"],
+    ["Bank Confirmation Letter.pdf", "payroll"],
+    ["Banking details.pdf", "payroll"],
+    ["Regulatory-Examination-Key-Individual-I-II-IIA-III-and-IV.pdf", "certificate"],
+    ["scan i.d copy.pdf", "id_document"],
+    ["Cobus Smit CV.pdf", "cv"],
+    ["Regional Manager Resume.docx", "cv"],
+    ["ISTQB QUALIFICATION .pdf", "certificate"],
+    ["Iseb Cetificate.pdf", "certificate"],
+    ["Istqb ISEB CTFL.pdf", "certificate"],
+    ["sastqb_Name_CTFL (2).png", "certificate"],
+    ["NDip Computer Systems Engineering.pdf", "qualification"],
+    ["NDIP IT (Software Development).png", "qualification"],
+    ["EEA1 Forms.pdf", "contract"],
+    ["Consultant Information Form.pdf", "contract"],
+    ["Code of Ehics and Conduct.pdf", "contract"],
+    ["Conditions of Service NEW.pdf", "contract"],
+    ["2022 Allan Gray application form .pdf", "payroll"],
+    ["2023 -TSA-Beneficiary-Nomination-Form.pdf", "payroll"],
+    ["2023 Discovery - Applying to join as new member.pdf", "payroll"],
+    ["Tipp Focus - Name - Discovery.docx", "cv"],
+    ["Senior Certi.pdf", "qualification"],
+    ["Ncumisa Nomna Mbusi Savings Account Details.pdf", "payroll"],
+    ["Proof of SARS Number Ncumisa Nomna Mbusi.pdf", "payroll"],
+    ["Ncumisa Oath of Secrecy.pdf", "contract"],
+    ["Ncumisa New Hire Checklist.pdf", "contract"],
+    ["Ncumisa Employee Information.pdf", "contract"],
     ["Proof of banking.pdf", "payroll"],
     ["Criminal check.pdf", "vetting"],
     ["MIE verification report.pdf", "vetting"],
@@ -196,4 +272,35 @@ describe("recognising somebody already on file", () => {
     expect(findKnownPerson({ full_name: "Sipho Dube", email: null, phone: null }, known)).toMatchObject({ by: "name", person: { id: "b" } });
     expect(findKnownPerson({ full_name: "Lerato Mokoena", email: null, phone: null }, known)).toBeNull();
   });
+
+  it("never matches two people on TiPP's own email or office line", () => {
+    const agency = [{ id: "p", full_name: "Piet Radebe", email: "samantha@tippfocus.co.za", phone: "011 805 3447" }];
+    expect(findKnownPerson({ full_name: "Sanah Sibaya", email: "brendam@tippfocus.co.za", phone: "+27 11 805 3447" }, agency)).toBeNull();
+    expect(withoutAgencyContact({ email: "Samantha@TippFocus.co.za", phone: "011 805 3447" })).toEqual({ email: null, phone: null });
+    expect(withoutAgencyContact({ email: "nomsa@example.co.za", phone: "082 555 0101" })).toEqual({ email: "nomsa@example.co.za", phone: "082 555 0101" });
+  });
 });
+
+describe("recordChecks", () => {
+  const base = {
+    full_name: "A B", email: null, phone: null, skills: ["Testing"], technical_skills: ["Java"],
+    work_experience: [{ title: "Dev", company: "X", start_date: "May 2019", end_date: "June 2020", is_current: false, description: "Built things" }],
+  };
+  it("is quiet for a clean record", () => {
+    expect(recordChecks(base, "A B")).toEqual([]);
+  });
+  it("flags a phone next to an ID label or among the referees", () => {
+    expect(recordChecks({ ...base, phone: "8308016405" }, "ID NUMBER/DOB\n8308016405184")).toContain("phone sits next to an ID/DOB/student label");
+    expect(recordChecks({ ...base, phone: "0831234567" }, "Me\nREFERENCES\nMr X 083 123 4567")).toContain("phone is in the references section");
+  });
+  it("flags odd dates, missing duties and heading skills", () => {
+    const r = recordChecks(
+      { ...base, skills: ["Skills:"], work_experience: [{ title: "Dev", company: "X", start_date: "May 17", end_date: null, is_current: false, description: "" }] },
+      "",
+    );
+    expect(r.some((x) => x.includes("need a look"))).toBe(true);
+    expect(r.some((x) => x.includes("no duties"))).toBe(true);
+    expect(r.some((x) => x.startsWith("skills that look like headings"))).toBe(true);
+  });
+});
+

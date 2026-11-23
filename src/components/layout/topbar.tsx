@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -29,26 +28,20 @@ export function Topbar({
         <Button
           variant="outline"
           nativeButton={false}
-          render={<Link href="/job-requirements" />}
+          render={<Link href="/tenders" />}
           className="hidden sm:inline-flex"
         >
           Match Candidates
         </Button>
         <Button
           nativeButton={false}
-          render={<Link href="/candidates" />}
+          render={<Link href="/candidates/new" />}
           className="hidden sm:inline-flex"
         >
           Upload CV
         </Button>
         {isAdmin && departments.length > 0 && <DepartmentSwitcher departments={departments} lensSlug={lensSlug} />}
         <ThemeToggle />
-        <button
-          aria-label="Notifications"
-          className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent"
-        >
-          <Bell className="size-4" />
-        </button>
       </div>
     </header>
   );

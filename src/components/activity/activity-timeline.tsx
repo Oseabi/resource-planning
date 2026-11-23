@@ -53,7 +53,10 @@ function timeAgo(iso: string): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.round(hours / 24);
   if (days < 30) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
+  // A fixed locale and zone: the server and the browser render this list in
+  // turn, and with the defaults they disagree (2026/09/15 against 15/09/2026),
+  // which breaks hydration and makes React rebuild the panel.
+  return new Date(iso).toLocaleDateString("en-ZA", { timeZone: "Africa/Johannesburg" });
 }
 
 export function ActivityTimeline({
@@ -154,7 +157,8 @@ export function ActivityTimeline({
                         {eventLabel(entry.action)}
                       </span>
                     )}
-                    <span className="text-label-md text-muted-foreground">
+                    {/* "5m ago" can tick over between the server render and the browser's. */}
+                    <span className="text-label-md text-muted-foreground" suppressHydrationWarning>
                       {timeAgo(entry.createdAt)}
                     </span>
                   </div>

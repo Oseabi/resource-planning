@@ -130,7 +130,7 @@ export function DeepMatchNoteBlock({
       <p className="mt-1.5 text-label-md text-muted-foreground">
         An opinion. The score and the order above are computed locally and are not changed by it.
         {parsed.model ? ` Read by ${parsed.model}` : ""}
-        {when ? ` on ${when.toLocaleDateString("en-ZA")}` : ""}
+        {when ? ` on ${when.toLocaleDateString("en-ZA", { timeZone: "Africa/Johannesburg" })}` : ""}
       </p>
     </div>
   );

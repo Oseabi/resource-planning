@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { TenderStatusBadge, DeliveryStateBadge } from "@/app/(app)/tenders/tender-badges";
 import { deliveryState, contractWindowLabel } from "@/lib/delivery";
 import { CvDownloadButton } from "@/app/(app)/candidates/[id]/cv-download-button";
+import { fileRoute } from "@/lib/candidate-files";
 import { DeleteTenderButton } from "@/app/(app)/tenders/[id]/delete-tender-button";
 import {
   TenderMatchingResults,
@@ -155,7 +156,7 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {tender.source_document_path && (
-            <CvDownloadButton path={tender.source_document_path} filename="RFQ document" />
+            <CvDownloadButton href={fileRoute("tender", tender.id)} filename="RFQ document" />
           )}
           <Button variant="outline" size="sm" render={<Link href={`/tenders/${id}/edit`} />} nativeButton={false}>
             <Pencil className="size-4" />

@@ -375,7 +375,16 @@ export default async function AnalyticsPage() {
               value={String(compliance.total)}
               sub={`${compliance.vendors} vendors`}
             />
-            <Kpi icon={<ShieldCheck className="size-4" />} label="Valid" value={String(compliance.valid)} tone="good" />
+            {/* Letters with no expiry date count as usable but are not "valid
+                until" anything, so they are named here rather than vanishing
+                from the four tiles. */}
+            <Kpi
+              icon={<ShieldCheck className="size-4" />}
+              label="Valid"
+              value={String(compliance.valid)}
+              sub={compliance.noExpiry > 0 ? `+${compliance.noExpiry} with no expiry date` : undefined}
+              tone="good"
+            />
             <Kpi
               icon={<AlertTriangle className="size-4" />}
               label="Expiring soon"

@@ -445,28 +445,6 @@ export async function placeCandidateForTender(
   return { error: null };
 }
 
-export async function getTenderDocUrl(path: string): Promise<{ url: string | null }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { url: null };
-
-  // The signed URL is minted with the service-role client, which bypasses RLS,
-  // so being signed in cannot be the whole check: any path handed to this
-  // action would be honoured. Resolve the path back to its tender through the
-  // ordinary client first, so RLS decides whether the caller may see it.
-  const { data: owner } = await supabase
-    .from("tenders")
-    .select("id")
-    .eq("source_document_path", path)
-    .maybeSingle();
-  if (!owner) return { url: null };
-
-  const { data } = await createAdminClient().storage.from(DOC_BUCKET).createSignedUrl(path, 120);
-  return { url: data?.signedUrl ?? null };
-}
-
 /**
  * Push a won contract's end date out, and take the team with it.
  *

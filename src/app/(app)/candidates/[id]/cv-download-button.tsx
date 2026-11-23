@@ -1,29 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { Download, Loader2 } from "lucide-react";
+import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getSignedCvUrl } from "@/app/(app)/candidates/actions";
 
-export function CvDownloadButton({
-  path,
-  filename,
-}: {
-  path: string;
-  filename: string | null;
-}) {
-  const [loading, setLoading] = useState(false);
-
-  async function handleClick() {
-    setLoading(true);
-    const { url } = await getSignedCvUrl(path);
-    setLoading(false);
-    if (url) window.open(url, "_blank", "noopener,noreferrer");
-  }
-
+/**
+ * Open a stored file through the app's own file route (CVs, documents, RFQ
+ * documents). A plain new-tab open straight from the click, so no popup
+ * blocker stands in the way and no storage link reaches the browser.
+ */
+export function CvDownloadButton({ href, filename }: { href: string; filename: string | null }) {
   return (
-    <Button variant="outline" size="sm" onClick={handleClick} disabled={loading}>
-      {loading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+    <Button variant="outline" size="sm" onClick={() => window.open(href, "_blank", "noopener,noreferrer")}>
+      <Download className="size-4" />
       {filename ?? "Download CV"}
     </Button>
   );

@@ -32,6 +32,7 @@
  */
 import type { WorkExperience, Education } from "@/lib/supabase/database.types";
 import type { ExtractedCandidateFields } from "@/lib/extraction/types";
+import { withoutNonPhoneNumbers } from "@/lib/extraction/heuristics";
 
 /**
  * Spellings seen on issued copies of the template, mapped to the heading
@@ -109,7 +110,12 @@ const DURATION_RE = new RegExp(
 const YEAR_CELL_RE = /^\s*(?:19|20)\d{2}\s*(?:[-–—]\s*(?:19|20)\d{2}\s*)?$/;
 
 const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.]+/;
-const PHONE_RE = /(?:\+27|0)\s?(?:\d[\s-]?){8,10}\d/;
+// Bounded so the middle of an ID number (one born in the 2000s starts with 0) never matches.
+const PHONE_RE = /(?<![\d])(?:\+27|0)\s?(?:\d[\s-]?){8}\d(?![\d])/;
+
+function firstSaPhone(text: string): string | null {
+  return text.match(PHONE_RE)?.[0]?.trim() ?? null;
+}
 const LINKEDIN_RE = /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[\w-]+/i;
 
 function normaliseHeading(line: string): string {
@@ -693,7 +699,7 @@ export function parseTippTemplate(
   return {
     full_name: firstValue(sectionLines(sections, "FULL NAME")),
     email: text.match(EMAIL_RE)?.[0] ?? null,
-    phone: text.match(PHONE_RE)?.[0]?.trim() ?? null,
+    phone: firstSaPhone(withoutNonPhoneNumbers(text)),
     current_role,
     additional_roles: [],
     years_experience: yearsFromRows(durations, thisYear),

@@ -221,7 +221,7 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <QuickAction href="/candidates" icon={<UploadCloud className="size-4" />} label="Submit CV" />
+          <QuickAction href="/candidates/new" icon={<UploadCloud className="size-4" />} label="Submit CV" />
           <QuickAction href="/job-requirements/new" icon={<UserSquare2 className="size-4" />} label="New requirement" />
           <QuickAction href="/tenders/new" icon={<FilePlus2 className="size-4" />} label="New tender" />
         </div>

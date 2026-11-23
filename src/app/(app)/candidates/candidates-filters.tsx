@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { VOCABULARY } from "@/lib/vocabulary";
+import type { RoleOption } from "@/lib/role-filter";
 import { CATEGORY_NAMES } from "@/lib/resource-categories";
 import type { DepartmentBrand } from "@/lib/departments";
 import { DepartmentDot } from "@/components/departments/department-chip";
@@ -26,8 +26,11 @@ const STATUS_LABELS: Record<string, string> = {
 export function CandidatesFilters({
   departments = [],
   defaultDepartmentId = null,
+  roles = [],
 }: {
   departments?: DepartmentBrand[];
+  /** Roles somebody holds, with how many; worked out on the server. */
+  roles?: RoleOption[];
   /** What the list shows when the address names no department: the person's own. */
   defaultDepartmentId?: string | null;
 } = {}) {
@@ -110,9 +113,12 @@ export function CandidatesFilters({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All roles</SelectItem>
-          {VOCABULARY.roles.map((r) => (
-            <SelectItem key={r} value={r}>
-              {r}
+          {roles.map((r) => (
+            <SelectItem key={r.role} value={r.role}>
+              <span className="flex w-full items-center justify-between gap-3">
+                {r.role}
+                <span className="text-muted-foreground">{r.count}</span>
+              </span>
             </SelectItem>
           ))}
         </SelectContent>

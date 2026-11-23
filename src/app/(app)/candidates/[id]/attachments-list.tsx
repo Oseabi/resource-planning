@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, FileText, Loader2, Trash2 } from "lucide-react";
+import { Download, FileText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,10 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/availability";
 import { groupByKind } from "@/lib/candidate-attachments";
-import {
-  deleteCandidateAttachment,
-  getSignedAttachmentUrl,
-} from "@/app/(app)/candidates/attachment-actions";
+import { deleteCandidateAttachment } from "@/app/(app)/candidates/attachment-actions";
+import { fileRoute } from "@/lib/candidate-files";
 import type { Database } from "@/lib/supabase/database.types";
 
 type Attachment = Database["public"]["Tables"]["candidate_attachments"]["Row"];
@@ -25,7 +23,7 @@ type Attachment = Database["public"]["Tables"]["candidate_attachments"]["Row"];
  * The documents on a person's file, under their headings.
  *
  * A client component because both row controls are interactive: a download
- * fetches a short-lived signed URL first, and a removal needs confirming. One
+ * opens the app's file route in a new tab, and a removal needs confirming. One
  * confirmation dialog serves the whole list rather than one per row.
  */
 export function CandidateAttachments({
@@ -39,19 +37,14 @@ export function CandidateAttachments({
   isAdmin: boolean;
 }) {
   const router = useRouter();
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [pending, setPending] = useState<Attachment | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDeleting, startTransition] = useTransition();
 
-  async function open(attachment: Attachment) {
-    setBusyId(attachment.id);
-    try {
-      const { url } = await getSignedAttachmentUrl(attachment.file_path);
-      if (url) window.open(url, "_blank", "noopener,noreferrer");
-    } finally {
-      setBusyId(null);
-    }
+  function open(attachment: Attachment) {
+    // Streamed by the app's own route from SharePoint or storage; no link to
+    // either ever reaches the browser.
+    window.open(fileRoute("attachment", attachment.id), "_blank", "noopener,noreferrer");
   }
 
   function confirmRemove() {
@@ -102,14 +95,9 @@ export function CandidateAttachments({
                       variant="outline"
                       size="sm"
                       onClick={() => open(a)}
-                      disabled={busyId === a.id}
                       aria-label={`Download ${a.title}`}
                     >
-                      {busyId === a.id ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <Download className="size-4" />
-                      )}
+                      <Download className="size-4" />
                       Download
                     </Button>
                     {/* Mirrors the delete policy. Cosmetic: the row count in
