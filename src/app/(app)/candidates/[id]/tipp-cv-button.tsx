@@ -12,6 +12,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { filenameFromDisposition } from "@/lib/cv-export/filename";
+import { saveBlob } from "@/lib/save-file";
 
 type CvFormat = "pdf" | "docx";
 
@@ -68,13 +69,8 @@ export function TippCvButton({
       // A blob URL rather than a direct link, because the route is a POST and
       // the browser cannot navigate to it.
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
       // The route names the file after the department; the fallback is the plain name.
-      a.download = filenameFromDisposition(res.headers.get("content-disposition"), `TippFocus - ${candidateName}.${format}`);
-      a.click();
-      URL.revokeObjectURL(url);
+      saveBlob(blob, filenameFromDisposition(res.headers.get("content-disposition"), `TippFocus - ${candidateName}.${format}`));
       setConfirming(null);
     } finally {
       setBusy(null);

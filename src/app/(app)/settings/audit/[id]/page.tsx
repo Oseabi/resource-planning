@@ -38,6 +38,8 @@ function when(iso: string): string {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    // South African time wherever the server runs; a hosted server is on UTC.
+    timeZone: "Africa/Johannesburg",
   });
 }
 

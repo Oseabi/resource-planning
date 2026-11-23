@@ -50,7 +50,7 @@ export default async function OemLetterDetailPage({
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {letter.file_path && (
-            <LetterDownloadButton path={letter.file_path} filename={letter.original_filename} />
+            <LetterDownloadButton letterId={letter.id} filename={letter.original_filename} />
           )}
           <Button
             variant="outline"

@@ -17,6 +17,8 @@ import { StatusBadge, AvailabilityBadge, Chip } from "@/app/(app)/candidates/can
 import { DepartmentChips } from "@/components/departments/department-chip";
 import { loadDepartmentContext } from "@/lib/departments-repo";
 import { parseDepartmentFilter, defaultCandidateDepartments } from "@/lib/departments";
+import { fetchAll } from "@/lib/supabase/fetch-all";
+import { roleOptions } from "@/lib/role-filter";
 
 const PAGE_SIZE = 10;
 
@@ -99,7 +101,7 @@ export default async function CandidatesPage({
   // shared, so any department can bid anybody. These two tiles are the only
   // numbers on a manager's screen that still count the whole business, which is
   // why the labels say so.
-  const [{ count: totalCount }, { count: availableCount }, { count: unfiledCount }] = await Promise.all([
+  const [{ count: totalCount }, { count: availableCount }, { count: unfiledCount }, { data: heldRoles }] = await Promise.all([
     supabase.from("candidates").select("id", { count: "exact", head: true }),
     supabase
       .from("candidates")
@@ -111,6 +113,11 @@ export default async function CandidatesPage({
     departmentFilter.kind === "one"
       ? supabase.from("candidates").select("id", { count: "exact", head: true }).filter("department_ids", "eq", "{}")
       : Promise.resolve({ count: 0 }),
+    // Every current role, one short column, so the role filter offers the
+    // roles people actually hold rather than a fixed list.
+    fetchAll<{ current_role: string | null }>((f, t) =>
+      supabase.from("candidates").select("current_role, id").order("id").range(f, t),
+    ),
   ]);
 
   const total = count ?? 0;
@@ -156,7 +163,11 @@ export default async function CandidatesPage({
         </div>
       </div>
 
-      <CandidatesFilters departments={departments.all} defaultDepartmentId={departments.filterDepartmentId} />
+      <CandidatesFilters
+        departments={departments.all}
+        defaultDepartmentId={departments.filterDepartmentId}
+        roles={roleOptions(heldRoles.map((r) => r.current_role), sp.role ?? null)}
+      />
 
       {departmentFilter.kind === "one" && (unfiledCount ?? 0) > 0 && (
         <p className="rounded-lg border border-border bg-card px-4 py-2.5 text-body-sm text-muted-foreground">

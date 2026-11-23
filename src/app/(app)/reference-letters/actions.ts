@@ -225,16 +225,3 @@ export async function deleteReferenceLetter(id: string): Promise<{ error: string
   revalidatePath("/tenders");
   return { error: null };
 }
-
-export async function getSignedReferenceUrl(path: string): Promise<{ url: string | null }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { url: null };
-
-  const { data } = await createAdminClient()
-    .storage.from(LETTER_BUCKET)
-    .createSignedUrl(path, 120); // 2-minute link
-  return { url: data?.signedUrl ?? null };
-}

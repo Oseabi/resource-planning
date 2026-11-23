@@ -112,7 +112,10 @@ async function uploadCv(file: File, candidateId: string): Promise<CandidateUpdat
   const stored = await storeCandidateFile(file, candidateId, `candidates/${crypto.randomUUID()}.${ext}`);
   return stored.kind === "drive"
     ? { cv_drive_id: stored.driveId, cv_drive_item_id: stored.itemId, cv_file_path: null, cv_original_filename: sanitizeFilename(file.name) }
-    : { cv_file_path: stored.path, cv_drive_id: null, cv_drive_item_id: null, cv_original_filename: sanitizeFilename(file.name) };
+    // The SharePoint columns are left out here so a bucket upload also works on
+    // a database without migration 0027; they are only ever set together with
+    // SharePoint being configured, when uploads go the other way.
+    : { cv_file_path: stored.path, cv_original_filename: sanitizeFilename(file.name) };
 }
 
 function parsePayload(formData: FormData): { fields: CandidateFormFields; force: boolean } {
@@ -239,10 +242,11 @@ export async function deleteCandidate(
 ): Promise<{ error: string | null }> {
   const supabase = await createClient();
 
-  // Fetch the CV path before deleting so we can clean up storage.
+  // Fetch the CV path before deleting so we can clean up storage. "*" so this
+  // works with or without the SharePoint columns from migration 0027.
   const { data: candidate } = await supabase
     .from("candidates")
-    .select("cv_file_path, cv_drive_item_id, full_name")
+    .select("*")
     .eq("id", candidateId)
     .single();
 
@@ -295,17 +299,4 @@ export async function deleteCandidate(
 
   revalidatePath("/candidates");
   return { error: null };
-}
-
-export async function getSignedCvUrl(path: string): Promise<{ url: string | null }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { url: null };
-
-  const { data } = await createAdminClient()
-    .storage.from(CV_BUCKET)
-    .createSignedUrl(path, 120); // 2-minute link
-  return { url: data?.signedUrl ?? null };
 }

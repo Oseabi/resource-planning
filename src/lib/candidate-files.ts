@@ -31,7 +31,9 @@ export function attachmentSource(row: {
 }
 
 /** The app's own address for a file; the browser never sees a storage or SharePoint link. */
-export function fileRoute(kind: "cv" | "attachment", id: string): string {
+export type FileKind = "cv" | "attachment" | "tender" | "oem-letter" | "reference-letter";
+
+export function fileRoute(kind: FileKind, id: string): string {
   return `/api/files/${kind}/${encodeURIComponent(id)}`;
 }
 

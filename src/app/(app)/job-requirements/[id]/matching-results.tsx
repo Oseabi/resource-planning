@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { DeepMatchNoteBlock } from "@/app/(app)/deep-match-controls";
 import { SCORING_WEIGHTS } from "@/lib/scoring";
 import { runMatch, sendAlert, placeCandidate } from "@/app/(app)/job-requirements/actions";
+import { saveBlob } from "@/lib/save-file";
 
 export interface MatchView {
   matchId: string;
@@ -143,12 +144,7 @@ export function MatchingResults({
     );
     const csv = [header.join(","), ...lines].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${requirementTitle.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-matches.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    saveBlob(blob, `${requirementTitle.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-matches.csv`);
   }
 
   return (

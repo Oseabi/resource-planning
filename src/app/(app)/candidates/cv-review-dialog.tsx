@@ -19,6 +19,7 @@ import { fieldsFromExtraction, flagsFromExtraction } from "@/app/(app)/candidate
 import type { DepartmentBrand } from "@/lib/departments";
 import { filenameFromDisposition } from "@/lib/cv-export/filename";
 import { missingTemplateFields } from "@/lib/cv-export/missing-fields";
+import { saveBlob } from "@/lib/save-file";
 
 export function CvReviewDialog({
   open,
@@ -75,12 +76,7 @@ export function CvReviewDialog({
         return;
       }
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filenameFromDisposition(res.headers.get("content-disposition"), `TippFocus - ${fields.full_name || "candidate"}.pdf`);
-      a.click();
-      URL.revokeObjectURL(url);
+      saveBlob(blob, filenameFromDisposition(res.headers.get("content-disposition"), `TippFocus - ${fields.full_name || "candidate"}.pdf`));
     } finally {
       setBuilding(false);
     }
