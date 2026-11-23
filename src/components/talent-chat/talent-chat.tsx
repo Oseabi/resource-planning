@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Sparkles, X, Send, Loader2, RotateCcw, Copy, Check, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AvailabilityBadge } from "@/app/(app)/candidates/candidate-badges";
@@ -9,6 +10,15 @@ import { findTalent, type TalentReply } from "@/app/(app)/talent-search-action";
 import type { TalentQuery } from "@/lib/talent-search/query";
 import type { TalentResult } from "@/lib/talent-search/rank";
 import { cn } from "@/lib/utils";
+import {
+  FROM_FINDER,
+  clearChat,
+  forgetReturn,
+  loadChat,
+  rememberReturn,
+  returnTarget,
+  saveChat,
+} from "@/components/talent-chat/finder-return";
 
 type Message = { from: "you"; text: string } | { from: "finder"; reply: TalentReply };
 
@@ -25,7 +35,9 @@ const EXAMPLES = [
  * Each answer carries the criteria it was read as, and the next message is
  * sent with them, so "make it 5" or "only in Cape Town" refines the last
  * search. The conversation lives in the layout, so it survives moving
- * between pages; "New search" forgets it.
+ * between pages, and in this tab's storage, so it survives a refresh; "New
+ * search" forgets it. Opening somebody's profile closes the panel, and coming
+ * back reopens it where it was (see finder-return.ts).
  */
 export function TalentChat() {
   const [open, setOpen] = useState(false);
@@ -35,10 +47,53 @@ export function TalentChat() {
   const [pending, startTransition] = useTransition();
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const pathname = usePathname();
+  // Set once the conversation has been touched, so the empty first render
+  // never wipes a saved one before it is restored.
+  const touched = useRef(false);
+
+  /** The saved conversation, when there is none on screen (after a refresh). */
+  function restore() {
+    if (messages.length > 0) return;
+    const saved = loadChat<{ messages: Message[]; query: TalentQuery | null }>();
+    if (saved && Array.isArray(saved.messages) && saved.messages.length > 0) {
+      touched.current = true;
+      setMessages(saved.messages);
+      setQuery(saved.query ?? null);
+    }
+  }
+
+  useEffect(() => {
+    if (!touched.current) return;
+    if (messages.length === 0) clearChat();
+    else saveChat({ messages, query });
+  }, [messages, query]);
+
+  // Back on the page a result was opened from: reopen where it was. Anywhere
+  // else except another profile: forget it. Worked out while rendering the new
+  // address rather than in an effect, so the panel opens in the same render.
+  const [seenPath, setSeenPath] = useState(pathname);
+  if (pathname !== seenPath) {
+    setSeenPath(pathname);
+    const target = returnTarget();
+    if (target && target.split("?")[0] === pathname) {
+      // The layout stayed mounted, so the conversation is still on screen.
+      forgetReturn();
+      setOpen(true);
+    } else if (target && !pathname.startsWith("/candidates/")) {
+      forgetReturn();
+    }
+  }
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, pending]);
+
+  /** A result was clicked: remember where from, and get out of the way of the profile. */
+  function picked() {
+    rememberReturn();
+    setOpen(false);
+  }
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
@@ -48,6 +103,7 @@ export function TalentChat() {
     const message = text.trim();
     if (!message || pending) return;
     setDraft("");
+    touched.current = true;
     setMessages((m) => [...m, { from: "you", text: message }]);
     startTransition(async () => {
       try {
@@ -66,6 +122,7 @@ export function TalentChat() {
   function reset() {
     setMessages([]);
     setQuery(null);
+    clearChat();
     setDraft("");
     inputRef.current?.focus();
   }
@@ -75,7 +132,10 @@ export function TalentChat() {
       {!open && (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            restore();
+            setOpen(true);
+          }}
           className="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-body-sm font-medium text-primary-foreground shadow-lg transition-opacity hover:opacity-90"
         >
           <Sparkles className="size-4" />
@@ -83,14 +143,18 @@ export function TalentChat() {
         </button>
       )}
 
-      {open && (
-        <section
+      {/* Kept mounted while closed, so the results keep their scroll position. */}
+      <section
           role="dialog"
           aria-label="Candidate finder"
+          hidden={!open}
           onKeyDown={(e) => {
             if (e.key === "Escape") setOpen(false);
           }}
-          className="fixed inset-0 z-50 flex flex-col border-border bg-card shadow-xl sm:inset-auto sm:bottom-5 sm:right-5 sm:h-[min(640px,calc(100vh-2.5rem))] sm:w-[420px] sm:rounded-xl sm:border"
+          className={cn(
+            "fixed inset-0 z-50 flex flex-col border-border bg-card shadow-xl sm:inset-auto sm:bottom-5 sm:right-5 sm:h-[min(640px,calc(100vh-2.5rem))] sm:w-[420px] sm:rounded-xl sm:border",
+            !open && "hidden",
+          )}
         >
           <header className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
             <div className="flex items-center gap-2">
@@ -138,7 +202,7 @@ export function TalentChat() {
                   <p className="max-w-[85%] whitespace-pre-wrap rounded-lg bg-primary px-3 py-2 text-body-sm text-primary-foreground">{m.text}</p>
                 </div>
               ) : (
-                <FinderReply key={i} reply={m.reply} />
+                <FinderReply key={i} reply={m.reply} onPick={picked} />
               ),
             )}
 
@@ -178,12 +242,11 @@ export function TalentChat() {
             </Button>
           </form>
         </section>
-      )}
     </>
   );
 }
 
-function FinderReply({ reply }: { reply: TalentReply }) {
+function FinderReply({ reply, onPick }: { reply: TalentReply; onPick: () => void }) {
   const [copied, setCopied] = useState(false);
   const all = [...reply.fits, ...reply.close];
 
@@ -213,7 +276,7 @@ function FinderReply({ reply }: { reply: TalentReply }) {
       {reply.fits.length > 0 && (
         <ul className="space-y-2">
           {reply.fits.map((r) => (
-            <ResultCard key={r.id} result={r} />
+            <ResultCard key={r.id} result={r} onPick={onPick} />
           ))}
         </ul>
       )}
@@ -222,7 +285,7 @@ function FinderReply({ reply }: { reply: TalentReply }) {
           {reply.fits.length > 0 && <p className="pt-1 text-label-md font-medium text-muted-foreground">Closest after them</p>}
           <ul className="space-y-2">
             {reply.close.map((r) => (
-              <ResultCard key={r.id} result={r} near />
+              <ResultCard key={r.id} result={r} near onPick={onPick} />
             ))}
           </ul>
         </>
@@ -237,12 +300,20 @@ function FinderReply({ reply }: { reply: TalentReply }) {
   );
 }
 
-function ResultCard({ result: r, near = false }: { result: TalentResult; near?: boolean }) {
+function ResultCard({ result: r, near = false, onPick }: { result: TalentResult; near?: boolean; onPick: () => void }) {
   return (
     <li className={cn("rounded-lg border p-3", near ? "border-dashed border-border" : "border-border bg-background")}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <Link href={`/candidates/${r.id}`} className="block truncate text-body-sm font-medium text-foreground hover:text-primary">
+          <Link
+            href={`/candidates/${r.id}?from=${FROM_FINDER}`}
+            onClick={(e) => {
+              // A new tab or window leaves this one, and the finder, as it is.
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+              onPick();
+            }}
+            className="block truncate text-body-sm font-medium text-foreground hover:text-primary"
+          >
             {r.name}
           </Link>
           <p className="truncate text-label-md text-muted-foreground">

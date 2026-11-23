@@ -13,6 +13,8 @@ import { DeploymentsPanel } from "@/app/(app)/candidates/[id]/deployments-panel"
 import { TippCvButton } from "@/app/(app)/candidates/[id]/tipp-cv-button";
 import { missingTemplateFields, type CvSource } from "@/lib/cv-export/build-tipp-cv";
 import { CandidateCvView, Card, Chips } from "@/app/(app)/candidates/[id]/cv-view";
+import { BackToResults } from "@/app/(app)/candidates/[id]/back-to-results";
+import { FROM_FINDER } from "@/components/talent-chat/finder-return";
 import { CvDownloadButton } from "@/app/(app)/candidates/[id]/cv-download-button";
 import { cvSource, fileRoute } from "@/lib/candidate-files";
 import { CandidateAttachments } from "@/app/(app)/candidates/[id]/attachments-list";
@@ -24,10 +26,13 @@ import { loadDepartmentContext } from "@/lib/departments-repo";
 
 export default async function CandidateProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
   const { id } = await params;
+  const fromFinder = (await searchParams).from === FROM_FINDER;
   const supabase = await createClient();
 
   // getCurrentProfile is request-cached: the layout has already resolved it, so
@@ -74,10 +79,14 @@ export default async function CandidateProfilePage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <Link href="/candidates" className="inline-flex items-center gap-1.5 text-body-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" />
-        Back to candidates
-      </Link>
+      {fromFinder ? (
+        <BackToResults />
+      ) : (
+        <Link href="/candidates" className="inline-flex items-center gap-1.5 text-body-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="size-4" />
+          Back to candidates
+        </Link>
+      )}
 
       <div className="flex items-start justify-between gap-4">
         <div>
